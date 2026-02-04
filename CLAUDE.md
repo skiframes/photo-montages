@@ -367,3 +367,44 @@ photo-montages/
 - **Training vs Race filter** — Easy way to find relevant sessions.
 - **Thumbnails for 5G, full-res for print** — Bandwidth-conscious design for mountain cellular.
 - **Ron LeMaster-inspired** — Photo montages follow the style of his technique photography in "Ultimate Skiing".
+
+## Video Stitcher Feature (edge/stitcher.py)
+
+Combines 4 camera angles (R1, Axis, R2, R3) into single broadcast-style videos per athlete.
+
+### Key Components
+- **stitcher.py** - Main video stitching logic
+- **calibration.html** - UI for configuring cuts, loading Vola timing data, processing
+
+### Features
+- **Multi-camera cuts**: Configurable percentage-based cuts (e.g., R1: -5%-5%, Axis: 5%-55%, R2: 55%-72%, R3: 72%-105%)
+- **Vola Excel parsing**: Loads athlete timing from race results (start time, duration)
+- **Start list PDF parsing**: Extracts bib-to-name mapping
+- **Timer overlay**: Shows run time (truncated decimals, not rounded), stops at finish
+- **Title overlay**: "Skiframes.com | Event Name | Event Date" at bottom right
+- **Logo overlay**: 3 logos (NHARA, RMST, Ragged) at 80px height, bottom left
+- **Comparison videos**: Generate videos vs fastest racer per gender with:
+  - Second timer showing time difference (green=ahead, red=behind)
+  - Ghost overlay of fastest racer (35% opacity, blue tint)
+  - Ghost runs at real speed and finishes earlier (not time-scaled)
+- **Cross-file segment handling**: Automatically finds continuation when segment spans video files
+- **Test count**: UI option to process limited athletes for testing (default: 3)
+- **Hardware acceleration**: M1 VideoToolbox encoding for speed
+
+### Technical Details
+- Uses PIL/Pillow for overlay images (ffmpeg drawtext not available on Mac)
+- `-loop 1` before `-i` for static PNG overlays
+- `eof_action=pass` for timer to prevent freezing at transitions
+- Re-encode during concatenation to fix timestamp issues
+- Event date extracted from video filename (not today's date)
+- Filenames: `Name_Bib#.mp4` or `Name_Bib#_vs_Bib3.mp4` (no U12/U14 in filename)
+
+### Known Issues Fixed
+- Bib 4 and Bib 13: Axis segment extends past video file boundary - fixed with `find_next_video()` helper and correct offset calculation for continuation files
+
+## Related Repository
+
+**skiframes-web** (`/Users/paul2/skiframes/skiframes-web/`) - Public web gallery for skiframes.com
+- Separate repo for the website
+- S3 buckets: `avillachlab-net` (web), `avillachlab-netm` (media)
+- See that repo's CLAUDE.md for details
