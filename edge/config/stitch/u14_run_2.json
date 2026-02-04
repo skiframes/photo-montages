@@ -1,0 +1,26 @@
+{
+  "name": "U14 run 2",
+  "created": "2026-02-04T08:30:54.976329",
+  "cuts": [
+    {
+      "camera": "R1",
+      "start_pct": -0.03,
+      "end_pct": 0.08
+    },
+    {
+      "camera": "Axis",
+      "start_pct": 0.08,
+      "end_pct": 0.4
+    },
+    {
+      "camera": "R2",
+      "start_pct": 0.4,
+      "end_pct": 0.6
+    },
+    {
+      "camera": "R3",
+      "start_pct": 0.6,
+      "end_pct": 1.08
+    }
+  ]
+}

@@ -1686,6 +1686,7 @@ def run_stitch_job(job_id: str, config: dict):
         output_dir = config.get('output_dir', str(Path(__file__).parent.parent / 'output'))
         race_name = config.get('race_name', 'race')
         race_title = config.get('race_title', '')
+        generate_comparison = config.get('generate_comparison', False)
 
         # Convert to objects
         cuts = [CameraCut(**c) for c in cuts_data]
@@ -1730,7 +1731,10 @@ def run_stitch_job(job_id: str, config: dict):
                     'current_racer': name
                 }
 
-        outputs = stitcher.process_all(progress_callback=progress_callback)
+        if generate_comparison:
+            outputs = stitcher.process_all_with_comparison(progress_callback=progress_callback, generate_comparison=True)
+        else:
+            outputs = stitcher.process_all(progress_callback=progress_callback)
 
         with stitch_jobs_lock:
             # Check if we were stopped
@@ -1808,7 +1812,8 @@ def start_stitch_process():
         'video_paths': video_paths,
         'race_name': data.get('race_name', 'race'),
         'race_title': data.get('race_title', ''),  # e.g., "Western Division U14 Ranking - SL"
-        'output_dir': data.get('output_dir', str(Path(__file__).parent.parent / 'output'))
+        'output_dir': data.get('output_dir', str(Path(__file__).parent.parent / 'output')),
+        'generate_comparison': data.get('generate_comparison', False)  # Generate videos vs fastest racer
     }
 
     thread = threading.Thread(target=run_stitch_job, args=(job_id, config))

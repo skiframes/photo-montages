@@ -1,0 +1,26 @@
+{
+  "name": "U12 run 1",
+  "created": "2026-02-04T08:47:18.325939",
+  "cuts": [
+    {
+      "camera": "R1",
+      "start_pct": -0.05,
+      "end_pct": 0.05
+    },
+    {
+      "camera": "Axis",
+      "start_pct": 0.05,
+      "end_pct": 0.425
+    },
+    {
+      "camera": "R2",
+      "start_pct": 0.425,
+      "end_pct": 0.575
+    },
+    {
+      "camera": "R3",
+      "start_pct": 0.575,
+      "end_pct": 1.02
+    }
+  ]
+}

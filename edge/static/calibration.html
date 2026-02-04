@@ -89,6 +89,15 @@
             -webkit-appearance: none;
         }
 
+        /* Restore checkbox appearance */
+        input[type="checkbox"] {
+            width: auto;
+            padding: 0;
+            margin-bottom: 0;
+            -webkit-appearance: checkbox;
+            appearance: checkbox;
+        }
+
         select:focus, input:focus {
             outline: none;
             border-color: var(--primary);
@@ -515,6 +524,20 @@
                 <label for="stitchRaceTitle" style="margin-top: 8px;">Video Title</label>
                 <input type="text" id="stitchRaceTitle" value="Western Divisional U12 Ranking - SL" style="margin-bottom: 0;">
                 <div class="help-text">Shown on video overlay (bottom right). Timer shown at top right.</div>
+
+                <div style="margin-top: 12px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="stitchGenerateComparison" style="width: 18px; height: 18px;">
+                        <span>Generate comparison videos vs fastest racer</span>
+                    </label>
+                    <div class="help-text">Creates additional videos showing time difference vs fastest in each gender category</div>
+                </div>
+
+                <div style="margin-top: 12px;">
+                    <label for="stitchTestCount" style="display: inline-block; margin-bottom: 0;">Test count (0 = all)</label>
+                    <input type="number" id="stitchTestCount" value="3" min="0" max="100" style="width: 80px; display: inline-block; margin-left: 10px; margin-bottom: 0;">
+                    <div class="help-text">Number of athletes to process for testing. Set to 0 to process all.</div>
+                </div>
 
                 <button id="stitchLoadRacers" class="btn btn-primary" style="margin-top: 12px;">
                     Load Racers
@@ -1025,6 +1048,8 @@
             stitchStartlistFile: document.getElementById('stitchStartlistFile'),
             stitchRace: document.getElementById('stitchRace'),
             stitchRaceTitle: document.getElementById('stitchRaceTitle'),
+            stitchGenerateComparison: document.getElementById('stitchGenerateComparison'),
+            stitchTestCount: document.getElementById('stitchTestCount'),
             stitchLoadRacers: document.getElementById('stitchLoadRacers'),
             stitchRacersInfo: document.getElementById('stitchRacersInfo'),
             stitchRacerCount: document.getElementById('stitchRacerCount'),
@@ -2148,6 +2173,15 @@
             const cuts = getStitchCuts();
             const raceName = elements.stitchRace.value.toLowerCase().replace(/\s+/g, '_');
             const raceTitle = elements.stitchRaceTitle.value.trim();
+            const generateComparison = elements.stitchGenerateComparison.checked;
+            const testCount = parseInt(elements.stitchTestCount.value) || 0;
+
+            // Limit racers if test count is set
+            let racersToProcess = state.stitchRacers;
+            if (testCount > 0 && testCount < state.stitchRacers.length) {
+                racersToProcess = state.stitchRacers.slice(0, testCount);
+                console.log(`Test mode: processing ${testCount} of ${state.stitchRacers.length} racers`);
+            }
 
             try {
                 elements.stitchStartProcess.disabled = true;
@@ -2162,11 +2196,12 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        racers: state.stitchRacers,
+                        racers: racersToProcess,
                         cuts: cuts,
                         video_paths: videoPaths,
                         race_name: raceName,
-                        race_title: raceTitle
+                        race_title: raceTitle,
+                        generate_comparison: generateComparison
                     })
                 });
 
