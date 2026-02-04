@@ -39,9 +39,11 @@ jobs_lock = threading.Lock()
 
 # Configuration
 CONFIG_DIR = Path(__file__).parent / 'config' / 'zones'
+STITCH_CONFIG_DIR = Path(__file__).parent / 'config' / 'stitch'
 CALIBRATION_FRAMES_DIR = Path(tempfile.gettempdir()) / 'skiframes_calibration'
 VIDEO_DIR = Path(__file__).parent.parent  # Parent of edge/ for finding test videos
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+STITCH_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CALIBRATION_FRAMES_DIR.mkdir(parents=True, exist_ok=True)
 
 # Camera definitions with time offset percentages for race timing
@@ -178,13 +180,26 @@ def parse_startlist_pdf(pdf_path: str) -> dict:
 
                 for line in text.split('\n'):
                     # Find all racers in the line (may have 2 due to two-column layout)
-                    # Pattern: bib lastname firstname year team
-                    matches = re.findall(r'(\d+)\s+([A-Za-z]+)\s+([A-Za-z]+)\s+(\d{4})\s+([A-Z]+)', line)
+                    # Pattern: bib (name words) year team
+                    # Name can be 2-4 words (e.g., "Van Der Berg John", "Doe Jane", "O'Brien Mary")
+                    # Match: bib, then name words, then 4-digit year, then 2-4 letter team code
+                    matches = re.findall(r'(\d+)\s+((?:[A-Za-z\'\-]+\s+){1,3}[A-Za-z\'\-]+)\s+(\d{4})\s+([A-Z]{2,4})', line)
                     for match in matches:
                         bib = int(match[0])
-                        lastname = match[1]
-                        firstname = match[2]
-                        team = match[4]
+                        name_parts = match[1].strip().split()
+                        year = match[2]
+                        team = match[3]
+
+                        # Name format: last word is firstname, rest is lastname
+                        # "Stellato Brigid" -> firstname=Brigid, lastname=Stellato
+                        # "Van Der Berg John" -> firstname=John, lastname=VanDerBerg
+                        if len(name_parts) >= 2:
+                            firstname = name_parts[-1]
+                            lastname = ''.join(name_parts[:-1])  # Join multi-word last names
+                        else:
+                            firstname = name_parts[0] if name_parts else ''
+                            lastname = ''
+
                         bib_to_racer[bib] = {
                             'name': f"{firstname}{lastname}",
                             'team': team,
@@ -287,18 +302,21 @@ def parse_results():
 
 def parse_vola_time(time_str):
     """
-    Parse Vola time string like '10h41:23.9049' to seconds since midnight.
+    Parse Vola time string like '10h41:23.9049' or ' 9h52:28.4396' to seconds since midnight.
     Returns None for 'Did Not Start', 'Did Not Finish', 'Disqualified', etc.
     """
     if not time_str or not isinstance(time_str, str):
         return None
+
+    # Strip leading/trailing whitespace
+    time_str = time_str.strip()
 
     # Check for DNF/DNS/DQ
     lower = time_str.lower()
     if 'did not' in lower or 'disqualified' in lower or 'dnf' in lower or 'dns' in lower or 'dq' in lower:
         return None
 
-    # Parse format: 10h41:23.9049
+    # Parse format: 10h41:23.9049 or 9h52:28.4396 (with optional leading space already stripped)
     match = re.match(r'(\d+)h(\d+):(\d+(?:\.\d+)?)', time_str)
     if match:
         hours = int(match.group(1))
@@ -1343,6 +1361,485 @@ def stop_process(job_id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# VIDEO STITCH ENDPOINTS
+# =============================================================================
+
+# Track active stitch jobs
+stitch_jobs = {}
+stitch_jobs_lock = threading.Lock()
+
+
+@app.route('/api/stitch/configs')
+def list_stitch_configs():
+    """List saved stitch cut point configurations."""
+    configs = []
+    for f in STITCH_CONFIG_DIR.glob('*.json'):
+        try:
+            with open(f, 'r') as fp:
+                config = json.load(fp)
+                configs.append({
+                    'filename': f.name,
+                    'name': config.get('name', f.stem),
+                    'created': config.get('created', ''),
+                    'cuts': config.get('cuts', [])
+                })
+        except Exception as e:
+            print(f"Error reading stitch config {f}: {e}")
+    return jsonify(sorted(configs, key=lambda x: x['name']))
+
+
+@app.route('/api/stitch/config/<name>')
+def get_stitch_config(name):
+    """Get a specific stitch configuration."""
+    # Sanitize name to prevent path traversal
+    safe_name = re.sub(r'[^\w\-]', '_', name.lower())
+    config_path = STITCH_CONFIG_DIR / f"{safe_name}.json"
+
+    if not config_path.exists():
+        return jsonify({'error': 'Config not found'}), 404
+
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/stitch/config', methods=['POST'])
+def save_stitch_config():
+    """
+    Save a stitch cut point configuration.
+
+    Request body:
+    {
+        "name": "U12 run 1",
+        "cuts": [
+            {"camera": "R1", "start_pct": -0.05, "end_pct": 0.05},
+            {"camera": "Axis", "start_pct": 0.05, "end_pct": 0.425},
+            {"camera": "R2", "start_pct": 0.425, "end_pct": 0.575},
+            {"camera": "R3", "start_pct": 0.575, "end_pct": 1.05}
+        ]
+    }
+    """
+    data = request.get_json() or {}
+    name = data.get('name', '').strip()
+    cuts = data.get('cuts', [])
+
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+
+    if not cuts or len(cuts) == 0:
+        return jsonify({'error': 'At least one cut is required'}), 400
+
+    # Validate cuts
+    for cut in cuts:
+        if 'camera' not in cut or 'start_pct' not in cut or 'end_pct' not in cut:
+            return jsonify({'error': 'Each cut must have camera, start_pct, and end_pct'}), 400
+
+    # Create config
+    config = {
+        'name': name,
+        'created': datetime.now().isoformat(),
+        'cuts': cuts
+    }
+
+    # Save to file
+    safe_name = re.sub(r'[^\w\-]', '_', name.lower())
+    config_path = STITCH_CONFIG_DIR / f"{safe_name}.json"
+
+    try:
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        return jsonify({'success': True, 'path': str(config_path)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/stitch/parse-racers', methods=['POST'])
+def parse_racers_for_stitch():
+    """
+    Parse Vola file and start list PDF to get racer data for stitching.
+
+    Request body:
+    {
+        "vola_file": "/path/to/vola.xlsx",
+        "race": "U12 run 1",
+        "startlist_file": "/path/to/startlist.pdf"  // Optional
+    }
+
+    Returns list of racers with timing and name data.
+    """
+    if not HAS_OPENPYXL:
+        return jsonify({'error': 'openpyxl not installed'}), 500
+
+    data = request.get_json() or {}
+    vola_file = data.get('vola_file')
+    race = data.get('race', '').lower()
+    startlist_file = data.get('startlist_file')
+
+    if not vola_file or not Path(vola_file).exists():
+        return jsonify({'error': 'Invalid vola_file'}), 400
+
+    # Map race selection to sheet names
+    race_map = {
+        'u12 run 1': ('u12 start run 1', 'u12 end run 1'),
+        'u12 run 2': ('u12 start run 2', 'u12 end run 2'),
+        'u14 run 1': ('u14 start run 1', 'u14 end run 1'),
+        'u14 run 2': ('u14 start run 2', 'u14 end run 2'),
+    }
+
+    if race not in race_map:
+        return jsonify({'error': f'Invalid race. Must be one of: {list(race_map.keys())}'}), 400
+
+    # Parse start list for names if provided
+    bib_to_racer = {}
+    if startlist_file and Path(startlist_file).exists():
+        bib_to_racer = parse_startlist_pdf(startlist_file)
+
+    start_sheet, end_sheet = race_map[race]
+
+    try:
+        wb = openpyxl.load_workbook(vola_file, data_only=True)
+
+        # Parse start times
+        start_times = {}
+        ws_start = wb[start_sheet]
+        for row in ws_start.iter_rows(min_row=2, values_only=True):
+            bib_raw = row[1]
+            time_str = row[2]
+            if bib_raw and time_str:
+                try:
+                    bib = int(bib_raw)
+                except (ValueError, TypeError):
+                    continue
+                start_seconds = parse_vola_time(str(time_str))
+                if start_seconds is not None:
+                    start_times[bib] = start_seconds
+
+        # Parse end times and durations
+        end_times = {}
+        run_durations = {}
+        ws_end = wb[end_sheet]
+        for row in ws_end.iter_rows(min_row=2, values_only=True):
+            bib_raw = row[1]
+            time_str = row[2]
+            duration = row[3] if len(row) > 3 else None
+            if bib_raw:
+                try:
+                    bib = int(bib_raw)
+                except (ValueError, TypeError):
+                    continue
+                if time_str:
+                    end_seconds = parse_vola_time(str(time_str))
+                    if end_seconds is not None:
+                        end_times[bib] = end_seconds
+                if duration is not None and isinstance(duration, (int, float)):
+                    run_durations[bib] = float(duration)
+
+        wb.close()
+
+        # Build racer list
+        racers = []
+        for bib in sorted(start_times.keys()):
+            start_sec = start_times[bib]
+
+            # Calculate run duration
+            run_duration = None
+            if bib in end_times:
+                run_duration = end_times[bib] - start_sec
+            elif bib in run_durations:
+                run_duration = run_durations[bib]
+
+            if not run_duration or run_duration <= 0:
+                continue  # Skip racers without valid finish
+
+            # Get name/team from start list
+            racer_info = bib_to_racer.get(bib, {})
+            name = racer_info.get('name', f'Bib{bib}')
+            team = racer_info.get('team', '')
+            gender = racer_info.get('gender', '')
+
+            racer = {
+                'bib': bib,
+                'name': name,
+                'team': team,
+                'gender': gender,
+                'start_time_sec': start_sec,
+                'start_time_str': seconds_to_time_str(start_sec),
+                'finish_time_sec': start_sec + run_duration,
+                'finish_time_str': seconds_to_time_str(start_sec + run_duration),
+                'run_duration': run_duration,
+                'finished': bib in end_times
+            }
+            racers.append(racer)
+
+        # Sort by start time
+        racers.sort(key=lambda r: r['start_time_sec'])
+
+        # Find videos for all 4 cameras
+        # Extract date from Vola filename (format: Vola_export_U12_U14_02-01-2026.xlsx)
+        vola_name = Path(vola_file).stem
+        date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', vola_name)
+        if not date_match:
+            return jsonify({'error': 'Could not extract date from Vola filename'}), 400
+
+        race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+
+        # Calculate time range needed (earliest start - 60s buffer, latest finish + 60s buffer)
+        if racers:
+            earliest_start = min(r['start_time_sec'] for r in racers) - 60
+            latest_finish = max(r['finish_time_sec'] for r in racers) + 60
+        else:
+            earliest_start = 0
+            latest_finish = 86400
+
+        # Find videos for each camera
+        camera_folders = {'R1': 'sd_R1', 'R2': 'sd_R2', 'R3': 'sd_R3', 'Axis': 'sd_Axis'}
+        video_paths = {}
+
+        for camera_id, folder_name in camera_folders.items():
+            camera_videos = []
+
+            if camera_id == 'Axis':
+                # Axis has different folder structure: sd_Axis/sdcard/YYYYMMDD/HH/YYYYMMDD_HHMMSS_XXXX_XXX/YYYYMMDD_HH/*.mkv
+                axis_date_str = race_date.replace('-', '')  # 2026-02-01 -> 20260201
+                axis_base = RECORDINGS_DIR / folder_name / 'sdcard' / axis_date_str
+                if axis_base.exists():
+                    # Search through hour folders
+                    for hour_folder in sorted(axis_base.glob('*')):
+                        if not hour_folder.is_dir():
+                            continue
+                        for recording_folder in sorted(hour_folder.glob('*')):
+                            if not recording_folder.is_dir():
+                                continue
+                            # Find mkv files in subdirectories
+                            for mkv_file in recording_folder.glob('**/*.mkv'):
+                                # Parse Axis filename: YYYYMMDD_HHMMSS_XXXX.mkv
+                                fname = mkv_file.stem  # e.g., 20260201_081402_A4CC
+                                match = re.match(r'(\d{8})_(\d{6})_', fname)
+                                if match:
+                                    start_str = match.group(2)
+                                    start_sec = int(start_str[0:2]) * 3600 + int(start_str[2:4]) * 60 + int(start_str[4:6])
+                                    # Estimate end time (Axis videos are typically ~5 min segments)
+                                    end_sec = start_sec + 300
+
+                                    if end_sec >= earliest_start and start_sec <= latest_finish:
+                                        camera_videos.append({
+                                            'path': str(mkv_file),
+                                            'start_sec': start_sec,
+                                            'end_sec': end_sec,
+                                        })
+            else:
+                # Reolink cameras: sd_XX/sdcard/Mp4Record/YYYY-MM-DD/*.mp4
+                videos_path = RECORDINGS_DIR / folder_name / 'sdcard' / 'Mp4Record' / race_date
+                if videos_path.exists():
+                    for video_file in sorted(videos_path.glob('*.mp4')):
+                        parsed_date, start_sec, end_sec = parse_reolink_video_times(video_file.name)
+                        if start_sec is None:
+                            continue
+
+                        if end_sec >= earliest_start and start_sec <= latest_finish:
+                            camera_videos.append({
+                                'path': str(video_file),
+                                'start_sec': start_sec,
+                                'end_sec': end_sec,
+                            })
+
+            # Return ALL videos that overlap with the race time range, sorted by start time
+            if camera_videos:
+                camera_videos.sort(key=lambda v: v['start_sec'])
+                video_paths[camera_id] = [v['path'] for v in camera_videos]
+
+        return jsonify({
+            'race': race,
+            'race_date': race_date,
+            'racers': racers,
+            'total_racers': len(racers),
+            'video_paths': video_paths,  # Now a dict of camera_id -> list of video paths
+            'time_range': {
+                'start_sec': earliest_start,
+                'end_sec': latest_finish,
+            }
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def run_stitch_job(job_id: str, config: dict):
+    """Background thread function to run the stitch job."""
+    from stitcher import VideoStitcher, CameraCut, Racer
+
+    try:
+        with stitch_jobs_lock:
+            stitch_jobs[job_id]['status'] = 'running'
+            stitch_jobs[job_id]['progress'] = {'current': 0, 'total': 0, 'current_racer': ''}
+
+        # Extract config
+        racers_data = config['racers']
+        cuts_data = config['cuts']
+        video_paths = config['video_paths']
+        output_dir = config.get('output_dir', str(Path(__file__).parent.parent / 'output'))
+        race_name = config.get('race_name', 'race')
+        race_title = config.get('race_title', '')
+
+        # Convert to objects
+        cuts = [CameraCut(**c) for c in cuts_data]
+        racers = []
+        for r in racers_data:
+            if r.get('run_duration', 0) <= 0:
+                continue
+            racers.append(Racer(
+                bib=r['bib'],
+                name=r.get('name', f"Bib{r['bib']}"),
+                team=r.get('team', ''),
+                gender=r.get('gender', ''),
+                start_time_sec=r['start_time_sec'],
+                finish_time_sec=r.get('finish_time_sec', r['start_time_sec'] + r['run_duration']),
+                duration=r['run_duration']
+            ))
+
+        with stitch_jobs_lock:
+            stitch_jobs[job_id]['progress']['total'] = len(racers)
+
+        # Stop flag function - checks if job should stop
+        def should_stop():
+            with stitch_jobs_lock:
+                return stitch_jobs.get(job_id, {}).get('status') == 'stopping'
+
+        # Create stitcher and run
+        stitcher = VideoStitcher(
+            racers=racers,
+            cuts=cuts,
+            video_paths=video_paths,
+            output_dir=output_dir,
+            race_name=race_name,
+            race_title=race_title,
+            stop_flag=should_stop
+        )
+
+        def progress_callback(current, total, name):
+            with stitch_jobs_lock:
+                stitch_jobs[job_id]['progress'] = {
+                    'current': current,
+                    'total': total,
+                    'current_racer': name
+                }
+
+        outputs = stitcher.process_all(progress_callback=progress_callback)
+
+        with stitch_jobs_lock:
+            # Check if we were stopped
+            if stitch_jobs[job_id]['status'] == 'stopping':
+                stitch_jobs[job_id]['status'] = 'stopped'
+            else:
+                stitch_jobs[job_id]['status'] = 'completed'
+            stitch_jobs[job_id]['outputs'] = [str(p) for p in outputs]
+            stitch_jobs[job_id]['output_dir'] = output_dir
+
+    except Exception as e:
+        with stitch_jobs_lock:
+            stitch_jobs[job_id]['status'] = 'error'
+            stitch_jobs[job_id]['error'] = str(e)
+
+
+@app.route('/api/stitch/process', methods=['POST'])
+def start_stitch_process():
+    """
+    Start video stitching process.
+
+    Request body:
+    {
+        "racers": [...],  // From parse-racers endpoint
+        "cuts": [...],    // Cut point configuration
+        "video_paths": {  // Camera ID to video file path
+            "R1": "/path/to/r1.mp4",
+            "R2": "/path/to/r2.mp4",
+            "Axis": "/path/to/axis.mp4",
+            "R3": "/path/to/r3.mp4"
+        },
+        "race_name": "u12_run1",  // Optional
+        "output_dir": "/path/to/output"  // Optional
+    }
+    """
+    data = request.get_json() or {}
+
+    racers = data.get('racers', [])
+    cuts = data.get('cuts', [])
+    video_paths = data.get('video_paths', {})
+
+    if not racers:
+        return jsonify({'error': 'No racers provided'}), 400
+    if not cuts:
+        return jsonify({'error': 'No cuts provided'}), 400
+    if not video_paths:
+        return jsonify({'error': 'No video_paths provided'}), 400
+
+    # Validate video paths exist (video_paths values can be single path or list of paths)
+    for camera, paths in video_paths.items():
+        # Normalize to list
+        if isinstance(paths, str):
+            paths = [paths]
+        if not paths:
+            return jsonify({'error': f'No video files provided for {camera}'}), 400
+        for path in paths:
+            if not Path(path).exists():
+                return jsonify({'error': f'Video file not found for {camera}: {path}'}), 400
+
+    # Create job
+    job_id = str(uuid.uuid4())[:8]
+
+    with stitch_jobs_lock:
+        stitch_jobs[job_id] = {
+            'status': 'starting',
+            'progress': {'current': 0, 'total': len(racers), 'current_racer': ''},
+            'outputs': [],
+            'error': None
+        }
+
+    # Start background thread
+    config = {
+        'racers': racers,
+        'cuts': cuts,
+        'video_paths': video_paths,
+        'race_name': data.get('race_name', 'race'),
+        'race_title': data.get('race_title', ''),  # e.g., "Western Division U14 Ranking - SL"
+        'output_dir': data.get('output_dir', str(Path(__file__).parent.parent / 'output'))
+    }
+
+    thread = threading.Thread(target=run_stitch_job, args=(job_id, config))
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({'job_id': job_id, 'status': 'starting'})
+
+
+@app.route('/api/stitch/job/<job_id>')
+def get_stitch_job_status(job_id):
+    """Get status of a stitch job."""
+    with stitch_jobs_lock:
+        if job_id not in stitch_jobs:
+            return jsonify({'error': 'Job not found'}), 404
+
+        job = stitch_jobs[job_id].copy()
+
+    return jsonify(job)
+
+
+@app.route('/api/stitch/job/<job_id>/stop', methods=['POST'])
+def stop_stitch_job(job_id):
+    """Stop a running stitch job (marks as stopped, thread will check)."""
+    with stitch_jobs_lock:
+        if job_id not in stitch_jobs:
+            return jsonify({'error': 'Job not found'}), 404
+
+        stitch_jobs[job_id]['status'] = 'stopping'
+
+    return jsonify({'success': True})
 
 
 if __name__ == '__main__':

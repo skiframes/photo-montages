@@ -473,8 +473,191 @@
     </header>
 
     <div class="container">
-        <!-- Active Session Warning -->
-        <div id="activeSession" class="active-session" style="display: none;">
+        <!-- Mode Selection -->
+        <div class="card">
+            <div class="card-title">Mode</div>
+            <div class="btn-group">
+                <button class="btn btn-primary mode-btn" id="modeCalibration">
+                    Photo Montage
+                </button>
+                <button class="btn btn-outline mode-btn" id="modeStitch">
+                    Video Stitch
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- VIDEO STITCH MODE UI                       -->
+        <!-- ============================================ -->
+        <div id="stitchMode" style="display: none;">
+            <!-- Step 1: Select Vola & Race -->
+            <div class="card">
+                <div class="card-title">1. Select Race Data</div>
+
+                <label for="stitchVolaFile">Vola Excel File</label>
+                <select id="stitchVolaFile">
+                    <option value="">Loading...</option>
+                </select>
+
+                <label for="stitchStartlistFile" style="margin-top: 8px;">Start List PDF (for names/teams)</label>
+                <select id="stitchStartlistFile">
+                    <option value="">-- None (use bib numbers) --</option>
+                </select>
+
+                <label for="stitchRace" style="margin-top: 8px;">Age Group / Run</label>
+                <select id="stitchRace">
+                    <option value="U12 run 1">U12 Run 1</option>
+                    <option value="U12 run 2">U12 Run 2</option>
+                    <option value="U14 run 1">U14 Run 1</option>
+                    <option value="U14 run 2">U14 Run 2</option>
+                </select>
+
+                <label for="stitchRaceTitle" style="margin-top: 8px;">Video Title</label>
+                <input type="text" id="stitchRaceTitle" value="Western Divisional U12 Ranking - SL" style="margin-bottom: 0;">
+                <div class="help-text">Shown on video overlay (bottom right). Timer shown at top right.</div>
+
+                <button id="stitchLoadRacers" class="btn btn-primary" style="margin-top: 12px;">
+                    Load Racers
+                </button>
+
+                <div id="stitchRacersInfo" style="display: none; margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0;">
+                    <strong style="color: #166534;">Racers Loaded:</strong> <span id="stitchRacerCount">0</span>
+                    <div style="margin-top: 8px; max-height: 150px; overflow-y: auto; font-size: 13px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="text-align: left; border-bottom: 1px solid #d1d5db;">
+                                    <th style="padding: 4px;">Bib</th>
+                                    <th style="padding: 4px;">Name</th>
+                                    <th style="padding: 4px;">Team</th>
+                                    <th style="padding: 4px;">Start</th>
+                                    <th style="padding: 4px;">Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stitchRacersTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Configure Cut Points -->
+            <div class="card" id="stitchCutsCard" style="display: none;">
+                <div class="card-title">2. Configure Camera Cut Points</div>
+
+                <label for="stitchConfigSelect">Load Saved Config</label>
+                <select id="stitchConfigSelect">
+                    <option value="">-- New Configuration --</option>
+                </select>
+
+                <div style="margin-top: 16px;">
+                    <p class="help-text" style="margin-bottom: 12px;">
+                        Set when each camera's segment starts/ends as a percentage of run time.
+                        Example: R1 from -5% to 5% means R1 shows from 2 seconds before start to 2 seconds after (for a 40s run).
+                    </p>
+
+                    <div id="stitchCutsContainer">
+                        <!-- R1 -->
+                        <div class="cut-row" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+                            <label style="width: 60px; margin: 0;">R1</label>
+                            <input type="number" id="stitchCutR1Start" value="-5" step="1" style="width: 70px; margin: 0;">
+                            <span>% to</span>
+                            <input type="number" id="stitchCutR1End" value="5" step="1" style="width: 70px; margin: 0;">
+                            <span>%</span>
+                        </div>
+                        <!-- Axis -->
+                        <div class="cut-row" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+                            <label style="width: 60px; margin: 0;">Axis</label>
+                            <input type="number" id="stitchCutAxisStart" value="5" step="1" style="width: 70px; margin: 0;">
+                            <span>% to</span>
+                            <input type="number" id="stitchCutAxisEnd" value="55" step="0.5" style="width: 70px; margin: 0;">
+                            <span>%</span>
+                        </div>
+                        <!-- R2 -->
+                        <div class="cut-row" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+                            <label style="width: 60px; margin: 0;">R2</label>
+                            <input type="number" id="stitchCutR2Start" value="55" step="0.5" style="width: 70px; margin: 0;">
+                            <span>% to</span>
+                            <input type="number" id="stitchCutR2End" value="72" step="0.5" style="width: 70px; margin: 0;">
+                            <span>%</span>
+                        </div>
+                        <!-- R3 -->
+                        <div class="cut-row" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+                            <label style="width: 60px; margin: 0;">R3</label>
+                            <input type="number" id="stitchCutR3Start" value="72" step="0.5" style="width: 70px; margin: 0;">
+                            <span>% to</span>
+                            <input type="number" id="stitchCutR3End" value="105" step="1" style="width: 70px; margin: 0;">
+                            <span>%</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 12px;">
+                        <label for="stitchConfigName" style="font-size: 13px;">Config Name (to save)</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="stitchConfigName" placeholder="e.g., U12 run 1" style="flex: 1; margin: 0;">
+                            <button id="stitchSaveConfig" class="btn btn-outline btn-sm">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Videos Info (auto-detected) -->
+            <div class="card" id="stitchVideosCard" style="display: none;">
+                <div class="card-title">3. Camera Videos (Auto-detected)</div>
+
+                <p class="help-text" style="margin-bottom: 12px;">
+                    Videos automatically selected from /Volumes/OWC_48/data/recordings/
+                </p>
+
+                <div id="stitchVideosList" style="font-size: 13px;">
+                    <div style="margin-bottom: 6px;"><strong>R1:</strong> <span id="stitchVideoR1Display">-</span></div>
+                    <div style="margin-bottom: 6px;"><strong>Axis:</strong> <span id="stitchVideoAxisDisplay">-</span></div>
+                    <div style="margin-bottom: 6px;"><strong>R2:</strong> <span id="stitchVideoR2Display">-</span></div>
+                    <div style="margin-bottom: 6px;"><strong>R3:</strong> <span id="stitchVideoR3Display">-</span></div>
+                </div>
+
+                <div id="stitchVideosMissing" style="display: none; margin-top: 12px; padding: 10px; background: #fef2f2; border-radius: 6px; color: #dc2626;">
+                    <strong>Warning:</strong> Some camera videos not found. Check recordings directory.
+                </div>
+            </div>
+
+            <!-- Step 4: Process -->
+            <div class="card" id="stitchProcessCard" style="display: none;">
+                <div class="card-title">4. Generate Stitched Videos</div>
+
+                <button id="stitchStartProcess" class="btn btn-success" style="font-size: 18px; padding: 16px;">
+                    Start Processing
+                </button>
+
+                <button id="stitchStopProcess" class="btn btn-danger" style="display: none; margin-top: 12px; font-size: 16px; padding: 14px;">
+                    Stop Processing
+                </button>
+
+                <div id="stitchProgress" style="display: none; margin-top: 16px;">
+                    <div style="background: #e5e7eb; border-radius: 8px; height: 24px; overflow: hidden;">
+                        <div id="stitchProgressBar" style="background: #22c55e; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                    <div style="margin-top: 8px; text-align: center;">
+                        <span id="stitchProgressText">Processing racer 0 of 0</span>
+                    </div>
+                    <div id="stitchCurrentRacer" style="margin-top: 4px; text-align: center; font-size: 14px; color: #6b7280;"></div>
+                </div>
+
+                <div id="stitchResults" style="display: none; margin-top: 16px; padding: 12px; background: #f0fdf4; border-radius: 8px;">
+                    <strong style="color: #166534;">Completed!</strong>
+                    <div id="stitchOutputDir" style="margin-top: 4px; font-size: 13px;"></div>
+                    <div id="stitchOutputCount" style="margin-top: 4px; font-size: 13px;"></div>
+                </div>
+
+                <div id="stitchError" style="display: none; margin-top: 16px; padding: 12px; background: #fef2f2; border-radius: 8px; color: #dc2626;">
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- PHOTO MONTAGE MODE UI (original)           -->
+        <!-- ============================================ -->
+        <div id="montageMode">
+            <!-- Active Session Warning -->
+            <div id="activeSession" class="active-session" style="display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <strong>Active Session:</strong> <span id="activeSessionId"></span>
@@ -710,6 +893,7 @@
                 Stop Processing
             </button>
         </div>
+        </div><!-- end montageMode -->
     </div>
 
     <!-- Drawing Indicator -->
@@ -720,6 +904,7 @@
     <script>
         // State
         let state = {
+            mode: 'montage',  // 'montage' or 'stitch'
             frameId: null,
             frameWidth: 0,
             frameHeight: 0,
@@ -741,6 +926,12 @@
             // Vola race timing data
             volaRacers: [],  // List of racers with timing data
             volaVideos: [],  // List of videos covering the race
+            // Stitch mode state
+            stitchRacers: [],
+            stitchCuts: [],
+            stitchVideoPaths: {},  // Auto-detected video paths for each camera
+            stitchJobId: null,
+            stitchPollInterval: null,
             volaRace: '',  // Selected race (e.g., "U12 run 1")
             volaCamera: '',  // Selected camera for Vola timing
             volaView: '1',  // View number 1-5 for filename
@@ -824,6 +1015,49 @@
             numAthletes: document.getElementById('numAthletes'),
             volaVideoCount: document.getElementById('volaVideoCount'),
             volaTimeRange: document.getElementById('volaTimeRange'),
+            // Mode selection
+            modeCalibration: document.getElementById('modeCalibration'),
+            modeStitch: document.getElementById('modeStitch'),
+            montageMode: document.getElementById('montageMode'),
+            stitchMode: document.getElementById('stitchMode'),
+            // Stitch elements
+            stitchVolaFile: document.getElementById('stitchVolaFile'),
+            stitchStartlistFile: document.getElementById('stitchStartlistFile'),
+            stitchRace: document.getElementById('stitchRace'),
+            stitchRaceTitle: document.getElementById('stitchRaceTitle'),
+            stitchLoadRacers: document.getElementById('stitchLoadRacers'),
+            stitchRacersInfo: document.getElementById('stitchRacersInfo'),
+            stitchRacerCount: document.getElementById('stitchRacerCount'),
+            stitchRacersTable: document.getElementById('stitchRacersTable'),
+            stitchCutsCard: document.getElementById('stitchCutsCard'),
+            stitchConfigSelect: document.getElementById('stitchConfigSelect'),
+            stitchCutR1Start: document.getElementById('stitchCutR1Start'),
+            stitchCutR1End: document.getElementById('stitchCutR1End'),
+            stitchCutAxisStart: document.getElementById('stitchCutAxisStart'),
+            stitchCutAxisEnd: document.getElementById('stitchCutAxisEnd'),
+            stitchCutR2Start: document.getElementById('stitchCutR2Start'),
+            stitchCutR2End: document.getElementById('stitchCutR2End'),
+            stitchCutR3Start: document.getElementById('stitchCutR3Start'),
+            stitchCutR3End: document.getElementById('stitchCutR3End'),
+            stitchConfigName: document.getElementById('stitchConfigName'),
+            stitchSaveConfig: document.getElementById('stitchSaveConfig'),
+            stitchVideosCard: document.getElementById('stitchVideosCard'),
+            stitchVideoR1Display: document.getElementById('stitchVideoR1Display'),
+            stitchVideoAxisDisplay: document.getElementById('stitchVideoAxisDisplay'),
+            stitchVideoR2Display: document.getElementById('stitchVideoR2Display'),
+            stitchVideoR3Display: document.getElementById('stitchVideoR3Display'),
+            stitchVideosMissing: document.getElementById('stitchVideosMissing'),
+            stitchProcessCard: document.getElementById('stitchProcessCard'),
+            stitchStartProcess: document.getElementById('stitchStartProcess'),
+            stitchStopProcess: document.getElementById('stitchStopProcess'),
+            stitchProgress: document.getElementById('stitchProgress'),
+            stitchProgressBar: document.getElementById('stitchProgressBar'),
+            stitchProgressText: document.getElementById('stitchProgressText'),
+            stitchCurrentRacer: document.getElementById('stitchCurrentRacer'),
+            stitchResults: document.getElementById('stitchResults'),
+            stitchOutputDir: document.getElementById('stitchOutputDir'),
+            stitchOutputCount: document.getElementById('stitchOutputCount'),
+            stitchError: document.getElementById('stitchError'),
         };
 
         // Initialize
@@ -1686,8 +1920,381 @@
             }, 5000);
         }
 
+        // ============================================
+        // VIDEO STITCH MODE FUNCTIONS
+        // ============================================
+
+        function switchMode(mode) {
+            state.mode = mode;
+            if (mode === 'montage') {
+                elements.montageMode.style.display = 'block';
+                elements.stitchMode.style.display = 'none';
+                elements.modeCalibration.classList.add('btn-primary');
+                elements.modeCalibration.classList.remove('btn-outline');
+                elements.modeStitch.classList.remove('btn-primary');
+                elements.modeStitch.classList.add('btn-outline');
+            } else {
+                elements.montageMode.style.display = 'none';
+                elements.stitchMode.style.display = 'block';
+                elements.modeStitch.classList.add('btn-primary');
+                elements.modeStitch.classList.remove('btn-outline');
+                elements.modeCalibration.classList.remove('btn-primary');
+                elements.modeCalibration.classList.add('btn-outline');
+                // Load stitch-specific data
+                loadStitchVolaFiles();
+                loadStitchConfigs();
+            }
+        }
+
+        async function loadStitchVolaFiles() {
+            try {
+                const res = await fetch('/api/vola/files');
+                const files = await res.json();
+                elements.stitchVolaFile.innerHTML = files.length === 0
+                    ? '<option value="">No Vola files found</option>'
+                    : files.map(f => `<option value="${f.path}">${f.name}</option>`).join('');
+
+                const resStartlist = await fetch('/api/vola/startlist-files');
+                const startlistFiles = await resStartlist.json();
+                elements.stitchStartlistFile.innerHTML = '<option value="">-- None (use bib numbers) --</option>' +
+                    startlistFiles.map(f => `<option value="${f.path}">${f.name}</option>`).join('');
+            } catch (e) {
+                console.error('Error loading Vola files:', e);
+            }
+        }
+
+        async function loadStitchConfigs() {
+            try {
+                const res = await fetch('/api/stitch/configs');
+                const configs = await res.json();
+                elements.stitchConfigSelect.innerHTML = '<option value="">-- New Configuration --</option>' +
+                    configs.map(c => `<option value="${c.filename}">${c.name}</option>`).join('');
+            } catch (e) {
+                console.error('Error loading stitch configs:', e);
+            }
+        }
+
+        async function loadStitchRacers() {
+            const volaFile = elements.stitchVolaFile.value;
+            const race = elements.stitchRace.value;
+            const startlistFile = elements.stitchStartlistFile.value;
+
+            if (!volaFile) {
+                showStatus('Please select a Vola file', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Loading racers...', 'info');
+                const res = await fetch('/api/stitch/parse-racers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        vola_file: volaFile,
+                        race: race,
+                        startlist_file: startlistFile
+                    })
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    return;
+                }
+
+                state.stitchRacers = data.racers;
+                state.stitchVideoPaths = data.video_paths || {};
+                elements.stitchRacerCount.textContent = data.total_racers;
+
+                // Populate table
+                elements.stitchRacersTable.innerHTML = data.racers.map(r => `
+                    <tr>
+                        <td style="padding: 4px;">${r.bib}</td>
+                        <td style="padding: 4px;">${r.name}</td>
+                        <td style="padding: 4px;">${r.team}</td>
+                        <td style="padding: 4px;">${r.start_time_str}</td>
+                        <td style="padding: 4px;">${r.run_duration ? r.run_duration.toFixed(1) + 's' : '-'}</td>
+                    </tr>
+                `).join('');
+
+                elements.stitchRacersInfo.style.display = 'block';
+                elements.stitchCutsCard.style.display = 'block';
+                elements.stitchVideosCard.style.display = 'block';
+                elements.stitchProcessCard.style.display = 'block';
+
+                // Display auto-detected video paths (now arrays)
+                const formatVideos = (paths) => {
+                    if (!paths || paths.length === 0) return 'Not found';
+                    if (paths.length === 1) return paths[0].split('/').pop();
+                    return `${paths.length} files`;
+                };
+                elements.stitchVideoR1Display.textContent = formatVideos(state.stitchVideoPaths.R1);
+                elements.stitchVideoAxisDisplay.textContent = formatVideos(state.stitchVideoPaths.Axis);
+                elements.stitchVideoR2Display.textContent = formatVideos(state.stitchVideoPaths.R2);
+                elements.stitchVideoR3Display.textContent = formatVideos(state.stitchVideoPaths.R3);
+
+                // Show warning if any videos missing
+                const missingCameras = ['R1', 'Axis', 'R2', 'R3'].filter(c => !state.stitchVideoPaths[c] || state.stitchVideoPaths[c].length === 0);
+                if (missingCameras.length > 0) {
+                    elements.stitchVideosMissing.textContent = `Warning: No videos found for: ${missingCameras.join(', ')}`;
+                    elements.stitchVideosMissing.style.display = 'block';
+                } else {
+                    elements.stitchVideosMissing.style.display = 'none';
+                }
+
+                // Auto-select config if matching race name exists
+                const raceNameClean = race.toLowerCase().replace(/\s+/g, '_');
+                const matchingOption = Array.from(elements.stitchConfigSelect.options)
+                    .find(opt => opt.value.includes(raceNameClean));
+                if (matchingOption) {
+                    elements.stitchConfigSelect.value = matchingOption.value;
+                    loadStitchConfigValues(matchingOption.value);
+                }
+
+                // Set config name default
+                elements.stitchConfigName.value = race;
+
+                showStatus(`Loaded ${data.total_racers} racers, ${4 - missingCameras.length}/4 videos found`, 'success');
+            } catch (e) {
+                showStatus('Error loading racers: ' + e.message, 'error');
+            }
+        }
+
+        async function loadStitchConfigValues(filename) {
+            if (!filename) return;
+
+            try {
+                const name = filename.replace('.json', '');
+                const res = await fetch(`/api/stitch/config/${name}`);
+                const config = await res.json();
+
+                if (config.error) return;
+
+                // Populate cut inputs
+                for (const cut of config.cuts) {
+                    const cam = cut.camera;
+                    const startInput = document.getElementById(`stitchCut${cam}Start`);
+                    const endInput = document.getElementById(`stitchCut${cam}End`);
+                    if (startInput) startInput.value = cut.start_pct * 100;
+                    if (endInput) endInput.value = cut.end_pct * 100;
+                }
+
+                elements.stitchConfigName.value = config.name || '';
+            } catch (e) {
+                console.error('Error loading config:', e);
+            }
+        }
+
+        async function saveStitchConfig() {
+            const name = elements.stitchConfigName.value.trim();
+            if (!name) {
+                showStatus('Please enter a config name', 'error');
+                return;
+            }
+
+            const cuts = [
+                { camera: 'R1', start_pct: parseFloat(elements.stitchCutR1Start.value) / 100, end_pct: parseFloat(elements.stitchCutR1End.value) / 100 },
+                { camera: 'Axis', start_pct: parseFloat(elements.stitchCutAxisStart.value) / 100, end_pct: parseFloat(elements.stitchCutAxisEnd.value) / 100 },
+                { camera: 'R2', start_pct: parseFloat(elements.stitchCutR2Start.value) / 100, end_pct: parseFloat(elements.stitchCutR2End.value) / 100 },
+                { camera: 'R3', start_pct: parseFloat(elements.stitchCutR3Start.value) / 100, end_pct: parseFloat(elements.stitchCutR3End.value) / 100 },
+            ];
+
+            try {
+                const res = await fetch('/api/stitch/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, cuts })
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    return;
+                }
+
+                showStatus('Config saved', 'success');
+                loadStitchConfigs();
+            } catch (e) {
+                showStatus('Error saving config: ' + e.message, 'error');
+            }
+        }
+
+        function getStitchCuts() {
+            return [
+                { camera: 'R1', start_pct: parseFloat(elements.stitchCutR1Start.value) / 100, end_pct: parseFloat(elements.stitchCutR1End.value) / 100 },
+                { camera: 'Axis', start_pct: parseFloat(elements.stitchCutAxisStart.value) / 100, end_pct: parseFloat(elements.stitchCutAxisEnd.value) / 100 },
+                { camera: 'R2', start_pct: parseFloat(elements.stitchCutR2Start.value) / 100, end_pct: parseFloat(elements.stitchCutR2End.value) / 100 },
+                { camera: 'R3', start_pct: parseFloat(elements.stitchCutR3Start.value) / 100, end_pct: parseFloat(elements.stitchCutR3End.value) / 100 },
+            ];
+        }
+
+        async function startStitchProcess() {
+            // Validate
+            if (state.stitchRacers.length === 0) {
+                showStatus('No racers loaded', 'error');
+                return;
+            }
+
+            // Use auto-detected video paths (now arrays)
+            const videoPaths = state.stitchVideoPaths;
+
+            // Check all videos detected (arrays must have at least one element)
+            const missingCameras = ['R1', 'Axis', 'R2', 'R3'].filter(c => !videoPaths[c] || videoPaths[c].length === 0);
+            if (missingCameras.length > 0) {
+                showStatus(`Missing videos for: ${missingCameras.join(', ')}. Check recordings directory.`, 'error');
+                return;
+            }
+
+            const cuts = getStitchCuts();
+            const raceName = elements.stitchRace.value.toLowerCase().replace(/\s+/g, '_');
+            const raceTitle = elements.stitchRaceTitle.value.trim();
+
+            try {
+                elements.stitchStartProcess.disabled = true;
+                elements.stitchStopProcess.style.display = 'block';
+                elements.stitchProgress.style.display = 'block';
+                elements.stitchResults.style.display = 'none';
+                elements.stitchError.style.display = 'none';
+                elements.stitchProgressBar.style.width = '0%';
+                elements.stitchProgressText.textContent = 'Starting...';
+
+                const res = await fetch('/api/stitch/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        racers: state.stitchRacers,
+                        cuts: cuts,
+                        video_paths: videoPaths,
+                        race_name: raceName,
+                        race_title: raceTitle
+                    })
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    elements.stitchStartProcess.disabled = false;
+                    return;
+                }
+
+                state.stitchJobId = data.job_id;
+                pollStitchStatus();
+
+            } catch (e) {
+                showStatus('Error starting process: ' + e.message, 'error');
+                elements.stitchStartProcess.disabled = false;
+            }
+        }
+
+        function pollStitchStatus() {
+            if (state.stitchPollInterval) {
+                clearInterval(state.stitchPollInterval);
+            }
+
+            state.stitchPollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/stitch/job/${state.stitchJobId}`);
+                    const data = await res.json();
+
+                    if (data.error) {
+                        clearInterval(state.stitchPollInterval);
+                        elements.stitchError.textContent = data.error;
+                        elements.stitchError.style.display = 'block';
+                        elements.stitchStartProcess.disabled = false;
+                        return;
+                    }
+
+                    const progress = data.progress || {};
+                    const current = progress.current || 0;
+                    const total = progress.total || 1;
+                    const pct = Math.round((current / total) * 100);
+
+                    elements.stitchProgressBar.style.width = pct + '%';
+                    elements.stitchProgressText.textContent = `Processing racer ${current} of ${total}`;
+                    elements.stitchCurrentRacer.textContent = progress.current_racer || '';
+
+                    if (data.status === 'completed') {
+                        clearInterval(state.stitchPollInterval);
+                        elements.stitchProgressBar.style.width = '100%';
+                        elements.stitchProgressText.textContent = 'Completed!';
+                        elements.stitchResults.style.display = 'block';
+                        elements.stitchOutputDir.textContent = 'Output: ' + (data.output_dir || '');
+                        elements.stitchOutputCount.textContent = `Generated ${(data.outputs || []).length} videos`;
+                        elements.stitchStartProcess.disabled = false;
+                        elements.stitchStopProcess.style.display = 'none';
+                    } else if (data.status === 'stopped') {
+                        clearInterval(state.stitchPollInterval);
+                        elements.stitchProgressText.textContent = 'Stopped by user';
+                        elements.stitchResults.style.display = 'block';
+                        elements.stitchOutputDir.textContent = 'Output: ' + (data.output_dir || '');
+                        elements.stitchOutputCount.textContent = `Generated ${(data.outputs || []).length} videos before stopping`;
+                        elements.stitchStartProcess.disabled = false;
+                        elements.stitchStopProcess.style.display = 'none';
+                    } else if (data.status === 'error') {
+                        clearInterval(state.stitchPollInterval);
+                        elements.stitchError.textContent = data.error || 'Unknown error';
+                        elements.stitchError.style.display = 'block';
+                        elements.stitchStartProcess.disabled = false;
+                        elements.stitchStopProcess.style.display = 'none';
+                    }
+
+                } catch (e) {
+                    console.error('Error polling status:', e);
+                }
+            }, 1000);
+        }
+
+        async function stopStitchProcess() {
+            if (!state.stitchJobId) return;
+
+            try {
+                elements.stitchStopProcess.disabled = true;
+                elements.stitchStopProcess.textContent = 'Stopping...';
+
+                const res = await fetch(`/api/stitch/job/${state.stitchJobId}/stop`, {
+                    method: 'POST'
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                } else {
+                    elements.stitchProgressText.textContent = 'Stopping...';
+                }
+            } catch (e) {
+                showStatus('Error stopping process: ' + e.message, 'error');
+            } finally {
+                elements.stitchStopProcess.disabled = false;
+                elements.stitchStopProcess.textContent = 'Stop Processing';
+            }
+        }
+
+        function updateDefaultTitle() {
+            // Update default title based on selected race
+            const race = elements.stitchRace.value;
+            let ageGroup = 'U12';
+            if (race.toLowerCase().includes('u14')) ageGroup = 'U14';
+            const defaultTitle = `Western Divisional ${ageGroup} Ranking - SL`;
+            elements.stitchRaceTitle.value = defaultTitle;
+        }
+
+        function setupStitchEventListeners() {
+            elements.modeCalibration.addEventListener('click', () => switchMode('montage'));
+            elements.modeStitch.addEventListener('click', () => switchMode('stitch'));
+            elements.stitchLoadRacers.addEventListener('click', loadStitchRacers);
+            elements.stitchConfigSelect.addEventListener('change', () => {
+                loadStitchConfigValues(elements.stitchConfigSelect.value);
+            });
+            elements.stitchSaveConfig.addEventListener('click', saveStitchConfig);
+            elements.stitchStartProcess.addEventListener('click', startStitchProcess);
+            elements.stitchStopProcess.addEventListener('click', stopStitchProcess);
+            // Update default title when race selection changes
+            elements.stitchRace.addEventListener('change', updateDefaultTitle);
+        }
+
         // Initialize on load
         init();
+        setupStitchEventListeners();
     </script>
 </body>
 </html>
