@@ -1,0 +1,296 @@
+{
+  "session_id": "2026-02-04_0033_u10_race",
+  "session_type": "race",
+  "group": "U10",
+  "camera_id": "R1",
+  "camera_url": "rtsp://192.168.1.101/h264Preview_01_main",
+  "calibration_frame": "b3d87e0e",
+  "start_zone": {
+    "x": 551,
+    "y": 369,
+    "w": 96,
+    "h": 99
+  },
+  "end_zone": {
+    "x": 532,
+    "y": 1317,
+    "w": 325,
+    "h": 38
+  },
+  "crop_zone": {
+    "x": 379,
+    "y": 297,
+    "w": 530,
+    "h": 1115
+  },
+  "run_duration_seconds": null,
+  "session_start_time": "2026-02-04T00:33:17.079366",
+  "session_end_time": "2026-02-04T00:39:25.892905",
+  "pre_buffer_seconds": 0,
+  "post_buffer_seconds": 0,
+  "detection_threshold": 47,
+  "min_pixel_change_pct": 9,
+  "min_brightness": 94,
+  "montage_fps": 4,
+  "start_offset_sec": 0,
+  "vola_racers": [
+    {
+      "bib": 52,
+      "camera_end_sec": 47907.4461,
+      "camera_start_sec": 47899.4461,
+      "finished": false,
+      "gender": "Women",
+      "name": "EmmyGuiterman",
+      "run_duration": null,
+      "start_time_sec": 47879.4461,
+      "team": "FS"
+    },
+    {
+      "bib": 51,
+      "camera_end_sec": 47936.220960000006,
+      "camera_start_sec": 47928.794200000004,
+      "finished": true,
+      "gender": "Women",
+      "name": "MargotAvillach",
+      "run_duration": 37.13380000000325,
+      "start_time_sec": 47910.2273,
+      "team": "RMS"
+    },
+    {
+      "bib": 50,
+      "camera_end_sec": 47965.20367,
+      "camera_start_sec": 47958.286250000005,
+      "finished": true,
+      "gender": "",
+      "name": "",
+      "run_duration": 34.58709999999701,
+      "start_time_sec": 47940.9927,
+      "team": ""
+    },
+    {
+      "bib": 49,
+      "camera_end_sec": 47997.37909,
+      "camera_start_sec": 47990.43275,
+      "finished": true,
+      "gender": "Women",
+      "name": "PiperMagleby",
+      "run_duration": 34.73170000000391,
+      "start_time_sec": 47973.0669,
+      "team": "FS"
+    },
+    {
+      "bib": 48,
+      "camera_end_sec": 48038.1692,
+      "camera_start_sec": 48030.1692,
+      "finished": false,
+      "gender": "",
+      "name": "",
+      "run_duration": null,
+      "start_time_sec": 48010.1692,
+      "team": ""
+    },
+    {
+      "bib": 47,
+      "camera_end_sec": 48069.01635,
+      "camera_start_sec": 48062.18485,
+      "finished": true,
+      "gender": "Women",
+      "name": "MillieFisher",
+      "run_duration": 34.157500000001164,
+      "start_time_sec": 48045.1061,
+      "team": "FS"
+    },
+    {
+      "bib": 46,
+      "camera_end_sec": 48100.92414,
+      "camera_start_sec": 48092.7853,
+      "finished": true,
+      "gender": "Women",
+      "name": "GenevieveChin",
+      "run_duration": 40.69420000000537,
+      "start_time_sec": 48072.4382,
+      "team": "SUN"
+    },
+    {
+      "bib": 45,
+      "camera_end_sec": 48127.827979999995,
+      "camera_start_sec": 48120.543699999995,
+      "finished": true,
+      "gender": "Women",
+      "name": "IsabelWaltham",
+      "run_duration": 36.42139999999927,
+      "start_time_sec": 48102.333,
+      "team": "SUN"
+    },
+    {
+      "bib": 44,
+      "camera_end_sec": 48159.300319999995,
+      "camera_start_sec": 48151.235199999996,
+      "finished": true,
+      "gender": "Women",
+      "name": "MargretLapomardo",
+      "run_duration": 40.32560000000376,
+      "start_time_sec": 48131.0724,
+      "team": "RMS"
+    },
+    {
+      "bib": 43,
+      "camera_end_sec": 48190.976220000004,
+      "camera_start_sec": 48183.4593,
+      "finished": true,
+      "gender": "Women",
+      "name": "AdaMeyer",
+      "run_duration": 37.584600000001956,
+      "start_time_sec": 48164.667,
+      "team": "FS"
+    },
+    {
+      "bib": 42,
+      "camera_end_sec": 48221.37962,
+      "camera_start_sec": 48213.4355,
+      "finished": true,
+      "gender": "Women",
+      "name": "VivienneMcdermott",
+      "run_duration": 39.72060000000056,
+      "start_time_sec": 48193.5752,
+      "team": "FS"
+    },
+    {
+      "bib": 40,
+      "camera_end_sec": 48250.531910000005,
+      "camera_start_sec": 48242.70165,
+      "finished": true,
+      "gender": "Women",
+      "name": "MckenzieLetson",
+      "run_duration": 39.151300000004994,
+      "start_time_sec": 48223.126,
+      "team": "RMS"
+    },
+    {
+      "bib": 39,
+      "camera_end_sec": 48284.04298,
+      "camera_start_sec": 48276.1763,
+      "finished": true,
+      "gender": "",
+      "name": "",
+      "run_duration": 39.33340000000317,
+      "start_time_sec": 48256.5096,
+      "team": ""
+    },
+    {
+      "bib": 38,
+      "camera_end_sec": 48315.681000000004,
+      "camera_start_sec": 48307.3378,
+      "finished": true,
+      "gender": "Women",
+      "name": "LianaLoehrke",
+      "run_duration": 41.71600000000035,
+      "start_time_sec": 48286.4798,
+      "team": "RMS"
+    },
+    {
+      "bib": 37,
+      "camera_end_sec": 48349.35234,
+      "camera_start_sec": 48340.5707,
+      "finished": true,
+      "gender": "Women",
+      "name": "BrielleDeferiere",
+      "run_duration": 43.90819999999803,
+      "start_time_sec": 48318.6166,
+      "team": "RMS"
+    },
+    {
+      "bib": 36,
+      "camera_end_sec": 48384.686460000004,
+      "camera_start_sec": 48375.582500000004,
+      "finished": true,
+      "gender": "Women",
+      "name": "EvelynDimarzio",
+      "run_duration": 45.51980000000185,
+      "start_time_sec": 48352.8226,
+      "team": "SUN"
+    },
+    {
+      "bib": 35,
+      "camera_end_sec": 48414.848009999994,
+      "camera_start_sec": 48406.964949999994,
+      "finished": true,
+      "gender": "Women",
+      "name": "LucyHouse",
+      "run_duration": 39.41530000000057,
+      "start_time_sec": 48387.2573,
+      "team": "FS"
+    },
+    {
+      "bib": 34,
+      "camera_end_sec": 48448.4403,
+      "camera_start_sec": 48440.4403,
+      "finished": false,
+      "gender": "Women",
+      "name": "ReeseCote",
+      "run_duration": null,
+      "start_time_sec": 48420.4403,
+      "team": "PROC"
+    },
+    {
+      "bib": 33,
+      "camera_end_sec": 48477.004550000005,
+      "camera_start_sec": 48468.069650000005,
+      "finished": true,
+      "gender": "Women",
+      "name": "EllaSoroko",
+      "run_duration": 44.67450000000099,
+      "start_time_sec": 48445.7324,
+      "team": "RMS"
+    },
+    {
+      "bib": 32,
+      "camera_end_sec": 48513.267439999996,
+      "camera_start_sec": 48503.8088,
+      "finished": true,
+      "gender": "Women",
+      "name": "PiperSatyshur",
+      "run_duration": 47.29320000000007,
+      "start_time_sec": 48480.1622,
+      "team": "SUN"
+    }
+  ],
+  "vola_videos": [
+    {
+      "end_time_sec": 47941,
+      "end_time_str": "13:19:01",
+      "name": "RecM03_20260201_131401_131901_533C810_BF344C9.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R3/sdcard/Mp4Record/2026-02-01/RecM03_20260201_131401_131901_533C810_BF344C9.mp4",
+      "start_time_sec": 47641,
+      "start_time_str": "13:14:01"
+    },
+    {
+      "end_time_sec": 48241,
+      "end_time_str": "13:24:01",
+      "name": "RecM03_20260201_131901_132401_533C810_BF52CA3.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R3/sdcard/Mp4Record/2026-02-01/RecM03_20260201_131901_132401_533C810_BF52CA3.mp4",
+      "start_time_sec": 47941,
+      "start_time_str": "13:19:01"
+    },
+    {
+      "end_time_sec": 48541,
+      "end_time_str": "13:29:01",
+      "name": "RecM03_20260201_132401_132901_533C810_BF5523F.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R3/sdcard/Mp4Record/2026-02-01/RecM03_20260201_132401_132901_533C810_BF5523F.mp4",
+      "start_time_sec": 48241,
+      "start_time_str": "13:24:01"
+    },
+    {
+      "end_time_sec": 48841,
+      "end_time_str": "13:34:01",
+      "name": "RecM03_20260201_132901_133401_533C810_BF5C721.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R3/sdcard/Mp4Record/2026-02-01/RecM03_20260201_132901_133401_533C810_BF5C721.mp4",
+      "start_time_sec": 48541,
+      "start_time_str": "13:29:01"
+    }
+  ],
+  "vola_race": "U12 run 2",
+  "vola_camera": "R3",
+  "vola_view": "1",
+  "race_date": "2026-02-01"
+}

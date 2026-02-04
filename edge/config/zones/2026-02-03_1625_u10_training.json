@@ -1,0 +1,31 @@
+{
+  "session_id": "2026-02-03_1625_u10_training",
+  "session_type": "training",
+  "group": "U10",
+  "camera_id": "axis_ptz_mid",
+  "camera_url": "rtsp://192.168.1.100/axis-media/media.amp",
+  "calibration_frame": "8ca0263d",
+  "start_zone": {
+    "x": 898,
+    "y": 1377,
+    "w": 91,
+    "h": 57
+  },
+  "end_zone": null,
+  "crop_zone": {
+    "x": 621,
+    "y": 386,
+    "w": 1920,
+    "h": 1035
+  },
+  "run_duration_seconds": 2,
+  "session_start_time": "2026-02-03T16:25:24.511750",
+  "session_end_time": "2026-02-03T16:25:45.566857",
+  "pre_buffer_seconds": 2,
+  "post_buffer_seconds": 2,
+  "detection_threshold": 25,
+  "min_pixel_change_pct": 5,
+  "min_brightness": 100,
+  "montage_fps": 4,
+  "start_delay_seconds": 0.5
+}

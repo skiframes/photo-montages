@@ -1,0 +1,311 @@
+{
+  "session_id": "2026-02-03_2104_u14_race",
+  "session_type": "race",
+  "group": "U14",
+  "camera_id": "R1",
+  "camera_url": "rtsp://192.168.1.101/h264Preview_01_main",
+  "calibration_frame": "ea7d0501",
+  "start_zone": {
+    "x": 933,
+    "y": 1363,
+    "w": 206,
+    "h": 71
+  },
+  "end_zone": null,
+  "crop_zone": {
+    "x": 761,
+    "y": 515,
+    "w": 1791,
+    "h": 906
+  },
+  "run_duration_seconds": 1.5,
+  "session_start_time": "2026-02-03T21:04:40.373671",
+  "session_end_time": "2026-02-03T21:34:06.546124",
+  "pre_buffer_seconds": 0,
+  "post_buffer_seconds": 0,
+  "detection_threshold": 47,
+  "min_pixel_change_pct": 9,
+  "min_brightness": 94,
+  "montage_fps": 4,
+  "start_offset_pct": 8,
+  "vola_racers": [
+    {
+      "bib": 111,
+      "camera_end_sec": 39357.859370000006,
+      "camera_start_sec": 39349.20539,
+      "finished": true,
+      "name": "",
+      "start_time_sec": 39344.8784
+    },
+    {
+      "bib": 112,
+      "camera_end_sec": 39384.60415000001,
+      "camera_start_sec": 39378.63985000001,
+      "finished": true,
+      "name": "AnnaGatti",
+      "start_time_sec": 39375.6577
+    },
+    {
+      "bib": 113,
+      "camera_end_sec": 39411.53738,
+      "camera_start_sec": 39404.977060000005,
+      "finished": true,
+      "name": "HarperDavis",
+      "start_time_sec": 39401.6969
+    },
+    {
+      "bib": 114,
+      "camera_end_sec": 39437.45533,
+      "camera_start_sec": 39429.88871,
+      "finished": true,
+      "name": "",
+      "start_time_sec": 39426.1054
+    },
+    {
+      "bib": 115,
+      "camera_end_sec": 39465.86685,
+      "camera_start_sec": 39459.300149999995,
+      "finished": true,
+      "name": "MadelineLinnemann",
+      "start_time_sec": 39456.0168
+    },
+    {
+      "bib": 116,
+      "camera_end_sec": 39491.78938,
+      "camera_start_sec": 39484.68746,
+      "finished": true,
+      "name": "PenelopeAlexander",
+      "start_time_sec": 39481.1365
+    },
+    {
+      "bib": 117,
+      "camera_end_sec": 39532.135010000005,
+      "camera_start_sec": 39524.65787,
+      "finished": true,
+      "name": "PaigePhillips",
+      "start_time_sec": 39520.9193
+    },
+    {
+      "bib": 118,
+      "camera_end_sec": 39560.82321,
+      "camera_start_sec": 39553.24227,
+      "finished": true,
+      "name": "KatarinaMacLean",
+      "start_time_sec": 39549.4518
+    },
+    {
+      "bib": 119,
+      "camera_end_sec": 39590.13782,
+      "camera_start_sec": 39581.996340000005,
+      "finished": true,
+      "name": "AlexisRaczka",
+      "start_time_sec": 39577.9256
+    },
+    {
+      "bib": 120,
+      "camera_end_sec": 39615.42261,
+      "camera_start_sec": 39607.47247,
+      "finished": true,
+      "name": "",
+      "start_time_sec": 39603.4974
+    },
+    {
+      "bib": 121,
+      "camera_end_sec": 39645.78522,
+      "camera_start_sec": 39638.92774,
+      "finished": true,
+      "name": "LouisaCollins",
+      "start_time_sec": 39635.499
+    },
+    {
+      "bib": 122,
+      "camera_end_sec": 39671.73178,
+      "camera_start_sec": 39663.01466,
+      "finished": true,
+      "name": "",
+      "start_time_sec": 39658.6561
+    },
+    {
+      "bib": 123,
+      "camera_end_sec": 39699.341830000005,
+      "camera_start_sec": 39692.02541,
+      "finished": true,
+      "name": "",
+      "start_time_sec": 39688.3672
+    },
+    {
+      "bib": 124,
+      "camera_end_sec": 39723.55727,
+      "camera_start_sec": 39717.18309,
+      "finished": true,
+      "name": "EdenTierney",
+      "start_time_sec": 39713.996
+    },
+    {
+      "bib": 125,
+      "camera_end_sec": 39751.32758,
+      "camera_start_sec": 39743.60486,
+      "finished": true,
+      "name": "MabelDustin",
+      "start_time_sec": 39739.7435
+    },
+    {
+      "bib": 126,
+      "camera_end_sec": 39779.38241,
+      "camera_start_sec": 39772.49007,
+      "finished": true,
+      "name": "PeytaNatusch",
+      "start_time_sec": 39769.0439
+    },
+    {
+      "bib": 127,
+      "camera_end_sec": 39806.90487,
+      "camera_start_sec": 39800.10749,
+      "finished": true,
+      "name": "SophieDiMarzio",
+      "start_time_sec": 39796.7088
+    },
+    {
+      "bib": 128,
+      "camera_end_sec": 39833.64086,
+      "camera_start_sec": 39826.426419999996,
+      "finished": true,
+      "name": "MargotTressler",
+      "start_time_sec": 39822.8192
+    },
+    {
+      "bib": 129,
+      "camera_end_sec": 39867.4193,
+      "camera_start_sec": 39859.4193,
+      "finished": false,
+      "name": "",
+      "start_time_sec": 39855.4193
+    },
+    {
+      "bib": 130,
+      "camera_end_sec": 39897.61659,
+      "camera_start_sec": 39891.67393,
+      "finished": true,
+      "name": "MaggieMcClay",
+      "start_time_sec": 39888.7026
+    },
+    {
+      "bib": 131,
+      "camera_end_sec": 39920.82277,
+      "camera_start_sec": 39915.01519,
+      "finished": true,
+      "name": "JosieCooper",
+      "start_time_sec": 39912.1114
+    },
+    {
+      "bib": 132,
+      "camera_end_sec": 39945.509079999996,
+      "camera_start_sec": 39940.130959999995,
+      "finished": true,
+      "name": "CouleeNelson",
+      "start_time_sec": 39937.4419
+    },
+    {
+      "bib": 134,
+      "camera_end_sec": 39976.79296,
+      "camera_start_sec": 39971.23012,
+      "finished": true,
+      "name": "AudreyWormer",
+      "start_time_sec": 39968.4487
+    },
+    {
+      "bib": 135,
+      "camera_end_sec": 40002.93436,
+      "camera_start_sec": 39996.10772,
+      "finished": true,
+      "name": "MirabelWelch",
+      "start_time_sec": 39992.6944
+    },
+    {
+      "bib": 136,
+      "camera_end_sec": 40028.48214,
+      "camera_start_sec": 40022.33738,
+      "finished": true,
+      "name": "CharlotteScarpa",
+      "start_time_sec": 40019.265
+    },
+    {
+      "bib": 137,
+      "camera_end_sec": 40058.05604,
+      "camera_start_sec": 40050.81988,
+      "finished": true,
+      "name": "JuliaAnderson",
+      "start_time_sec": 40047.2018
+    },
+    {
+      "bib": 138,
+      "camera_end_sec": 40088.9967,
+      "camera_start_sec": 40080.9967,
+      "finished": false,
+      "name": "AubrieSoroko",
+      "start_time_sec": 40076.9967
+    },
+    {
+      "bib": 139,
+      "camera_end_sec": 40118.176369999994,
+      "camera_start_sec": 40111.622989999996,
+      "finished": true,
+      "name": "AriaTzilianos",
+      "start_time_sec": 40108.3463
+    },
+    {
+      "bib": 140,
+      "camera_end_sec": 40154.11083,
+      "camera_start_sec": 40147.199609999996,
+      "finished": true,
+      "name": "OliviaHowe",
+      "start_time_sec": 40143.744
+    },
+    {
+      "bib": 141,
+      "camera_end_sec": 40182.1556,
+      "camera_start_sec": 40174.1556,
+      "finished": false,
+      "name": "MaggieHolland",
+      "start_time_sec": 40170.1556
+    }
+  ],
+  "vola_videos": [
+    {
+      "end_time_sec": 39471,
+      "end_time_str": "10:57:51",
+      "name": "RecM03_20260201_105251_105751_533C810_BF5E82A.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R2/sdcard/Mp4Record/2026-02-01/RecM03_20260201_105251_105751_533C810_BF5E82A.mp4",
+      "start_time_sec": 39171,
+      "start_time_str": "10:52:51"
+    },
+    {
+      "end_time_sec": 39771,
+      "end_time_str": "11:02:51",
+      "name": "RecM03_20260201_105751_110251_533C810_BF84954.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R2/sdcard/Mp4Record/2026-02-01/RecM03_20260201_105751_110251_533C810_BF84954.mp4",
+      "start_time_sec": 39471,
+      "start_time_str": "10:57:51"
+    },
+    {
+      "end_time_sec": 40071,
+      "end_time_str": "11:07:51",
+      "name": "RecM03_20260201_110251_110751_533C810_BF931D4.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R2/sdcard/Mp4Record/2026-02-01/RecM03_20260201_110251_110751_533C810_BF931D4.mp4",
+      "start_time_sec": 39771,
+      "start_time_str": "11:02:51"
+    },
+    {
+      "end_time_sec": 40371,
+      "end_time_str": "11:12:51",
+      "name": "RecM03_20260201_110751_111251_533C810_BF955D9.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R2/sdcard/Mp4Record/2026-02-01/RecM03_20260201_110751_111251_533C810_BF955D9.mp4",
+      "start_time_sec": 40071,
+      "start_time_str": "11:07:51"
+    }
+  ],
+  "vola_race": "U14 run 1",
+  "vola_camera": "R2",
+  "vola_view": "1",
+  "race_date": "2026-02-01"
+}

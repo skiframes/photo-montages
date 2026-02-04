@@ -360,7 +360,6 @@ class SkiFramesRunner:
             run_view_folder=output_folder,  # Pass folder path (Team/Run1_View1)
             run_duration_sec=run_duration,  # Pass duration for overlay display
             race_title=race_title,  # Pass race title for overlay
-            start_offset_sec=self.raw_config.get('start_offset_sec', 0.0),  # Pass start offset for overlay display
         )
 
         if result:

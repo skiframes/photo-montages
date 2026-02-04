@@ -1,0 +1,31 @@
+{
+  "session_id": "2026-02-03_1818_u14_race",
+  "session_type": "race",
+  "group": "U14",
+  "camera_id": "R1",
+  "camera_url": "rtsp://192.168.1.101/h264Preview_01_main",
+  "calibration_frame": "4eff6a8f",
+  "start_zone": {
+    "x": 812,
+    "y": 1368,
+    "w": 258,
+    "h": 66
+  },
+  "end_zone": null,
+  "crop_zone": {
+    "x": 688,
+    "y": 414,
+    "w": 1858,
+    "h": 1011
+  },
+  "run_duration_seconds": 2,
+  "session_start_time": "2026-02-03T18:18:39.530475",
+  "session_end_time": "2026-02-03T18:27:01.204983",
+  "pre_buffer_seconds": 0,
+  "post_buffer_seconds": 0,
+  "detection_threshold": 47,
+  "min_pixel_change_pct": 9,
+  "min_brightness": 94,
+  "montage_fps": 4,
+  "start_delay_seconds": 0.5
+}

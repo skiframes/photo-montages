@@ -1,0 +1,165 @@
+{
+  "session_id": "2026-02-03_2240_u14_race",
+  "session_type": "race",
+  "group": "U14",
+  "camera_id": "R1",
+  "camera_url": "rtsp://192.168.1.101/h264Preview_01_main",
+  "calibration_frame": "4872d4ab",
+  "start_zone": {
+    "x": 632,
+    "y": 1319,
+    "w": 335,
+    "h": 90
+  },
+  "end_zone": null,
+  "crop_zone": {
+    "x": 680,
+    "y": 333,
+    "w": 1858,
+    "h": 1087
+  },
+  "run_duration_seconds": 1.8,
+  "session_start_time": "2026-02-03T22:40:04.932190",
+  "session_end_time": "2026-02-04T05:06:00.000Z",
+  "pre_buffer_seconds": 0,
+  "post_buffer_seconds": 0,
+  "detection_threshold": 47,
+  "min_pixel_change_pct": 9,
+  "min_brightness": 94,
+  "montage_fps": 4,
+  "start_offset_pct": 4,
+  "vola_racers": [
+    {
+      "bib": 111,
+      "camera_end_sec": 39357.859370000006,
+      "camera_start_sec": 39349.20539,
+      "finished": true,
+      "gender": "Women",
+      "name": "BrigidStellato",
+      "run_duration": 43.269899999999325,
+      "start_time_sec": 39344.8784,
+      "team": "SUN"
+    },
+    {
+      "bib": 112,
+      "camera_end_sec": 39384.60415000001,
+      "camera_start_sec": 39378.63985000001,
+      "finished": true,
+      "gender": "Women",
+      "name": "AnnaGatti",
+      "run_duration": 29.821499999998196,
+      "start_time_sec": 39375.6577,
+      "team": "PROC"
+    },
+    {
+      "bib": 113,
+      "camera_end_sec": 39411.53738,
+      "camera_start_sec": 39404.977060000005,
+      "finished": true,
+      "gender": "Women",
+      "name": "HarperDavis",
+      "run_duration": 32.80159999999887,
+      "start_time_sec": 39401.6969,
+      "team": "RMS"
+    },
+    {
+      "bib": 114,
+      "camera_end_sec": 39437.45533,
+      "camera_start_sec": 39429.88871,
+      "finished": true,
+      "gender": "Women",
+      "name": "IsabellaBlais",
+      "run_duration": 37.83309999999619,
+      "start_time_sec": 39426.1054,
+      "team": "SUN"
+    },
+    {
+      "bib": 115,
+      "camera_end_sec": 39465.86685,
+      "camera_start_sec": 39459.300149999995,
+      "finished": true,
+      "gender": "Women",
+      "name": "MadelineLinnemann",
+      "run_duration": 32.83350000000064,
+      "start_time_sec": 39456.0168,
+      "team": "SUN"
+    },
+    {
+      "bib": 116,
+      "camera_end_sec": 39491.78938,
+      "camera_start_sec": 39484.68746,
+      "finished": true,
+      "gender": "Women",
+      "name": "PenelopeAlexander",
+      "run_duration": 35.50959999999759,
+      "start_time_sec": 39481.1365,
+      "team": "SUN"
+    },
+    {
+      "bib": 117,
+      "camera_end_sec": 39532.135010000005,
+      "camera_start_sec": 39524.65787,
+      "finished": true,
+      "gender": "Women",
+      "name": "PaigePhillips",
+      "run_duration": 37.385699999998906,
+      "start_time_sec": 39520.9193,
+      "team": "SUN"
+    },
+    {
+      "bib": 118,
+      "camera_end_sec": 39560.82321,
+      "camera_start_sec": 39553.24227,
+      "finished": true,
+      "gender": "Women",
+      "name": "KatarinaMacLean",
+      "run_duration": 37.90469999999914,
+      "start_time_sec": 39549.4518,
+      "team": "RMS"
+    },
+    {
+      "bib": 119,
+      "camera_end_sec": 39590.13782,
+      "camera_start_sec": 39581.996340000005,
+      "finished": true,
+      "gender": "Women",
+      "name": "AlexisRaczka",
+      "run_duration": 40.707399999999325,
+      "start_time_sec": 39577.9256,
+      "team": "SUN"
+    },
+    {
+      "bib": 120,
+      "camera_end_sec": 39615.42261,
+      "camera_start_sec": 39607.47247,
+      "finished": true,
+      "gender": "Women",
+      "name": "MadeleineMcDermott",
+      "run_duration": 39.75069999999687,
+      "start_time_sec": 39603.4974,
+      "team": "FS"
+    }
+  ],
+  "vola_videos": [
+    {
+      "end_time_sec": 39471,
+      "end_time_str": "10:57:51",
+      "name": "RecM03_20260201_105251_105751_533C810_BF5E82A.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R2/sdcard/Mp4Record/2026-02-01/RecM03_20260201_105251_105751_533C810_BF5E82A.mp4",
+      "start_time_sec": 39171,
+      "start_time_str": "10:52:51"
+    },
+    {
+      "end_time_sec": 39771,
+      "end_time_str": "11:02:51",
+      "name": "RecM03_20260201_105751_110251_533C810_BF84954.mp4",
+      "path": "/Volumes/OWC_48/data/recordings/sd_R2/sdcard/Mp4Record/2026-02-01/RecM03_20260201_105751_110251_533C810_BF84954.mp4",
+      "start_time_sec": 39471,
+      "start_time_str": "10:57:51"
+    }
+  ],
+  "vola_race": "U14 run 1",
+  "vola_camera": "R2",
+  "vola_view": "1",
+  "race_date": "2026-02-01"
+}

@@ -207,9 +207,8 @@ def resize_for_thumbnail(image: np.ndarray, max_width: int = 800) -> np.ndarray:
 
 
 def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str = "",
-                duration_sec: Optional[float] = None, race_title: str = "",
-                start_zone_in_crop: Optional[Dict] = None, start_offset_sec: float = 0.0) -> np.ndarray:
-    """Add skiframes.com overlay with race title, date, FPS, variant indicator, and start zone visualization."""
+                duration_sec: Optional[float] = None, race_title: str = "") -> np.ndarray:
+    """Add skiframes.com overlay with race title, date, duration, FPS, and variant indicator."""
     from zoneinfo import ZoneInfo
 
     img = image.copy()
@@ -219,57 +218,6 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = max(0.4, w / 2000)
     thickness = max(1, int(w / 1000))
-
-    # Draw start trigger zone if provided (in cropped image coordinates)
-    if start_zone_in_crop:
-        zone_x = start_zone_in_crop['x']
-        zone_y = start_zone_in_crop['y']
-        zone_w = start_zone_in_crop['w']
-        zone_h = start_zone_in_crop['h']
-
-        # Draw semi-transparent rectangle for trigger zone
-        overlay = img.copy()
-        cv2.rectangle(overlay,
-                      (zone_x, zone_y),
-                      (zone_x + zone_w, zone_y + zone_h),
-                      (0, 255, 255), -1)  # Yellow fill
-        cv2.addWeighted(overlay, 0.3, img, 0.7, 0, img)
-
-        # Draw zone border
-        cv2.rectangle(img,
-                      (zone_x, zone_y),
-                      (zone_x + zone_w, zone_y + zone_h),
-                      (0, 200, 200), max(1, thickness))  # Yellow border
-
-        # Add label next to the zone showing "START" and offset
-        label_font_scale = font_scale * 0.8
-        if start_offset_sec > 0:
-            zone_label = f"START +{start_offset_sec:.1f}s"
-        else:
-            zone_label = "START"
-
-        (label_w, label_h), _ = cv2.getTextSize(zone_label, font, label_font_scale, thickness)
-
-        # Position label to the right of the zone
-        label_x = zone_x + zone_w + 10
-        label_y = zone_y + zone_h // 2 + label_h // 2
-
-        # If label would go off screen, put it inside the zone
-        if label_x + label_w > w - 10:
-            label_x = zone_x + 10
-            label_y = zone_y + label_h + 10
-
-        # Draw label background
-        label_padding = 5
-        overlay = img.copy()
-        cv2.rectangle(overlay,
-                      (label_x - label_padding, label_y - label_h - label_padding),
-                      (label_x + label_w + label_padding, label_y + label_padding),
-                      (0, 200, 200), -1)
-        cv2.addWeighted(overlay, 0.7, img, 0.3, 0, img)
-
-        # Draw label text
-        cv2.putText(img, zone_label, (label_x, label_y), font, label_font_scale, (0, 0, 0), thickness)
 
     # Convert timestamp to Boston time (US/Eastern)
     boston_tz = ZoneInfo("America/New_York")
@@ -281,19 +229,26 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
     # Date only (no time)
     date_str = boston_time.strftime("%Y-%m-%d")
 
-    # Format text: skiframes.com | Western Division U12 Ranking - SL | 2026-02-01 | 4fps (+2frames)
+    # Format text: skiframes.com | Western Division U12 Ranking - SL | 2026-02-01 | 2.0s | 4fps (+2frames)
     # Use race_title if provided, otherwise generic
     if race_title:
         title_part = race_title
     else:
         title_part = "Ski Race"
 
+    # Build duration part if provided
+    duration_part = f"{duration_sec:.1f}s" if duration_sec else ""
+
     # Build FPS part with optional variant
     fps_part = f"{fps:.0f}fps"
     if variant:
         fps_part += f" ({variant})"
 
-    text = f"skiframes.com | {title_part} | {date_str} | {fps_part}"
+    # Combine parts, including duration if available
+    if duration_part:
+        text = f"skiframes.com | {title_part} | {date_str} | {duration_part} | {fps_part}"
+    else:
+        text = f"skiframes.com | {title_part} | {date_str} | {fps_part}"
 
     # Get text size
     (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
@@ -403,8 +358,7 @@ def generate_montage(frames: List[np.ndarray],
                      custom_filename: Optional[str] = None,
                      run_view_folder: Optional[str] = None,
                      run_duration_sec: Optional[float] = None,
-                     race_title: str = "",
-                     start_offset_sec: float = 0.0) -> Optional[MontageResultPair]:
+                     race_title: str = "") -> Optional[MontageResultPair]:
     """
     Generate A and B montage pairs from run frames.
 
@@ -430,7 +384,6 @@ def generate_montage(frames: List[np.ndarray],
         run_view_folder: Optional folder name for organization (e.g., "Run1_View1")
                         If provided, outputs are placed in this subfolder
         run_duration_sec: Optional run duration in seconds for overlay display
-        start_offset_sec: Start offset in seconds (displayed next to trigger zone)
 
     Returns:
         MontageResultPair with A and B results, or None on failure
@@ -452,31 +405,6 @@ def generate_montage(frames: List[np.ndarray],
         frame_h, frame_w = frames[0].shape[:2]
         crop = CropRegion.from_zones(start_zone, end_zone, frame_w, frame_h, padding_left_pct, padding_right_pct, padding_y_pct)
         print(f"    Crop region (from zones): ({crop.x}, {crop.y}) {crop.w}x{crop.h}")
-
-    # Compute start zone position relative to crop (for overlay visualization)
-    start_zone_in_crop = None
-    if start_zone and crop:
-        # Translate start zone coordinates to crop-relative coordinates
-        start_zone_in_crop = {
-            'x': start_zone['x'] - crop.x,
-            'y': start_zone['y'] - crop.y,
-            'w': start_zone['w'],
-            'h': start_zone['h']
-        }
-        # Clamp to crop bounds (in case zone extends outside crop)
-        if start_zone_in_crop['x'] < 0:
-            start_zone_in_crop['w'] += start_zone_in_crop['x']
-            start_zone_in_crop['x'] = 0
-        if start_zone_in_crop['y'] < 0:
-            start_zone_in_crop['h'] += start_zone_in_crop['y']
-            start_zone_in_crop['y'] = 0
-        if start_zone_in_crop['x'] + start_zone_in_crop['w'] > crop.w:
-            start_zone_in_crop['w'] = crop.w - start_zone_in_crop['x']
-        if start_zone_in_crop['y'] + start_zone_in_crop['h'] > crop.h:
-            start_zone_in_crop['h'] = crop.h - start_zone_in_crop['y']
-        # Only include if zone is visible in crop
-        if start_zone_in_crop['w'] <= 0 or start_zone_in_crop['h'] <= 0:
-            start_zone_in_crop = None
 
     # Create output directories
     # If run_view_folder provided (e.g., "Run1_View1"), create subfolder structure
@@ -512,10 +440,9 @@ def generate_montage(frames: List[np.ndarray],
             print(f"    ERROR creating composite {variant_name}: {e}")
             continue
 
-        # Add branding overlay with variant label, race title, and start zone visualization
+        # Add branding overlay with variant label and race title
         if add_branding:
-            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title,
-                                    start_zone_in_crop=start_zone_in_crop, start_offset_sec=start_offset_sec)
+            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title)
 
         # Output paths - use file_suffix for naming
         # Use custom filename if provided (from Vola racer data), otherwise use run number

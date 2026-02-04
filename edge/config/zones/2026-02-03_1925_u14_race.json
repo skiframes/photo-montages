@@ -1,0 +1,106 @@
+{
+  "session_id": "2026-02-03_1925_u14_race",
+  "session_type": "race",
+  "group": "U14",
+  "camera_id": "R1",
+  "camera_url": "rtsp://192.168.1.101/h264Preview_01_main",
+  "calibration_frame": "b5ba294e",
+  "start_zone": {
+    "x": 884,
+    "y": 1331,
+    "w": 148,
+    "h": 81
+  },
+  "end_zone": null,
+  "crop_zone": {
+    "x": 841,
+    "y": 366,
+    "w": 1705,
+    "h": 1059
+  },
+  "run_duration_seconds": 2,
+  "session_start_time": "2026-02-03T19:25:35.335088",
+  "session_end_time": "2026-02-03T19:42:10.013947",
+  "pre_buffer_seconds": 0,
+  "post_buffer_seconds": 0,
+  "detection_threshold": 47,
+  "min_pixel_change_pct": 9,
+  "min_brightness": 94,
+  "montage_fps": 4,
+  "start_offset_pct": 7,
+  "vola_racers": [
+    {
+      "bib": 111,
+      "camera_end_sec": 39357.859370000006,
+      "camera_start_sec": 39349.20539,
+      "finished": true,
+      "start_time_sec": 39344.8784
+    },
+    {
+      "bib": 112,
+      "camera_end_sec": 39384.60415000001,
+      "camera_start_sec": 39378.63985000001,
+      "finished": true,
+      "start_time_sec": 39375.6577
+    },
+    {
+      "bib": 113,
+      "camera_end_sec": 39411.53738,
+      "camera_start_sec": 39404.977060000005,
+      "finished": true,
+      "start_time_sec": 39401.6969
+    },
+    {
+      "bib": 114,
+      "camera_end_sec": 39437.45533,
+      "camera_start_sec": 39429.88871,
+      "finished": true,
+      "start_time_sec": 39426.1054
+    },
+    {
+      "bib": 115,
+      "camera_end_sec": 39465.86685,
+      "camera_start_sec": 39459.300149999995,
+      "finished": true,
+      "start_time_sec": 39456.0168
+    },
+    {
+      "bib": 116,
+      "camera_end_sec": 39491.78938,
+      "camera_start_sec": 39484.68746,
+      "finished": true,
+      "start_time_sec": 39481.1365
+    },
+    {
+      "bib": 117,
+      "camera_end_sec": 39532.135010000005,
+      "camera_start_sec": 39524.65787,
+      "finished": true,
+      "start_time_sec": 39520.9193
+    },
+    {
+      "bib": 118,
+      "camera_end_sec": 39560.82321,
+      "camera_start_sec": 39553.24227,
+      "finished": true,
+      "start_time_sec": 39549.4518
+    },
+    {
+      "bib": 119,
+      "camera_end_sec": 39590.13782,
+      "camera_start_sec": 39581.996340000005,
+      "finished": true,
+      "start_time_sec": 39577.9256
+    },
+    {
+      "bib": 120,
+      "camera_end_sec": 39615.42261,
+      "camera_start_sec": 39607.47247,
+      "finished": true,
+      "start_time_sec": 39603.4974
+    }
+  ],
+  "vola_race": "U14 run 1",
+  "vola_camera": "R2",
+  "race_date": "2026-02-01"
+}

@@ -1,0 +1,30 @@
+{
+  "session_id": "2026-02-03_1553_u14_race",
+  "session_type": "race",
+  "group": "U14",
+  "camera_id": "axis_ptz_mid",
+  "camera_url": "rtsp://192.168.1.100/axis-media/media.amp",
+  "calibration_frame": "ff706cf6",
+  "start_zone": {
+    "x": 2326,
+    "y": 1213,
+    "w": 134,
+    "h": 57
+  },
+  "end_zone": null,
+  "crop_zone": {
+    "x": 879,
+    "y": 515,
+    "w": 1671,
+    "h": 844
+  },
+  "run_duration_seconds": 1,
+  "session_start_time": "2026-02-03T15:53:41.937159",
+  "session_end_time": "2026-02-03T22:21:00.000Z",
+  "pre_buffer_seconds": 2,
+  "post_buffer_seconds": 2,
+  "detection_threshold": 25,
+  "min_pixel_change_pct": 5,
+  "min_brightness": 100,
+  "montage_fps": 4
+}
