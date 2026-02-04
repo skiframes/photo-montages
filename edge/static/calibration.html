@@ -1,0 +1,1693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>SkiFrames - Calibration</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --danger: #dc2626;
+            --success: #16a34a;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --start-zone: rgba(34, 197, 94, 0.5);
+            --end-zone: rgba(239, 68, 68, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 16px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .container {
+            padding: 16px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            margin-bottom: 12px;
+            -webkit-appearance: none;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-primary:disabled {
+            background: var(--border);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-outline {
+            background: white;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-sm {
+            padding: 10px 16px;
+            font-size: 14px;
+            width: auto;
+            display: inline-block;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-group .btn {
+            flex: 1;
+        }
+
+        /* Frame display area */
+        .frame-container {
+            position: relative;
+            width: 100%;
+            background: #1e293b;
+            border-radius: 8px;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .frame-container img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .frame-placeholder {
+            aspect-ratio: 16/9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* Zone overlays */
+        .zone-overlay {
+            position: absolute;
+            border: 3px solid;
+            pointer-events: none;
+        }
+
+        .zone-overlay.start {
+            border-color: #22c55e;
+            background: var(--start-zone);
+        }
+
+        .zone-overlay.end {
+            border-color: #ef4444;
+            background: var(--end-zone);
+        }
+
+        .zone-label {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            background: inherit;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .zone-overlay.start .zone-label {
+            background: #22c55e;
+        }
+
+        .zone-overlay.end .zone-label {
+            background: #ef4444;
+        }
+
+        /* Drawing indicator */
+        .drawing-active {
+            cursor: crosshair;
+        }
+
+        .drawing-indicator {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 200;
+            display: none;
+        }
+
+        .drawing-indicator.visible {
+            display: block;
+        }
+
+        /* Zone buttons */
+        .zone-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .zone-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .zone-btn.start {
+            border-color: #22c55e;
+            color: #22c55e;
+        }
+
+        .zone-btn.start.active, .zone-btn.start:active {
+            background: #22c55e;
+            color: white;
+        }
+
+        .zone-btn.end {
+            border-color: #ef4444;
+            color: #ef4444;
+        }
+
+        .zone-btn.end.active, .zone-btn.end:active {
+            background: #ef4444;
+            color: white;
+        }
+
+        .zone-btn.crop {
+            border-color: #3b82f6;
+            color: #3b82f6;
+        }
+
+        .zone-btn.crop.active, .zone-btn.crop:active {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .zone-overlay.crop {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.3);
+        }
+
+        /* End Mode Toggle */
+        .end-mode-toggle {
+            display: flex;
+            gap: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .end-mode-btn {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            background: white;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-muted);
+        }
+
+        .end-mode-btn:first-child {
+            border-right: 1px solid var(--border);
+        }
+
+        .end-mode-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .end-mode-btn:hover:not(.active) {
+            background: var(--bg);
+        }
+
+        /* Slider */
+        input[type="range"] {
+            -webkit-appearance: none;
+            height: 8px;
+            border-radius: 4px;
+            background: var(--border);
+            padding: 0;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+        }
+
+        /* Status messages */
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        /* Active session banner */
+        .active-session {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+
+        .active-session strong {
+            color: #92400e;
+        }
+
+        /* Time picker styling */
+        input[type="time"], input[type="datetime-local"] {
+            padding: 12px;
+        }
+
+        /* Advanced settings toggle */
+        .advanced-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            cursor: pointer;
+            border-top: 1px solid var(--border);
+            margin-top: 12px;
+        }
+
+        .advanced-settings {
+            display: none;
+            padding-top: 12px;
+        }
+
+        .advanced-settings.visible {
+            display: block;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Pinch zoom support */
+        .frame-wrapper {
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+            max-height: 60vh;
+        }
+
+        .frame-inner {
+            position: relative;
+            transform-origin: 0 0;
+            transition: transform 0.1s ease-out;
+        }
+
+        /* Zoom controls */
+        .zoom-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            justify-content: center;
+        }
+
+        .zoom-btn {
+            width: 44px;
+            height: 44px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .zoom-btn:active {
+            background: var(--bg);
+        }
+
+        /* Help text */
+        .help-text {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>SkiFrames Calibration</h1>
+    </header>
+
+    <div class="container">
+        <!-- Active Session Warning -->
+        <div id="activeSession" class="active-session" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong>Active Session:</strong> <span id="activeSessionId"></span>
+                    <br><small>Ends: <span id="activeSessionEnd"></span></small>
+                </div>
+                <button class="btn btn-danger btn-sm" id="stopSession">Stop Session</button>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="status" class="status" style="display: none;"></div>
+
+        <!-- Step 1: Camera Selection -->
+        <div class="card">
+            <div class="card-title">1. Select Source</div>
+            <label for="sourceType">Input Type</label>
+            <select id="sourceType">
+                <option value="rtsp">Live Camera (RTSP)</option>
+                <option value="video">Video File</option>
+            </select>
+
+            <div id="cameraSelect">
+                <label for="camera">Camera</label>
+                <select id="camera">
+                    <option value="">Loading cameras...</option>
+                </select>
+                <div class="help-text" id="cameraOffsetInfo" style="display: none;">
+                    Time offset: <span id="cameraOffsetPct">0</span>% into run
+                </div>
+            </div>
+
+            <div id="videoSelect" style="display: none;">
+                <label for="videoDropdown">Select Video</label>
+                <select id="videoDropdown">
+                    <option value="">Loading videos...</option>
+                </select>
+                <div id="videoInfo" style="display: none;">
+                    <label for="seekTime">Seek to (seconds)</label>
+                    <input type="range" id="seekTime" min="0" max="100" value="0">
+                    <div class="help-text">Duration: <span id="videoDuration">0</span>s | Position: <span id="seekPosition">0</span>s</div>
+                </div>
+
+                <!-- Race Timing Section (appears for Video File only) -->
+                <div id="volaSelect" style="margin-top: 16px; padding: 12px; background: #f0f9ff; border-radius: 8px; border: 1px solid #bfdbfe;">
+                    <label style="font-weight: 600; color: #1e40af; margin-bottom: 8px; display: block;">Race Timing (Vola)</label>
+
+                    <label for="volaFile" style="font-size: 13px;">Vola Excel File</label>
+                    <select id="volaFile">
+                        <option value="">-- None (manual detection) --</option>
+                    </select>
+
+                    <label for="startlistFile" style="margin-top: 8px; font-size: 13px;">Start List PDF (for names/teams)</label>
+                    <select id="startlistFile">
+                        <option value="">-- None (no names) --</option>
+                    </select>
+                    <div class="help-text">Adds athlete names and organizes by team folder</div>
+
+                    <label for="volaRace" style="margin-top: 8px; font-size: 13px;">Race</label>
+                    <select id="volaRace">
+                        <option value="U12 run 1">U12 Run 1</option>
+                        <option value="U12 run 2">U12 Run 2</option>
+                        <option value="U14 run 1">U14 Run 1</option>
+                        <option value="U14 run 2">U14 Run 2</option>
+                    </select>
+
+                    <label for="volaCamera" style="margin-top: 8px; font-size: 13px;">Camera Position</label>
+                    <select id="volaCamera">
+                        <option value="">Loading cameras...</option>
+                    </select>
+                    <div class="help-text" id="volaCameraOffsetInfo">
+                        Time offset: <span id="volaCameraOffsetPct">0</span>% into run
+                    </div>
+
+                    <label for="volaView" style="margin-top: 8px; font-size: 13px;">View Number</label>
+                    <select id="volaView" style="width: 100px;">
+                        <option value="1">View 1</option>
+                        <option value="2">View 2</option>
+                        <option value="3">View 3</option>
+                        <option value="4">View 4</option>
+                        <option value="5">View 5</option>
+                    </select>
+                    <div class="help-text">For filename: Name_bib_runX_ViewY</div>
+
+                    <label for="numAthletes" style="margin-top: 8px; font-size: 13px;">Number of Athletes</label>
+                    <input type="number" id="numAthletes" min="0" max="100" value="5" style="width: 80px;">
+                    <div class="help-text">Athletes to process (0 or blank = all)</div>
+
+                    <button id="loadVolaData" class="btn btn-outline btn-sm" style="margin-top: 10px;">
+                        Load Race Videos
+                    </button>
+
+                    <div id="volaRacersInfo" style="display: none; margin-top: 12px; padding: 10px; background: white; border-radius: 6px;">
+                        <strong>Athletes:</strong> <span id="volaRacerCount">0</span> |
+                        <strong>Videos:</strong> <span id="volaVideoCount">0</span>
+                        <div class="help-text" style="margin-top: 4px;">
+                            Time range: <span id="volaTimeRange">-</span>
+                        </div>
+                        <div class="help-text" style="margin-top: 2px;">
+                            First: Bib <span id="volaFirstRacer">-</span> | Last: Bib <span id="volaLastRacer">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button id="grabFrame" class="btn btn-primary">
+                Grab Frame
+            </button>
+        </div>
+
+        <!-- Step 2: Frame & Zone Drawing -->
+        <div class="card" id="frameCard" style="display: none;">
+            <div class="card-title">2. Draw Trigger Zones</div>
+            <p class="help-text" style="margin-bottom: 12px;">
+                Draw START zone (green) at top where skiers enter, END zone (red) at bottom where they exit.
+                Gates are between the two zones.
+            </p>
+
+            <div class="frame-wrapper" id="frameWrapper">
+                <div class="frame-inner" id="frameInner">
+                    <div class="frame-container" id="frameContainer">
+                        <div class="frame-placeholder">No frame loaded</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="zoom-controls">
+                <button class="zoom-btn" id="zoomOut">-</button>
+                <button class="zoom-btn" id="zoomReset">1x</button>
+                <button class="zoom-btn" id="zoomIn">+</button>
+            </div>
+
+            <div class="zone-buttons">
+                <button class="zone-btn start" id="drawStart">Draw START Zone</button>
+                <button class="zone-btn end" id="drawEnd">Draw END Zone</button>
+                <button class="zone-btn crop" id="drawCrop">Draw CROP Area</button>
+            </div>
+
+            <!-- End Mode Toggle -->
+            <div style="margin-top: 12px; padding: 12px; background: var(--bg); border-radius: 8px;">
+                <label style="margin-bottom: 8px; display: block;">Run End Mode</label>
+                <div class="end-mode-toggle">
+                    <button type="button" class="end-mode-btn" id="endModeZone">END Zone</button>
+                    <button type="button" class="end-mode-btn active" id="endModeDuration">Duration</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label for="runDuration" style="font-size: 13px;">Duration (seconds)</label>
+                    <input type="number" id="runDuration" min="0.5" max="30" step="0.5" value="2" style="width: 100px;">
+                    <span id="durationSetting" style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">run capture length</span>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label for="montageFps" style="font-size: 13px;">Montage FPS</label>
+                    <input type="number" id="montageFps" min="1" max="15" step="1" value="4" style="width: 80px;">
+                    <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">frames per second</span>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label for="startDelay" style="font-size: 13px;">Start Offset (sec)</label>
+                    <input type="number" id="startDelay" min="0" max="10" step="0.1" value="0" style="width: 80px;">
+                    <div class="help-text" style="margin-top: 4px;">Fixed delay in seconds after trigger before capturing. Same for all racers.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Session Config -->
+        <div class="card" id="configCard" style="display: none;">
+            <div class="card-title">3. Session Configuration</div>
+
+            <label for="sessionType">Session Type</label>
+            <select id="sessionType">
+                <option value="training">Training</option>
+                <option value="race">Race</option>
+            </select>
+
+            <label for="group">Group</label>
+            <select id="group">
+                <option value="U10">U10</option>
+                <option value="U12">U12</option>
+                <option value="U14">U14</option>
+                <option value="Scored">Scored</option>
+                <option value="Masters">Masters</option>
+            </select>
+
+            <div id="sessionEndTimeSection">
+                <label for="endTime">Session End Time</label>
+                <input type="datetime-local" id="endTime">
+                <div class="help-text">Detection stops automatically at this time</div>
+            </div>
+
+            <div class="advanced-toggle" id="advancedToggle">
+                <span>Advanced Settings</span>
+                <span id="advancedArrow">&#9654;</span>
+            </div>
+
+            <div class="advanced-settings" id="advancedSettings">
+                <label for="threshold">Detection Threshold</label>
+                <input type="range" id="threshold" min="10" max="50" value="47">
+                <div class="help-text">Current: <span id="thresholdValue">47</span></div>
+
+                <label for="minPixels">Min Pixel Change %</label>
+                <input type="range" id="minPixels" min="1" max="20" value="9" step="0.5">
+                <div class="help-text">Current: <span id="minPixelsValue">9</span>%</div>
+
+                <label for="minBrightness">Shadow Filter (Min Brightness)</label>
+                <input type="range" id="minBrightness" min="0" max="200" value="94">
+                <div class="help-text">Current: <span id="minBrightnessValue">94</span> (0=off, higher=filter more shadows)</div>
+
+                <label for="preBuffer">Pre-buffer (seconds)</label>
+                <input type="number" id="preBuffer" min="0" max="10" value="0">
+
+                <label for="postBuffer">Post-buffer (seconds)</label>
+                <input type="number" id="postBuffer" min="0" max="10" value="0">
+            </div>
+        </div>
+
+        <!-- Save Button -->
+        <div id="saveSection" style="display: none;">
+            <button id="saveConfig" class="btn btn-success">
+                Start Live Session
+            </button>
+        </div>
+
+        <!-- Processing Status -->
+        <div id="processingStatus" class="card" style="display: none;">
+            <div class="card-title">Processing Video</div>
+            <div id="processingInfo" style="margin-bottom: 12px;">
+                <div style="color: var(--text-muted); font-size: 14px;">
+                    Status: <span id="processingStatusText">Starting...</span>
+                </div>
+                <div style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">
+                    Runs detected: <span id="processingRuns">0</span>
+                </div>
+            </div>
+            <button id="stopProcessing" class="btn btn-danger">
+                Stop Processing
+            </button>
+        </div>
+    </div>
+
+    <!-- Drawing Indicator -->
+    <div class="drawing-indicator" id="drawingIndicator">
+        Tap and drag to draw zone
+    </div>
+
+    <script>
+        // State
+        let state = {
+            frameId: null,
+            frameWidth: 0,
+            frameHeight: 0,
+            startZone: null,
+            endZone: null,
+            cropZone: null,
+            drawingMode: null, // 'start', 'end', or 'crop'
+            isDrawing: false,
+            drawStart: { x: 0, y: 0 },
+            zoom: 1,
+            cameraId: null,
+            cameraOffsetPct: 0,  // Camera time offset percentage
+            endMode: 'duration',  // 'zone' or 'duration'
+            runDurationSeconds: 2.0,
+            montageFps: 4,
+            startOffsetSec: 0,  // Fixed delay in seconds after trigger
+            currentJobId: null,  // Track current processing job
+            statusPollInterval: null,  // Interval for polling job status
+            // Vola race timing data
+            volaRacers: [],  // List of racers with timing data
+            volaVideos: [],  // List of videos covering the race
+            volaRace: '',  // Selected race (e.g., "U12 run 1")
+            volaCamera: '',  // Selected camera for Vola timing
+            volaView: '1',  // View number 1-5 for filename
+            startlistFile: '',  // Start list PDF file path (for racer names and teams)
+            numAthletes: 5,  // Number of athletes to process (0 = all)
+            raceDate: '',  // Date extracted from Vola file
+            cameras: [],  // Camera list with offset percentages
+        };
+
+        // DOM Elements
+        const elements = {
+            sourceType: document.getElementById('sourceType'),
+            cameraSelect: document.getElementById('cameraSelect'),
+            camera: document.getElementById('camera'),
+            videoSelect: document.getElementById('videoSelect'),
+            videoDropdown: document.getElementById('videoDropdown'),
+            seekPosition: document.getElementById('seekPosition'),
+            videoInfo: document.getElementById('videoInfo'),
+            seekTime: document.getElementById('seekTime'),
+            videoDuration: document.getElementById('videoDuration'),
+            grabFrame: document.getElementById('grabFrame'),
+            frameCard: document.getElementById('frameCard'),
+            frameWrapper: document.getElementById('frameWrapper'),
+            frameInner: document.getElementById('frameInner'),
+            frameContainer: document.getElementById('frameContainer'),
+            drawStart: document.getElementById('drawStart'),
+            drawEnd: document.getElementById('drawEnd'),
+            drawCrop: document.getElementById('drawCrop'),
+            drawingIndicator: document.getElementById('drawingIndicator'),
+            configCard: document.getElementById('configCard'),
+            sessionType: document.getElementById('sessionType'),
+            group: document.getElementById('group'),
+            endTime: document.getElementById('endTime'),
+            advancedToggle: document.getElementById('advancedToggle'),
+            advancedSettings: document.getElementById('advancedSettings'),
+            advancedArrow: document.getElementById('advancedArrow'),
+            threshold: document.getElementById('threshold'),
+            thresholdValue: document.getElementById('thresholdValue'),
+            minPixels: document.getElementById('minPixels'),
+            minPixelsValue: document.getElementById('minPixelsValue'),
+            minBrightness: document.getElementById('minBrightness'),
+            minBrightnessValue: document.getElementById('minBrightnessValue'),
+            preBuffer: document.getElementById('preBuffer'),
+            postBuffer: document.getElementById('postBuffer'),
+            saveSection: document.getElementById('saveSection'),
+            saveConfig: document.getElementById('saveConfig'),
+            status: document.getElementById('status'),
+            activeSession: document.getElementById('activeSession'),
+            activeSessionId: document.getElementById('activeSessionId'),
+            activeSessionEnd: document.getElementById('activeSessionEnd'),
+            stopSession: document.getElementById('stopSession'),
+            sessionEndTimeSection: document.getElementById('sessionEndTimeSection'),
+            zoomIn: document.getElementById('zoomIn'),
+            zoomOut: document.getElementById('zoomOut'),
+            zoomReset: document.getElementById('zoomReset'),
+            endModeZone: document.getElementById('endModeZone'),
+            endModeDuration: document.getElementById('endModeDuration'),
+            runDuration: document.getElementById('runDuration'),
+            montageFps: document.getElementById('montageFps'),
+            startDelay: document.getElementById('startDelay'),
+            processingStatus: document.getElementById('processingStatus'),
+            processingStatusText: document.getElementById('processingStatusText'),
+            processingRuns: document.getElementById('processingRuns'),
+            stopProcessing: document.getElementById('stopProcessing'),
+            // Vola elements
+            volaSelect: document.getElementById('volaSelect'),
+            volaFile: document.getElementById('volaFile'),
+            startlistFile: document.getElementById('startlistFile'),
+            volaRace: document.getElementById('volaRace'),
+            volaCamera: document.getElementById('volaCamera'),
+            volaView: document.getElementById('volaView'),
+            volaCameraOffsetInfo: document.getElementById('volaCameraOffsetInfo'),
+            volaCameraOffsetPct: document.getElementById('volaCameraOffsetPct'),
+            volaRacersInfo: document.getElementById('volaRacersInfo'),
+            volaRacerCount: document.getElementById('volaRacerCount'),
+            volaFirstRacer: document.getElementById('volaFirstRacer'),
+            volaLastRacer: document.getElementById('volaLastRacer'),
+            loadVolaData: document.getElementById('loadVolaData'),
+            cameraOffsetInfo: document.getElementById('cameraOffsetInfo'),
+            cameraOffsetPct: document.getElementById('cameraOffsetPct'),
+            numAthletes: document.getElementById('numAthletes'),
+            volaVideoCount: document.getElementById('volaVideoCount'),
+            volaTimeRange: document.getElementById('volaTimeRange'),
+        };
+
+        // Initialize
+        async function init() {
+            await loadCameras();
+            await loadVideos();
+            await loadVolaFiles();
+            setDefaultEndTime();
+            setupEventListeners();
+            // Set initial end mode (hides END zone button if in duration mode)
+            setEndMode(state.endMode);
+            // Only check active session for RTSP mode (check after setup so UI is correct)
+            if (elements.sourceType.value === 'rtsp') {
+                await checkActiveSession();
+            }
+        }
+
+        async function loadVideos() {
+            try {
+                const res = await fetch('/api/videos');
+                const videos = await res.json();
+                if (videos.length === 0) {
+                    elements.videoDropdown.innerHTML = '<option value="">No videos found</option>';
+                    return;
+                }
+                elements.videoDropdown.innerHTML = videos.map(v =>
+                    `<option value="${v.path}">${v.name} (${v.duration}s, ${v.resolution}, ${v.size_mb}MB)</option>`
+                ).join('');
+                // Auto-select first video and load its info
+                if (videos.length > 0) {
+                    loadVideoInfo(videos[0].path);
+                }
+            } catch (e) {
+                elements.videoDropdown.innerHTML = '<option value="">Failed to load videos</option>';
+            }
+        }
+
+        async function loadVideoInfo(videoPath) {
+            if (!videoPath) return;
+            try {
+                const res = await fetch('/api/video/info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video_path: videoPath })
+                });
+                const info = await res.json();
+                if (info.duration) {
+                    elements.videoInfo.style.display = 'block';
+                    elements.seekTime.max = Math.floor(info.duration);
+                    elements.seekTime.value = 0;
+                    elements.videoDuration.textContent = Math.floor(info.duration);
+                    elements.seekPosition.textContent = '0';
+                }
+            } catch (e) {
+                console.error('Failed to get video info:', e);
+            }
+        }
+
+        async function loadCameras() {
+            try {
+                const res = await fetch('/api/cameras');
+                const cameras = await res.json();
+                state.cameras = cameras;
+
+                // Populate main camera dropdown
+                elements.camera.innerHTML = cameras.map(c =>
+                    `<option value="${c.id}" data-offset="${c.offset_pct}">${c.name} (${c.offset_pct}% offset)</option>`
+                ).join('');
+
+                // Populate Vola camera dropdown
+                elements.volaCamera.innerHTML = cameras.map(c =>
+                    `<option value="${c.id}" data-offset="${c.offset_pct}">${c.name} (${c.offset_pct}% offset)</option>`
+                ).join('');
+
+                if (cameras.length > 0) {
+                    state.cameraId = cameras[0].id;
+                    state.cameraOffsetPct = cameras[0].offset_pct || 0;
+                    state.volaCamera = cameras[0].id;
+                    updateCameraOffsetDisplay();
+                }
+            } catch (e) {
+                showStatus('Failed to load cameras', 'error');
+            }
+        }
+
+        function updateCameraOffsetDisplay() {
+            const camera = state.cameras.find(c => c.id === state.cameraId);
+            if (camera) {
+                elements.cameraOffsetPct.textContent = camera.offset_pct || 0;
+                elements.cameraOffsetInfo.style.display = 'block';
+            }
+            const volaCamera = state.cameras.find(c => c.id === state.volaCamera);
+            if (volaCamera) {
+                elements.volaCameraOffsetPct.textContent = volaCamera.offset_pct || 0;
+            }
+        }
+
+        async function loadVolaFiles() {
+            try {
+                // Load Vola Excel files
+                const res = await fetch('/api/vola/files');
+                const files = await res.json();
+                if (files.length === 0) {
+                    elements.volaFile.innerHTML = '<option value="">No Vola files found</option>';
+                } else {
+                    elements.volaFile.innerHTML = files.map(f =>
+                        `<option value="${f.path}">${f.name}</option>`
+                    ).join('');
+                }
+
+                // Load Start List PDF files
+                const resStartlist = await fetch('/api/vola/startlist-files');
+                const startlistFiles = await resStartlist.json();
+                elements.startlistFile.innerHTML = '<option value="">-- None (no names) --</option>';
+                if (startlistFiles.length > 0) {
+                    elements.startlistFile.innerHTML += startlistFiles.map(f =>
+                        `<option value="${f.path}">${f.name}</option>`
+                    ).join('');
+                }
+            } catch (e) {
+                elements.volaFile.innerHTML = '<option value="">Failed to load files</option>';
+            }
+        }
+
+        async function loadVolaData() {
+            const filePath = elements.volaFile.value;
+            const startlistFilePath = elements.startlistFile.value;
+            const race = elements.volaRace.value;
+            const cameraId = elements.volaCamera.value;
+            const numAthletes = parseInt(elements.numAthletes.value) || 0;
+
+            if (!filePath) {
+                showStatus('Please select a Vola file', 'error');
+                return;
+            }
+
+            elements.loadVolaData.innerHTML = '<span class="spinner"></span>Loading...';
+            elements.loadVolaData.disabled = true;
+
+            try {
+                // Use the new API that returns both racers and matching videos
+                const res = await fetch('/api/recordings/videos-for-race', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        vola_file: filePath,
+                        startlist_file: startlistFilePath || null,  // Optional: PDF with racer names and teams
+                        race: race,
+                        camera_id: cameraId,
+                        num_athletes: numAthletes,
+                    })
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(`Error: ${data.error}`, 'error');
+                    return;
+                }
+
+                // Store data in state
+                state.volaRacers = data.racers;
+                state.volaVideos = data.videos;
+                state.volaRace = race;
+                state.volaCamera = cameraId;
+                state.numAthletes = numAthletes;
+                state.raceDate = data.date;
+
+                // Update UI
+                elements.volaRacersInfo.style.display = 'block';
+                elements.volaRacerCount.textContent = data.num_athletes;
+                elements.volaVideoCount.textContent = data.videos.length;
+                elements.volaTimeRange.textContent = `${data.time_range.start_str} - ${data.time_range.end_str}`;
+
+                if (data.racers.length > 0) {
+                    elements.volaFirstRacer.textContent = data.racers[0].bib;
+                    elements.volaLastRacer.textContent = data.racers[data.racers.length - 1].bib;
+                }
+
+                // Auto-select first video in dropdown for calibration
+                if (data.videos.length > 0) {
+                    // Update video dropdown with matching videos
+                    elements.videoDropdown.innerHTML = data.videos.map(v =>
+                        `<option value="${v.path}">${v.name} (${v.start_time_str} - ${v.end_time_str})</option>`
+                    ).join('');
+                    elements.videoDropdown.dispatchEvent(new Event('change'));
+                }
+
+                showStatus(`Found ${data.num_athletes} athletes, ${data.videos.length} videos`, 'success');
+
+            } catch (e) {
+                showStatus('Failed to load race data: ' + e.message, 'error');
+            } finally {
+                elements.loadVolaData.innerHTML = 'Load Race Videos';
+                elements.loadVolaData.disabled = false;
+            }
+        }
+
+        async function checkActiveSession() {
+            // Only check/show active session for RTSP mode
+            if (elements.sourceType.value !== 'rtsp') {
+                elements.activeSession.style.display = 'none';
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/config/active');
+                const data = await res.json();
+                if (data.active) {
+                    elements.activeSession.style.display = 'block';
+                    elements.activeSessionId.textContent = data.config.session_id;
+                    elements.activeSessionEnd.textContent = new Date(data.config.session_end_time).toLocaleTimeString();
+                } else {
+                    elements.activeSession.style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Failed to check active session:', e);
+            }
+        }
+
+        function setDefaultEndTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + 90);
+            const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+            elements.endTime.value = local.toISOString().slice(0, 16);
+        }
+
+        function setupEventListeners() {
+            // Source type toggle
+            elements.sourceType.addEventListener('change', () => {
+                const sourceType = elements.sourceType.value;
+                const isRtsp = sourceType === 'rtsp';
+                const isVideo = sourceType === 'video';
+
+                // Show/hide source-specific sections
+                elements.cameraSelect.style.display = isRtsp ? 'block' : 'none';
+                elements.videoSelect.style.display = isVideo ? 'block' : 'none';
+
+                // Show/hide session end time (only for RTSP live streams)
+                elements.sessionEndTimeSection.style.display = isRtsp ? 'block' : 'none';
+
+                // Show/hide active session banner (only for RTSP)
+                if (!isRtsp) {
+                    elements.activeSession.style.display = 'none';
+                } else {
+                    checkActiveSession();
+                }
+
+                // Update button text based on source type
+                updateSaveButtonText();
+            });
+
+            elements.camera.addEventListener('change', () => {
+                state.cameraId = elements.camera.value;
+                const camera = state.cameras.find(c => c.id === state.cameraId);
+                if (camera) {
+                    state.cameraOffsetPct = camera.offset_pct || 0;
+                }
+                updateCameraOffsetDisplay();
+            });
+
+            // Vola camera change
+            elements.volaCamera.addEventListener('change', () => {
+                state.volaCamera = elements.volaCamera.value;
+                updateCameraOffsetDisplay();
+            });
+
+            // Vola view change
+            elements.volaView.addEventListener('change', () => {
+                state.volaView = elements.volaView.value;
+            });
+
+            // Vola race change - reload data if we have a file selected
+            elements.volaRace.addEventListener('change', () => {
+                if (elements.volaFile.value && state.volaRacers.length > 0) {
+                    loadVolaData();
+                }
+            });
+
+            // Load Vola data button
+            elements.loadVolaData.addEventListener('click', loadVolaData);
+
+            // Video dropdown change - load video info
+            elements.videoDropdown.addEventListener('change', () => {
+                loadVideoInfo(elements.videoDropdown.value);
+            });
+
+            // Seek time change - update position display
+            elements.seekTime.addEventListener('input', () => {
+                elements.seekPosition.textContent = elements.seekTime.value;
+            });
+
+            // Frame grabbing
+            elements.grabFrame.addEventListener('click', grabFrame);
+
+            // Zone drawing buttons
+            elements.drawStart.addEventListener('click', () => toggleDrawMode('start'));
+            elements.drawEnd.addEventListener('click', () => toggleDrawMode('end'));
+            elements.drawCrop.addEventListener('click', () => toggleDrawMode('crop'));
+
+            // End mode toggle (buttons)
+            elements.endModeZone.addEventListener('click', () => setEndMode('zone'));
+            elements.endModeDuration.addEventListener('click', () => setEndMode('duration'));
+            elements.runDuration.addEventListener('change', () => {
+                state.runDurationSeconds = parseFloat(elements.runDuration.value) || 2.0;
+            });
+            elements.montageFps.addEventListener('change', () => {
+                state.montageFps = parseInt(elements.montageFps.value) || 4;
+            });
+            elements.startDelay.addEventListener('change', () => {
+                state.startOffsetSec = parseFloat(elements.startDelay.value) || 0;
+            });
+
+            // Advanced settings toggle
+            elements.advancedToggle.addEventListener('click', () => {
+                elements.advancedSettings.classList.toggle('visible');
+                elements.advancedArrow.textContent = elements.advancedSettings.classList.contains('visible') ? '▼' : '▶';
+            });
+
+            // Sliders
+            elements.threshold.addEventListener('input', () => {
+                elements.thresholdValue.textContent = elements.threshold.value;
+            });
+            elements.minPixels.addEventListener('input', () => {
+                elements.minPixelsValue.textContent = elements.minPixels.value;
+            });
+            elements.minBrightness.addEventListener('input', () => {
+                elements.minBrightnessValue.textContent = elements.minBrightness.value;
+            });
+
+            // Zoom controls
+            elements.zoomIn.addEventListener('click', () => setZoom(state.zoom * 1.5));
+            elements.zoomOut.addEventListener('click', () => setZoom(state.zoom / 1.5));
+            elements.zoomReset.addEventListener('click', () => setZoom(1));
+
+            // Save config
+            elements.saveConfig.addEventListener('click', saveConfig);
+
+            // Stop session
+            elements.stopSession.addEventListener('click', stopSession);
+
+            // Stop processing
+            elements.stopProcessing.addEventListener('click', stopProcessing);
+        }
+
+        async function stopSession() {
+            if (!confirm('Are you sure you want to stop the current session?')) {
+                return;
+            }
+
+            try {
+                const sessionId = elements.activeSessionId.textContent;
+                const res = await fetch(`/api/config/stop/${sessionId}`, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    return;
+                }
+
+                showStatus('Session stopped', 'success');
+                elements.activeSession.style.display = 'none';
+            } catch (e) {
+                showStatus('Failed to stop session: ' + e.message, 'error');
+            }
+        }
+
+        async function grabFrame() {
+            elements.grabFrame.innerHTML = '<span class="spinner"></span>Loading...';
+            elements.grabFrame.disabled = true;
+
+            try {
+                const isVideo = elements.sourceType.value === 'video';
+                console.log('grabFrame: sourceType =', elements.sourceType.value);
+                console.log('grabFrame: videoDropdown.value =', elements.videoDropdown.value);
+
+                // Validate video path before making request
+                if (isVideo && !elements.videoDropdown.value) {
+                    showStatus('Please select a video first', 'error');
+                    elements.grabFrame.innerHTML = 'Grab Frame';
+                    elements.grabFrame.disabled = false;
+                    return;
+                }
+
+                const body = !isVideo
+                    ? { source_type: 'rtsp', camera_id: state.cameraId }
+                    : {
+                        source_type: 'video',
+                        video_path: elements.videoDropdown.value,
+                        seek_seconds: parseInt(elements.seekTime.value) || 0
+                    };
+                console.log('grabFrame: body =', body);
+
+                const res = await fetch('/api/frame/grab', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    return;
+                }
+
+                state.frameId = data.frame_id;
+                state.frameWidth = data.width;
+                state.frameHeight = data.height;
+
+                // Display frame
+                elements.frameContainer.innerHTML = `<img src="${data.url}" alt="Calibration frame" id="frameImage">`;
+                elements.frameCard.style.display = 'block';
+                elements.configCard.style.display = 'block';
+                elements.saveSection.style.display = 'block';
+
+                // Setup drawing handlers
+                setupDrawingHandlers();
+
+                showStatus('Frame captured! Draw START and END zones.', 'success');
+
+            } catch (e) {
+                showStatus('Failed to grab frame: ' + e.message, 'error');
+            } finally {
+                elements.grabFrame.innerHTML = 'Grab Frame';
+                elements.grabFrame.disabled = false;
+            }
+        }
+
+        function setupDrawingHandlers() {
+            const container = elements.frameContainer;
+
+            // Mouse events
+            container.addEventListener('mousedown', onDrawStart);
+            container.addEventListener('mousemove', onDrawMove);
+            container.addEventListener('mouseup', onDrawEnd);
+            container.addEventListener('mouseleave', onDrawEnd);
+
+            // Touch events
+            container.addEventListener('touchstart', onDrawStart, { passive: false });
+            container.addEventListener('touchmove', onDrawMove, { passive: false });
+            container.addEventListener('touchend', onDrawEnd);
+        }
+
+        function toggleDrawMode(mode) {
+            if (state.drawingMode === mode) {
+                state.drawingMode = null;
+                elements.drawStart.classList.remove('active');
+                elements.drawEnd.classList.remove('active');
+                elements.drawCrop.classList.remove('active');
+                elements.drawingIndicator.classList.remove('visible');
+                elements.frameContainer.classList.remove('drawing-active');
+            } else {
+                state.drawingMode = mode;
+                elements.drawStart.classList.toggle('active', mode === 'start');
+                elements.drawEnd.classList.toggle('active', mode === 'end');
+                elements.drawCrop.classList.toggle('active', mode === 'crop');
+                const label = mode === 'crop' ? 'CROP area' : `${(mode || '').toUpperCase()} zone`;
+                elements.drawingIndicator.textContent = `Tap and drag to draw ${label}`;
+                elements.drawingIndicator.classList.add('visible');
+                elements.frameContainer.classList.add('drawing-active');
+            }
+        }
+
+        function setEndMode(mode) {
+            state.endMode = mode;
+            // Update button states
+            elements.endModeZone.classList.toggle('active', mode === 'zone');
+            elements.endModeDuration.classList.toggle('active', mode === 'duration');
+            // Show/hide END zone button based on mode (Duration is always visible)
+            elements.drawEnd.style.display = mode === 'zone' ? 'inline-block' : 'none';
+            // Clear END zone if switching to duration mode
+            if (state.endMode === 'duration') {
+                state.endZone = null;
+                renderZones();
+            }
+        }
+
+        function getEventCoords(e) {
+            const rect = elements.frameContainer.getBoundingClientRect();
+            const img = document.getElementById('frameImage');
+            if (!img) return null;
+
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            // Account for zoom and scroll
+            const displayWidth = img.clientWidth;
+            const displayHeight = img.clientHeight;
+
+            const x = ((clientX - rect.left) / displayWidth) * state.frameWidth / state.zoom;
+            const y = ((clientY - rect.top) / displayHeight) * state.frameHeight / state.zoom;
+
+            return { x: Math.round(x), y: Math.round(y) };
+        }
+
+        function onDrawStart(e) {
+            if (!state.drawingMode) return;
+            e.preventDefault();
+
+            const coords = getEventCoords(e);
+            if (!coords) return;
+
+            state.isDrawing = true;
+            state.drawStart = coords;
+        }
+
+        function onDrawMove(e) {
+            if (!state.isDrawing || !state.drawingMode) return;
+            e.preventDefault();
+
+            const coords = getEventCoords(e);
+            if (!coords) return;
+
+            const zone = {
+                x: Math.min(state.drawStart.x, coords.x),
+                y: Math.min(state.drawStart.y, coords.y),
+                w: Math.abs(coords.x - state.drawStart.x),
+                h: Math.abs(coords.y - state.drawStart.y)
+            };
+
+            if (state.drawingMode === 'start') {
+                state.startZone = zone;
+            } else if (state.drawingMode === 'end') {
+                state.endZone = zone;
+            } else if (state.drawingMode === 'crop') {
+                state.cropZone = zone;
+            }
+
+            renderZones();
+        }
+
+        function onDrawEnd(e) {
+            if (!state.isDrawing) return;
+
+            state.isDrawing = false;
+
+            // Auto-advance to next zone (but not from crop)
+            // Only auto-advance to END zone if in zone mode (not duration mode)
+            if (state.drawingMode === 'start' && state.startZone && !state.endZone && state.endMode === 'zone') {
+                toggleDrawMode('end');
+            } else if (state.drawingMode === 'end' && state.endZone) {
+                toggleDrawMode(null);
+            } else if (state.drawingMode === 'crop') {
+                toggleDrawMode(null);
+            } else if (state.drawingMode === 'start' && state.startZone && state.endMode === 'duration') {
+                // In duration mode, just clear drawing mode after START zone
+                toggleDrawMode(null);
+            }
+
+            checkReadyToSave();
+        }
+
+        function renderZones() {
+            // Remove existing overlays
+            document.querySelectorAll('.zone-overlay').forEach(el => el.remove());
+
+            const img = document.getElementById('frameImage');
+            if (!img) return;
+
+            const displayWidth = img.clientWidth;
+            const displayHeight = img.clientHeight;
+            const scaleX = displayWidth / state.frameWidth * state.zoom;
+            const scaleY = displayHeight / state.frameHeight * state.zoom;
+
+            if (state.startZone) {
+                const overlay = createZoneOverlay(state.startZone, 'start', 'START', scaleX, scaleY);
+                elements.frameContainer.appendChild(overlay);
+            }
+
+            if (state.endZone) {
+                const overlay = createZoneOverlay(state.endZone, 'end', 'END', scaleX, scaleY);
+                elements.frameContainer.appendChild(overlay);
+            }
+
+            if (state.cropZone) {
+                const overlay = createZoneOverlay(state.cropZone, 'crop', 'CROP', scaleX, scaleY);
+                elements.frameContainer.appendChild(overlay);
+            }
+        }
+
+        function createZoneOverlay(zone, type, label, scaleX, scaleY) {
+            const overlay = document.createElement('div');
+            overlay.className = `zone-overlay ${type}`;
+            overlay.style.left = `${zone.x * scaleX}px`;
+            overlay.style.top = `${zone.y * scaleY}px`;
+            overlay.style.width = `${zone.w * scaleX}px`;
+            overlay.style.height = `${zone.h * scaleY}px`;
+
+            const labelEl = document.createElement('span');
+            labelEl.className = 'zone-label';
+            labelEl.textContent = label;
+            overlay.appendChild(labelEl);
+
+            return overlay;
+        }
+
+        function setZoom(newZoom) {
+            state.zoom = Math.max(0.5, Math.min(4, newZoom));
+            elements.frameInner.style.transform = `scale(${state.zoom})`;
+            elements.zoomReset.textContent = `${state.zoom.toFixed(1)}x`;
+            renderZones();
+        }
+
+        function checkReadyToSave() {
+            // Need START zone. For END: either END zone (zone mode) or duration setting (duration mode)
+            const endReady = state.endMode === 'duration' || state.endZone;
+            const ready = state.startZone && endReady;
+            elements.saveConfig.disabled = !ready;
+        }
+
+        function updateSaveButtonText() {
+            const sourceType = elements.sourceType.value;
+            const buttonText = sourceType === 'video' ? 'Process Video' : 'Start Live Session';
+            elements.saveConfig.textContent = buttonText;
+        }
+
+        async function saveConfig() {
+            console.log('saveConfig called');
+            console.log('state:', state);
+
+            // Validate based on end mode
+            if (!state.startZone) {
+                showStatus('Please draw START zone', 'error');
+                return;
+            }
+            if (state.endMode === 'zone' && !state.endZone) {
+                showStatus('Please draw END zone (or switch to duration mode)', 'error');
+                return;
+            }
+
+            const isVideo = elements.sourceType.value === 'video';
+            const buttonText = isVideo ? 'Process Video' : 'Start Live Session';
+            elements.saveConfig.innerHTML = `<span class="spinner"></span>${isVideo ? 'Processing...' : 'Saving...'}`;
+            elements.saveConfig.disabled = true;
+
+            try {
+                // For video files, use the Vola camera (if set) since that determines which camera's videos we're processing
+                let cameraId = state.cameraId;
+                if (isVideo && state.volaCamera) {
+                    cameraId = state.volaCamera;  // Use Vola camera selection for video processing
+                } else if (!cameraId && isVideo) {
+                    cameraId = elements.videoDropdown.value || 'video_file';
+                }
+                console.log('cameraId:', cameraId);
+
+                const config = {
+                    camera_id: cameraId,
+                    calibration_frame_id: state.frameId,
+                    session_type: elements.sessionType.value,
+                    group: elements.group.value,
+                    start_zone: state.startZone,
+                    end_zone: state.endMode === 'zone' ? state.endZone : null,  // Only include if zone mode
+                    crop_zone: state.cropZone || null,  // Optional - if set, overrides trigger zone crop calculation
+                    session_end_time: new Date(elements.endTime.value).toISOString(),
+                    detection_threshold: parseInt(elements.threshold.value),
+                    min_pixel_change_pct: parseFloat(elements.minPixels.value),
+                    start_offset_sec: state.startOffsetSec,  // Fixed delay in seconds after trigger
+                    min_brightness: parseInt(elements.minBrightness.value),
+                    pre_buffer_seconds: parseInt(elements.preBuffer.value),
+                    post_buffer_seconds: parseInt(elements.postBuffer.value),
+                    // Duration mode settings
+                    run_duration_seconds: state.endMode === 'duration' ? state.runDurationSeconds : null,
+                    // Montage settings
+                    montage_fps: state.montageFps,
+                };
+
+                // For video files, include the video path and Vola racer data for processing
+                if (isVideo) {
+                    config.video_path = elements.videoDropdown.value;
+
+                    // Include Vola racer data and videos if loaded
+                    if (state.volaRacers && state.volaRacers.length > 0) {
+                        config.vola_racers = state.volaRacers;
+                        config.vola_videos = state.volaVideos;  // Videos to process
+                        config.vola_race = state.volaRace;
+                        config.vola_camera = state.volaCamera;
+                        config.vola_view = state.volaView;  // View number 1-5 for filename
+                        config.num_athletes = state.numAthletes;
+                        // Use date from Vola data or parse from filename
+                        config.race_date = state.raceDate || new Date().toISOString().split('T')[0];
+                    }
+                }
+
+                console.log('config to save:', config);
+
+                const res = await fetch('/api/config/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                console.log('response status:', res.status);
+
+                const data = await res.json();
+                console.log('response data:', data);
+
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    return;
+                }
+
+                if (isVideo) {
+                    // For video files, launch processing asynchronously
+                    // If Vola data loaded, process all videos from config; otherwise use selected video
+                    const hasVolaVideos = state.volaVideos && state.volaVideos.length > 0;
+                    const videoPath = elements.videoDropdown.value;
+
+                    if (!hasVolaVideos && !videoPath) {
+                        showStatus('No video selected', 'error');
+                        return;
+                    }
+
+                    const numVideos = hasVolaVideos ? state.volaVideos.length : 1;
+                    showStatus(`Config saved: ${data.session_id}. Processing ${numVideos} video(s)...`, 'info');
+
+                    // Call the process endpoint
+                    const processRes = await fetch('/api/process/video', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            config_path: data.config_path,
+                            video_path: hasVolaVideos ? null : videoPath,
+                            use_config_videos: hasVolaVideos
+                        })
+                    });
+
+                    const processData = await processRes.json();
+                    console.log('Process response:', processData);
+
+                    if (processData.error) {
+                        showStatus(`Processing error: ${processData.error}`, 'error');
+                    } else {
+                        // Start polling for status
+                        state.currentJobId = processData.job_id;
+                        elements.processingStatus.style.display = 'block';
+                        elements.processingStatusText.textContent = 'Processing...';
+                        elements.processingRuns.textContent = '0';
+                        startStatusPolling();
+                        showStatus(`Processing started. Job ID: ${processData.job_id}`, 'info');
+                    }
+                } else {
+                    // For RTSP, just show session started
+                    showStatus(`Live session started: ${data.session_id}`, 'success');
+                    elements.activeSession.style.display = 'block';
+                    elements.activeSessionId.textContent = data.session_id;
+                    elements.activeSessionEnd.textContent = new Date(config.session_end_time).toLocaleTimeString();
+                }
+
+            } catch (e) {
+                console.error('saveConfig error:', e);
+                showStatus('Failed: ' + e.message, 'error');
+            } finally {
+                elements.saveConfig.innerHTML = buttonText;
+                elements.saveConfig.disabled = false;
+            }
+        }
+
+        function resetProcessingUI() {
+            // Hide processing status card and reset button state
+            elements.processingStatus.style.display = 'none';
+            elements.stopProcessing.innerHTML = 'Stop Processing';
+            elements.stopProcessing.disabled = false;
+            elements.stopProcessing.style.background = '';  // Reset to default (var(--danger))
+        }
+
+        function startStatusPolling() {
+            // Clear any existing interval
+            if (state.statusPollInterval) {
+                clearInterval(state.statusPollInterval);
+            }
+
+            // Poll every 2 seconds
+            state.statusPollInterval = setInterval(async () => {
+                if (!state.currentJobId) {
+                    clearInterval(state.statusPollInterval);
+                    return;
+                }
+
+                try {
+                    const res = await fetch(`/api/process/status/${state.currentJobId}`);
+                    const data = await res.json();
+
+                    if (data.error) {
+                        console.error('Status poll error:', data.error);
+                        return;
+                    }
+
+                    elements.processingRuns.textContent = data.runs_detected || 0;
+
+                    if (data.status === 'completed') {
+                        clearInterval(state.statusPollInterval);
+                        state.statusPollInterval = null;
+                        state.currentJobId = null;
+                        resetProcessingUI();
+                        showStatus(`Processing complete! ${data.runs_detected} runs detected. Output: ${data.output_dir}`, 'success');
+                    } else if (data.status === 'stopped') {
+                        clearInterval(state.statusPollInterval);
+                        state.statusPollInterval = null;
+                        state.currentJobId = null;
+                        resetProcessingUI();
+                        showStatus(`Processing stopped. ${data.runs_detected} runs detected before stopping.`, 'info');
+                    } else if (data.status === 'failed') {
+                        clearInterval(state.statusPollInterval);
+                        state.statusPollInterval = null;
+                        state.currentJobId = null;
+                        resetProcessingUI();
+                        showStatus(`Processing failed: ${data.error}`, 'error');
+                    } else {
+                        elements.processingStatusText.textContent = 'Processing...';
+                    }
+                } catch (e) {
+                    console.error('Status poll failed:', e);
+                }
+            }, 2000);
+        }
+
+        async function stopProcessing() {
+            if (!state.currentJobId) {
+                showStatus('No active processing job', 'error');
+                return;
+            }
+
+            elements.stopProcessing.innerHTML = '<span class="spinner"></span>Stopping...';
+            elements.stopProcessing.disabled = true;
+
+            try {
+                const res = await fetch(`/api/process/stop/${state.currentJobId}`, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.error) {
+                    showStatus(`Failed to stop: ${data.error}`, 'error');
+                    elements.stopProcessing.innerHTML = 'Stop Processing';
+                    elements.stopProcessing.disabled = false;
+                } else {
+                    // Update UI immediately to show stopped state
+                    elements.processingStatusText.textContent = 'Stopped';
+                    elements.stopProcessing.innerHTML = 'Stopped';
+                    elements.stopProcessing.style.background = 'var(--text-muted)';
+                    showStatus('Processing stopped', 'success');
+                    // Poll will handle final cleanup, but give immediate feedback
+                }
+            } catch (e) {
+                showStatus('Failed to stop processing: ' + e.message, 'error');
+                elements.stopProcessing.innerHTML = 'Stop Processing';
+                elements.stopProcessing.disabled = false;
+            }
+        }
+
+        function showStatus(message, type) {
+            elements.status.textContent = message;
+            elements.status.className = `status ${type}`;
+            elements.status.style.display = 'block';
+            setTimeout(() => {
+                elements.status.style.display = 'none';
+            }, 5000);
+        }
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>

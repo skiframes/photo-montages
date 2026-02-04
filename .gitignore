@@ -1,0 +1,24 @@
+# Video files (large, for testing only)
+*.mp4
+*.mkv
+*.avi
+
+# Credentials
+credentials.local
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Output
+output/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
