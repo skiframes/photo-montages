@@ -207,8 +207,12 @@ def resize_for_thumbnail(image: np.ndarray, max_width: int = 800) -> np.ndarray:
 
 
 def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str = "",
-                duration_sec: Optional[float] = None, race_title: str = "") -> np.ndarray:
-    """Add skiframes.com overlay with race title, date, duration, FPS, and variant indicator."""
+                duration_sec: Optional[float] = None, race_title: str = "",
+                race_info: Optional[Dict] = None) -> np.ndarray:
+    """Add overlay with race title, date, duration, FPS, and variant indicator.
+
+    Title format: Western Division Ranking | SL | U14 | Run 1 | 2026-02-01 | 2.0s | 4fps (+2frames)
+    """
     from zoneinfo import ZoneInfo
 
     img = image.copy()
@@ -229,12 +233,24 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
     # Date only (no time)
     date_str = boston_time.strftime("%Y-%m-%d")
 
-    # Format text: skiframes.com | Western Division U12 Ranking - SL | 2026-02-01 | 2.0s | 4fps (+2frames)
-    # Use race_title if provided, otherwise generic
-    if race_title:
-        title_part = race_title
+    # Build title from race_info if provided
+    # Format: "Western Division Ranking | SL | U14 | Run 1 | 2026-02-01"
+    if race_info:
+        title_parts = []
+        if race_info.get("event"):
+            title_parts.append(race_info["event"])
+        if race_info.get("discipline"):
+            title_parts.append(race_info["discipline"])
+        if race_info.get("age_group"):
+            title_parts.append(race_info["age_group"])
+        if race_info.get("run"):
+            title_parts.append(race_info["run"])
+        title_parts.append(date_str)
+        title_part = " | ".join(title_parts)
+    elif race_title:
+        title_part = f"{race_title} | {date_str}"
     else:
-        title_part = "Ski Race"
+        title_part = f"Ski Race | {date_str}"
 
     # Build duration part if provided
     duration_part = f"{duration_sec:.1f}s" if duration_sec else ""
@@ -246,9 +262,9 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
 
     # Combine parts, including duration if available
     if duration_part:
-        text = f"skiframes.com | {title_part} | {date_str} | {duration_part} | {fps_part}"
+        text = f"{title_part} | {duration_part} | {fps_part}"
     else:
-        text = f"skiframes.com | {title_part} | {date_str} | {fps_part}"
+        text = f"{title_part} | {fps_part}"
 
     # Get text size
     (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
@@ -358,7 +374,8 @@ def generate_montage(frames: List[np.ndarray],
                      custom_filename: Optional[str] = None,
                      run_view_folder: Optional[str] = None,
                      run_duration_sec: Optional[float] = None,
-                     race_title: str = "") -> Optional[MontageResultPair]:
+                     race_title: str = "",
+                     race_info: Optional[Dict] = None) -> Optional[MontageResultPair]:
     """
     Generate A and B montage pairs from run frames.
 
@@ -440,9 +457,9 @@ def generate_montage(frames: List[np.ndarray],
             print(f"    ERROR creating composite {variant_name}: {e}")
             continue
 
-        # Add branding overlay with variant label and race title
+        # Add branding overlay with variant label and race title/info
         if add_branding:
-            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title)
+            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title, race_info)
 
         # Output paths - use file_suffix for naming
         # Use custom filename if provided (from Vola racer data), otherwise use run number

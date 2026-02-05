@@ -513,6 +513,11 @@
                     <option value="">-- None (use bib numbers) --</option>
                 </select>
 
+                <label for="stitchResultsFile" style="margin-top: 8px;">Results PDF (for USSA IDs & rankings)</label>
+                <select id="stitchResultsFile">
+                    <option value="">-- None --</option>
+                </select>
+
                 <label for="stitchRace" style="margin-top: 8px;">Age Group / Run</label>
                 <select id="stitchRace">
                     <option value="U12 run 1">U12 Run 1</option>
@@ -521,9 +526,68 @@
                     <option value="U14 run 2">U14 Run 2</option>
                 </select>
 
-                <label for="stitchRaceTitle" style="margin-top: 8px;">Video Title</label>
-                <input type="text" id="stitchRaceTitle" value="Western Divisional U12 Ranking - SL" style="margin-bottom: 0;">
-                <div class="help-text">Shown on video overlay (bottom right). Timer shown at top right.</div>
+                <!-- Race Info Fields (for manifest and title overlay) -->
+                <div style="margin-top: 12px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #334155;">Race Information</div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div>
+                            <label for="raceInfoEvent" style="font-size: 12px; margin-bottom: 2px;">Event</label>
+                            <input type="text" id="raceInfoEvent" value="Western Division Ranking" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoDiscipline" style="font-size: 12px; margin-bottom: 2px;">Discipline</label>
+                            <input type="text" id="raceInfoDiscipline" value="SL" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoAgeGroup" style="font-size: 12px; margin-bottom: 2px;">Age Group</label>
+                            <input type="text" id="raceInfoAgeGroup" value="U14" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoRun" style="font-size: 12px; margin-bottom: 2px;">Run</label>
+                            <input type="text" id="raceInfoRun" value="Run 1" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoDate" style="font-size: 12px; margin-bottom: 2px;">Date</label>
+                            <input type="text" id="raceInfoDate" value="Sunday, 2026/02/01" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoType" style="font-size: 12px; margin-bottom: 2px;">Type</label>
+                            <input type="text" id="raceInfoType" value="USSA/NHARA" style="font-size: 13px;">
+                        </div>
+                    </div>
+
+                    <div style="font-weight: 600; margin: 12px 0 8px 0; color: #334155;">Course Information</div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div>
+                            <label for="raceInfoCourse" style="font-size: 12px; margin-bottom: 2px;">Course Name</label>
+                            <input type="text" id="raceInfoCourse" value="Flying Yankee" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoLocation" style="font-size: 12px; margin-bottom: 2px;">Location</label>
+                            <input type="text" id="raceInfoLocation" value="Ragged Mountain, NH" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoVertical" style="font-size: 12px; margin-bottom: 2px;">Vertical Drop</label>
+                            <input type="text" id="raceInfoVertical" value="85m" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoLength" style="font-size: 12px; margin-bottom: 2px;">Length</label>
+                            <input type="text" id="raceInfoLength" value="305m" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoGates" style="font-size: 12px; margin-bottom: 2px;">Gates</label>
+                            <input type="text" id="raceInfoGates" value="35" style="font-size: 13px;">
+                        </div>
+                        <div>
+                            <label for="raceInfoSnow" style="font-size: 12px; margin-bottom: 2px;">Snow Conditions</label>
+                            <input type="text" id="raceInfoSnow" value="Packed Powder" style="font-size: 13px;">
+                        </div>
+                    </div>
+
+                    <div class="help-text" style="margin-top: 8px;">Title overlay: Event | Discipline | Age Group | Run | Date</div>
+                </div>
 
                 <div style="margin-top: 12px;">
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -1046,8 +1110,21 @@
             // Stitch elements
             stitchVolaFile: document.getElementById('stitchVolaFile'),
             stitchStartlistFile: document.getElementById('stitchStartlistFile'),
+            stitchResultsFile: document.getElementById('stitchResultsFile'),
             stitchRace: document.getElementById('stitchRace'),
-            stitchRaceTitle: document.getElementById('stitchRaceTitle'),
+            // Race info fields
+            raceInfoEvent: document.getElementById('raceInfoEvent'),
+            raceInfoDiscipline: document.getElementById('raceInfoDiscipline'),
+            raceInfoAgeGroup: document.getElementById('raceInfoAgeGroup'),
+            raceInfoRun: document.getElementById('raceInfoRun'),
+            raceInfoDate: document.getElementById('raceInfoDate'),
+            raceInfoType: document.getElementById('raceInfoType'),
+            raceInfoCourse: document.getElementById('raceInfoCourse'),
+            raceInfoLocation: document.getElementById('raceInfoLocation'),
+            raceInfoVertical: document.getElementById('raceInfoVertical'),
+            raceInfoLength: document.getElementById('raceInfoLength'),
+            raceInfoGates: document.getElementById('raceInfoGates'),
+            raceInfoSnow: document.getElementById('raceInfoSnow'),
             stitchGenerateComparison: document.getElementById('stitchGenerateComparison'),
             stitchTestCount: document.getElementById('stitchTestCount'),
             stitchLoadRacers: document.getElementById('stitchLoadRacers'),
@@ -1983,6 +2060,11 @@
                 const startlistFiles = await resStartlist.json();
                 elements.stitchStartlistFile.innerHTML = '<option value="">-- None (use bib numbers) --</option>' +
                     startlistFiles.map(f => `<option value="${f.path}">${f.name}</option>`).join('');
+
+                const resResults = await fetch('/api/vola/results-files');
+                const resultsFiles = await resResults.json();
+                elements.stitchResultsFile.innerHTML = '<option value="">-- None --</option>' +
+                    resultsFiles.map(f => `<option value="${f.path}">${f.name}</option>`).join('');
             } catch (e) {
                 console.error('Error loading Vola files:', e);
             }
@@ -2003,6 +2085,7 @@
             const volaFile = elements.stitchVolaFile.value;
             const race = elements.stitchRace.value;
             const startlistFile = elements.stitchStartlistFile.value;
+            const resultsFile = elements.stitchResultsFile.value;
 
             if (!volaFile) {
                 showStatus('Please select a Vola file', 'error');
@@ -2017,7 +2100,8 @@
                     body: JSON.stringify({
                         vola_file: volaFile,
                         race: race,
-                        startlist_file: startlistFile
+                        startlist_file: startlistFile,
+                        results_file: resultsFile
                     })
                 });
 
@@ -2172,9 +2256,24 @@
 
             const cuts = getStitchCuts();
             const raceName = elements.stitchRace.value.toLowerCase().replace(/\s+/g, '_');
-            const raceTitle = elements.stitchRaceTitle.value.trim();
             const generateComparison = elements.stitchGenerateComparison.checked;
             const testCount = parseInt(elements.stitchTestCount.value) || 0;
+
+            // Build race_info from form fields
+            const raceInfo = {
+                event: elements.raceInfoEvent.value.trim(),
+                discipline: elements.raceInfoDiscipline.value.trim(),
+                age_group: elements.raceInfoAgeGroup.value.trim(),
+                run: elements.raceInfoRun.value.trim(),
+                date: elements.raceInfoDate.value.trim(),
+                type: elements.raceInfoType.value.trim(),
+                course: elements.raceInfoCourse.value.trim(),
+                location: elements.raceInfoLocation.value.trim(),
+                vertical_drop: elements.raceInfoVertical.value.trim(),
+                length: elements.raceInfoLength.value.trim(),
+                gates: elements.raceInfoGates.value.trim(),
+                snow: elements.raceInfoSnow.value.trim()
+            };
 
             // Limit racers if test count is set
             let racersToProcess = state.stitchRacers;
@@ -2200,7 +2299,7 @@
                         cuts: cuts,
                         video_paths: videoPaths,
                         race_name: raceName,
-                        race_title: raceTitle,
+                        race_info: raceInfo,
                         generate_comparison: generateComparison
                     })
                 });
@@ -2304,13 +2403,16 @@
             }
         }
 
-        function updateDefaultTitle() {
-            // Update default title based on selected race
+        function updateRaceInfoFromSelection() {
+            // Update age group and run fields based on selected race
             const race = elements.stitchRace.value;
             let ageGroup = 'U12';
+            let runNum = 'Run 1';
             if (race.toLowerCase().includes('u14')) ageGroup = 'U14';
-            const defaultTitle = `Western Divisional ${ageGroup} Ranking - SL`;
-            elements.stitchRaceTitle.value = defaultTitle;
+            if (race.toLowerCase().includes('run 2')) runNum = 'Run 2';
+
+            elements.raceInfoAgeGroup.value = ageGroup;
+            elements.raceInfoRun.value = runNum;
         }
 
         function setupStitchEventListeners() {
@@ -2323,8 +2425,8 @@
             elements.stitchSaveConfig.addEventListener('click', saveStitchConfig);
             elements.stitchStartProcess.addEventListener('click', startStitchProcess);
             elements.stitchStopProcess.addEventListener('click', stopStitchProcess);
-            // Update default title when race selection changes
-            elements.stitchRace.addEventListener('change', updateDefaultTitle);
+            // Update race info fields when race selection changes
+            elements.stitchRace.addEventListener('change', updateRaceInfoFromSelection);
         }
 
         // Initialize on load

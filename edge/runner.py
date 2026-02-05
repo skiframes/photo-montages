@@ -84,6 +84,9 @@ class SkiFramesRunner:
         self.vola_camera: str = self.raw_config.get('vola_camera', '')
         self.race_date: str = self.raw_config.get('race_date', datetime.now().strftime('%Y-%m-%d'))
 
+        # Race info for overlay (same format as video stitcher)
+        self.race_info: Dict = self.raw_config.get('race_info', {})
+
         # Videos to process (from Vola API)
         self.vola_videos: List[Dict] = self.raw_config.get('vola_videos', [])
 
@@ -329,9 +332,9 @@ class SkiFramesRunner:
         # Get folder path for Team/Run_View organization
         output_folder = self._get_output_folder(racer)
 
-        # Build race title for overlay (e.g., "Western Division U14 Ranking - SL")
+        # Build race title for overlay (fallback if no race_info)
         race_title = ""
-        if self.vola_race:
+        if not self.race_info and self.vola_race:
             # Extract age group from vola_race (e.g., "U12 run 1" -> "U12")
             age_group = ""
             if "U12" in self.vola_race.upper():
@@ -359,7 +362,8 @@ class SkiFramesRunner:
             custom_filename=custom_filename,  # Pass custom filename from Vola data (Name_bib)
             run_view_folder=output_folder,  # Pass folder path (Team/Run1_View1)
             run_duration_sec=run_duration,  # Pass duration for overlay display
-            race_title=race_title,  # Pass race title for overlay
+            race_title=race_title,  # Pass race title for overlay (fallback)
+            race_info=self.race_info,  # Pass race info for overlay (preferred)
         )
 
         if result:

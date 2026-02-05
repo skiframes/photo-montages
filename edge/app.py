@@ -13,6 +13,7 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from subprocess import Popen, PIPE
+from typing import Optional
 
 import cv2
 import re
@@ -42,6 +43,7 @@ CONFIG_DIR = Path(__file__).parent / 'config' / 'zones'
 STITCH_CONFIG_DIR = Path(__file__).parent / 'config' / 'stitch'
 CALIBRATION_FRAMES_DIR = Path(tempfile.gettempdir()) / 'skiframes_calibration'
 VIDEO_DIR = Path(__file__).parent.parent  # Parent of edge/ for finding test videos
+LOGOS_DIR = Path(__file__).parent.parent / 'logos'  # Logo images for overlays
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 STITCH_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CALIBRATION_FRAMES_DIR.mkdir(parents=True, exist_ok=True)
@@ -142,6 +144,17 @@ def list_startlist_files():
     return jsonify(sorted(files, key=lambda x: x['name']))
 
 
+def get_gender_from_bib(bib: int) -> str:
+    """Determine gender from bib number based on standard ranges."""
+    # U12: Women 1-60, Men 61-99
+    # U14: Women 111-170, Men 171-220
+    if 1 <= bib <= 60 or 111 <= bib <= 170:
+        return 'Women'
+    elif 61 <= bib <= 110 or 171 <= bib <= 220:
+        return 'Men'
+    return ''
+
+
 def parse_startlist_pdf(pdf_path: str) -> dict:
     """
     Parse a start list PDF to extract bib-to-racer mapping.
@@ -154,22 +167,12 @@ def parse_startlist_pdf(pdf_path: str) -> dict:
     - U12 Women: 1-60, U12 Men: 61-99
     - U14 Women: 111-170, U14 Men: 171-220
 
-    Returns dict mapping bib number to {'name': 'FirstnameLastname', 'team': 'SUN', 'gender': 'Women'}
+    Returns dict mapping bib number to {'name': 'Firstname Lastname', 'team': 'SUN', 'gender': 'Women'}
     """
     if not HAS_PDFPLUMBER:
         return {}
 
     bib_to_racer = {}
-
-    def get_gender_from_bib(bib: int) -> str:
-        """Determine gender from bib number based on standard ranges."""
-        # U12: Women 1-60, Men 61-99
-        # U14: Women 111-170, Men 171-220
-        if 1 <= bib <= 60 or 111 <= bib <= 170:
-            return 'Women'
-        elif 61 <= bib <= 110 or 171 <= bib <= 220:
-            return 'Men'
-        return ''
 
     try:
         with pdfplumber.open(pdf_path) as pdf:
@@ -192,16 +195,16 @@ def parse_startlist_pdf(pdf_path: str) -> dict:
 
                         # Name format: last word is firstname, rest is lastname
                         # "Stellato Brigid" -> firstname=Brigid, lastname=Stellato
-                        # "Van Der Berg John" -> firstname=John, lastname=VanDerBerg
+                        # "Van Der Berg John" -> firstname=John, lastname=Van Der Berg
                         if len(name_parts) >= 2:
                             firstname = name_parts[-1]
-                            lastname = ''.join(name_parts[:-1])  # Join multi-word last names
+                            lastname = ' '.join(name_parts[:-1])  # Keep spaces in multi-word last names
                         else:
                             firstname = name_parts[0] if name_parts else ''
                             lastname = ''
 
                         bib_to_racer[bib] = {
-                            'name': f"{firstname}{lastname}",
+                            'name': f"{firstname} {lastname}".strip(),
                             'team': team,
                             'gender': get_gender_from_bib(bib)
                         }
@@ -209,6 +212,157 @@ def parse_startlist_pdf(pdf_path: str) -> dict:
         print(f"Error parsing start list PDF {pdf_path}: {e}")
 
     return bib_to_racer
+
+
+def parse_results_pdf(pdf_path: str) -> dict:
+    """
+    Parse a results PDF to extract USSA IDs, rankings, and status (DSQ/DNF/DNS).
+
+    Results format: "1 132 E7031024 Nelson Coulee 2012 PROC 26.89 31.13 58.02"
+    (rank bib ussa_id lastname firstname year club run1 run2 total)
+
+    Also parses DSQ/DNF/DNS sections.
+
+    Returns dict mapping bib number to:
+    {
+        'ussa_id': 'E7031024',
+        'name': 'Coulee Nelson',
+        'team': 'PROC',
+        'gender': 'Women',
+        'rank': 1,  # None for DSQ/DNF/DNS
+        'status': 'finished',  # or 'DSQ', 'DNF', 'DNS'
+        'run1_time': 26.89,  # None for DNS
+        'run2_time': 31.13,  # None for DNF in run2
+        'total_time': 58.02,  # None for DSQ/DNF/DNS
+    }
+    """
+    if not HAS_PDFPLUMBER:
+        return {}
+
+    bib_to_racer = {}
+    current_gender = None
+    current_status = 'finished'
+
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if not text:
+                    continue
+
+                for line in text.split('\n'):
+                    # Detect gender sections
+                    if 'Women' in line and len(line.strip()) < 20:
+                        current_gender = 'Women'
+                        continue
+                    if 'Men' in line and len(line.strip()) < 20:
+                        current_gender = 'Men'
+                        continue
+
+                    # Detect status sections
+                    if 'Did Not Start' in line:
+                        current_status = 'DNS'
+                        continue
+                    if 'Did Not Finish' in line:
+                        current_status = 'DNF'
+                        continue
+                    if 'Disqualified' in line:
+                        current_status = 'DSQ'
+                        continue
+
+                    # Parse ranked finishers
+                    # Pattern: rank bib ussa_id lastname firstname year club run1 run2 total [gap]
+                    # Example: "1 132 E7031024 Nelson Coulee 2012 PROC 26.89 31.13 58.02"
+                    ranked_match = re.match(
+                        r'(\d+)\s+(\d+)\s+(E\d{7})\s+((?:[A-Za-z\'\-]+\s+)+)(\d{4})\s+([A-Z]{2,4})\s+([\d:.]+)\s+([\d:.]+)\s+([\d:.]+)',
+                        line
+                    )
+                    if ranked_match:
+                        rank = int(ranked_match.group(1))
+                        bib = int(ranked_match.group(2))
+                        ussa_id = ranked_match.group(3)
+                        name_parts = ranked_match.group(4).strip().split()
+                        year = ranked_match.group(5)
+                        team = ranked_match.group(6)
+                        run1 = ranked_match.group(7)
+                        run2 = ranked_match.group(8)
+                        total = ranked_match.group(9)
+
+                        # Name: last word is firstname
+                        if len(name_parts) >= 2:
+                            firstname = name_parts[-1]
+                            lastname = ' '.join(name_parts[:-1])
+                        else:
+                            firstname = name_parts[0] if name_parts else ''
+                            lastname = ''
+
+                        bib_to_racer[bib] = {
+                            'ussa_id': ussa_id,
+                            'name': f"{firstname} {lastname}".strip(),
+                            'team': team,
+                            'gender': current_gender or get_gender_from_bib(bib),
+                            'rank': rank,
+                            'status': 'finished',
+                            'run1_time': parse_race_time(run1),
+                            'run2_time': parse_race_time(run2),
+                            'total_time': parse_race_time(total),
+                        }
+                        continue
+
+                    # Parse DSQ/DNF/DNS entries (no rank, may have partial times)
+                    # Pattern: bib ussa_id lastname firstname year club [times...]
+                    # Example: "133 E7090134 Morton Julia 2012 SUN"
+                    # Example: "129 E6997139 O'Brien Madison 2012 PROC 32.18"
+                    unranked_match = re.match(
+                        r'(\d+)\s+(E\d{7})\s+((?:[A-Za-z\'\-]+\s+)+)(\d{4})\s+([A-Z]{2,4})(?:\s+([\d:.]+))?',
+                        line
+                    )
+                    if unranked_match and current_status != 'finished':
+                        bib = int(unranked_match.group(1))
+                        ussa_id = unranked_match.group(2)
+                        name_parts = unranked_match.group(3).strip().split()
+                        year = unranked_match.group(4)
+                        team = unranked_match.group(5)
+                        partial_time = unranked_match.group(6)
+
+                        if len(name_parts) >= 2:
+                            firstname = name_parts[-1]
+                            lastname = ' '.join(name_parts[:-1])
+                        else:
+                            firstname = name_parts[0] if name_parts else ''
+                            lastname = ''
+
+                        bib_to_racer[bib] = {
+                            'ussa_id': ussa_id,
+                            'name': f"{firstname} {lastname}".strip(),
+                            'team': team,
+                            'gender': current_gender or get_gender_from_bib(bib),
+                            'rank': None,
+                            'status': current_status,
+                            'run1_time': parse_race_time(partial_time) if partial_time else None,
+                            'run2_time': None,
+                            'total_time': None,
+                        }
+
+    except Exception as e:
+        print(f"Error parsing results PDF {pdf_path}: {e}")
+
+    return bib_to_racer
+
+
+def parse_race_time(time_str: str) -> Optional[float]:
+    """Parse race time string to seconds (e.g., '26.89' -> 26.89, '1:03.02' -> 63.02)."""
+    if not time_str:
+        return None
+    try:
+        if ':' in time_str:
+            parts = time_str.split(':')
+            minutes = int(parts[0])
+            seconds = float(parts[1])
+            return minutes * 60 + seconds
+        return float(time_str)
+    except (ValueError, IndexError):
+        return None
 
 
 @app.route('/api/vola/results-files')
@@ -224,52 +378,6 @@ def list_results_files():
                 'path': str(f),
             })
     return jsonify(sorted(files, key=lambda x: x['name']))
-
-
-def parse_results_pdf(pdf_path: str) -> dict:
-    """
-    Parse a results PDF to extract bib-to-name mapping.
-    DEPRECATED: Use parse_startlist_pdf instead for better data (includes team).
-
-    Returns dict mapping bib number to name (e.g., {132: "Nelson Coulee", 131: "Cooper Josie"})
-    """
-    if not HAS_PDFPLUMBER:
-        return {}
-
-    bib_to_name = {}
-
-    try:
-        with pdfplumber.open(pdf_path) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                if not text:
-                    continue
-
-                # Look for lines with bib numbers and names
-                # Format: "1 132 E7031024 Nelson Coulee 2012 PROC 26.89 ..."
-                # Also handles DNS/DNF: "132 E7031024 Nelson Coulee 2012 PROC"
-                for line in text.split('\n'):
-                    # Pattern 1: with rank - "1 132 E7031024 Lastname Firstname 2012"
-                    match = re.match(r'^\d+\s+(\d+)\s+[A-Z]\d+\s+([A-Za-z]+)\s+([A-Za-z]+)\s+\d{4}\s', line)
-                    if match:
-                        bib = int(match.group(1))
-                        lastname = match.group(2)
-                        firstname = match.group(3)
-                        bib_to_name[bib] = f"{firstname}{lastname}"
-                        continue
-
-                    # Pattern 2: without rank (DNS/DNF) - "132 E7031024 Lastname Firstname 2012"
-                    match = re.match(r'^(\d+)\s+[A-Z]\d+\s+([A-Za-z]+)\s+([A-Za-z]+)\s+\d{4}\s', line)
-                    if match:
-                        bib = int(match.group(1))
-                        lastname = match.group(2)
-                        firstname = match.group(3)
-                        if bib not in bib_to_name:  # Don't overwrite existing entry
-                            bib_to_name[bib] = f"{firstname}{lastname}"
-    except Exception as e:
-        print(f"Error parsing PDF {pdf_path}: {e}")
-
-    return bib_to_name
 
 
 @app.route('/api/vola/parse-results', methods=['POST'])
@@ -1372,6 +1480,57 @@ stitch_jobs = {}
 stitch_jobs_lock = threading.Lock()
 
 
+@app.route('/api/stitch/logos')
+def list_available_logos():
+    """
+    List all available logo images for overlay selection.
+
+    Returns list of logos with filename, name, and preview URL.
+    User can select which logos to include and in what order (left to right).
+    """
+    logos = []
+    if LOGOS_DIR.exists():
+        for f in sorted(LOGOS_DIR.glob('*.png')):
+            # Skip hidden files
+            if f.name.startswith('.'):
+                continue
+
+            # Create a friendly display name from filename
+            # e.g., "US-Ski-Snowboard.png" -> "US Ski Snowboard"
+            display_name = f.stem.replace('_', ' ').replace('-', ' ')
+
+            logos.append({
+                'filename': f.name,
+                'name': display_name,
+                'path': str(f),
+                'preview_url': f'/api/stitch/logo/{f.name}'
+            })
+
+    return jsonify({
+        'logos': logos,
+        'default_order': [
+            'US-Ski-Snowboard.png',
+            'NHARA_logo.png',
+            'RMST_logo.png',
+            'Ragged_logo.png',
+            'Skiframes-com_logo.png'
+        ]
+    })
+
+
+@app.route('/api/stitch/logo/<filename>')
+def get_logo_preview(filename):
+    """Serve a logo image for preview."""
+    # Sanitize filename to prevent path traversal
+    safe_filename = Path(filename).name
+    logo_path = LOGOS_DIR / safe_filename
+
+    if not logo_path.exists() or not logo_path.suffix.lower() == '.png':
+        return jsonify({'error': 'Logo not found'}), 404
+
+    return send_file(logo_path, mimetype='image/png')
+
+
 @app.route('/api/stitch/configs')
 def list_stitch_configs():
     """List saved stitch cut point configurations."""
@@ -1462,16 +1621,18 @@ def save_stitch_config():
 @app.route('/api/stitch/parse-racers', methods=['POST'])
 def parse_racers_for_stitch():
     """
-    Parse Vola file and start list PDF to get racer data for stitching.
+    Parse Vola file, start list PDF, and results PDF to get racer data for stitching.
 
     Request body:
     {
         "vola_file": "/path/to/vola.xlsx",
         "race": "U12 run 1",
-        "startlist_file": "/path/to/startlist.pdf"  // Optional
+        "startlist_file": "/path/to/startlist.pdf",  // Optional
+        "results_file": "/path/to/results.pdf",  // Optional - for USSA IDs, rankings, DSQ/DNF
+        "include_dsq_dnf": true  // Optional - include DSQ/DNF racers with 60s replacement time
     }
 
-    Returns list of racers with timing and name data.
+    Returns list of racers with timing, name, USSA ID, ranking, and status data.
     """
     if not HAS_OPENPYXL:
         return jsonify({'error': 'openpyxl not installed'}), 500
@@ -1480,6 +1641,8 @@ def parse_racers_for_stitch():
     vola_file = data.get('vola_file')
     race = data.get('race', '').lower()
     startlist_file = data.get('startlist_file')
+    results_file = data.get('results_file')
+    include_dsq_dnf = data.get('include_dsq_dnf', True)
 
     if not vola_file or not Path(vola_file).exists():
         return jsonify({'error': 'Invalid vola_file'}), 400
@@ -1496,11 +1659,19 @@ def parse_racers_for_stitch():
         return jsonify({'error': f'Invalid race. Must be one of: {list(race_map.keys())}'}), 400
 
     # Parse start list for names if provided
-    bib_to_racer = {}
+    bib_to_startlist = {}
     if startlist_file and Path(startlist_file).exists():
-        bib_to_racer = parse_startlist_pdf(startlist_file)
+        bib_to_startlist = parse_startlist_pdf(startlist_file)
+
+    # Parse results PDF for USSA IDs, rankings, and status
+    bib_to_results = {}
+    if results_file and Path(results_file).exists():
+        bib_to_results = parse_results_pdf(results_file)
 
     start_sheet, end_sheet = race_map[race]
+
+    # Default replacement time for DSQ/DNF (60 seconds)
+    DSQ_DNF_REPLACEMENT_TIME = 60.0
 
     try:
         wb = openpyxl.load_workbook(vola_file, data_only=True)
@@ -1547,6 +1718,14 @@ def parse_racers_for_stitch():
         for bib in sorted(start_times.keys()):
             start_sec = start_times[bib]
 
+            # Get data from results PDF (has USSA ID, rank, status)
+            results_info = bib_to_results.get(bib, {})
+            startlist_info = bib_to_startlist.get(bib, {})
+
+            # Determine status from results
+            status = results_info.get('status', 'finished')
+            rank = results_info.get('rank')
+
             # Calculate run duration
             run_duration = None
             if bib in end_times:
@@ -1554,26 +1733,35 @@ def parse_racers_for_stitch():
             elif bib in run_durations:
                 run_duration = run_durations[bib]
 
-            if not run_duration or run_duration <= 0:
-                continue  # Skip racers without valid finish
+            # Handle DSQ/DNF/DNS - use replacement time
+            if run_duration is None or run_duration <= 0:
+                if status in ('DSQ', 'DNF', 'DNS') and include_dsq_dnf:
+                    run_duration = DSQ_DNF_REPLACEMENT_TIME
+                else:
+                    continue  # Skip racers without valid finish and not DSQ/DNF
 
-            # Get name/team from start list
-            racer_info = bib_to_racer.get(bib, {})
-            name = racer_info.get('name', f'Bib{bib}')
-            team = racer_info.get('team', '')
-            gender = racer_info.get('gender', '')
+            # Get name/team - prefer results (has parsed name), fallback to startlist
+            name = results_info.get('name') or startlist_info.get('name', f'Bib{bib}')
+            team = results_info.get('team') or startlist_info.get('team', '')
+            gender = results_info.get('gender') or startlist_info.get('gender', '') or get_gender_from_bib(bib)
+
+            # Get USSA ID from results
+            ussa_id = results_info.get('ussa_id', '')
 
             racer = {
                 'bib': bib,
                 'name': name,
                 'team': team,
                 'gender': gender,
+                'ussa_id': ussa_id,
+                'ussa_profile_url': f"https://www.usskiandsnowboard.org/public-tools/members/{ussa_id}" if ussa_id else None,
                 'start_time_sec': start_sec,
                 'start_time_str': seconds_to_time_str(start_sec),
                 'finish_time_sec': start_sec + run_duration,
                 'finish_time_str': seconds_to_time_str(start_sec + run_duration),
                 'run_duration': run_duration,
-                'finished': bib in end_times
+                'status': status,  # 'finished', 'DSQ', 'DNF', 'DNS'
+                'rank': rank,  # None for DSQ/DNF/DNS
             }
             racers.append(racer)
 
@@ -1686,6 +1874,8 @@ def run_stitch_job(job_id: str, config: dict):
         output_dir = config.get('output_dir', str(Path(__file__).parent.parent / 'output'))
         race_name = config.get('race_name', 'race')
         race_title = config.get('race_title', '')
+        race_info = config.get('race_info', {})
+        selected_logos = config.get('selected_logos')
         generate_comparison = config.get('generate_comparison', False)
 
         # Convert to objects
@@ -1701,7 +1891,9 @@ def run_stitch_job(job_id: str, config: dict):
                 gender=r.get('gender', ''),
                 start_time_sec=r['start_time_sec'],
                 finish_time_sec=r.get('finish_time_sec', r['start_time_sec'] + r['run_duration']),
-                duration=r['run_duration']
+                duration=r['run_duration'],
+                ussa_id=r.get('ussa_id', ''),
+                status=r.get('status', 'finished')
             ))
 
         with stitch_jobs_lock:
@@ -1720,6 +1912,8 @@ def run_stitch_job(job_id: str, config: dict):
             output_dir=output_dir,
             race_name=race_name,
             race_title=race_title,
+            race_info=race_info,
+            selected_logos=selected_logos,
             stop_flag=should_stop
         )
 
@@ -1731,10 +1925,29 @@ def run_stitch_job(job_id: str, config: dict):
                     'current_racer': name
                 }
 
-        if generate_comparison:
-            outputs = stitcher.process_all_with_comparison(progress_callback=progress_callback, generate_comparison=True)
+        # Get parallel processing options
+        parallel = config.get('parallel', True)  # Default to parallel for M1 Mac
+        max_workers = config.get('max_workers', 8)  # Default 8 workers for M1 Max (8 perf cores)
+
+        if parallel:
+            print(f"Using parallel processing with {max_workers} workers")
+            if generate_comparison:
+                outputs = stitcher.process_all_with_comparison_parallel(
+                    max_workers=max_workers,
+                    progress_callback=progress_callback,
+                    generate_comparison=True
+                )
+            else:
+                outputs = stitcher.process_all_parallel(
+                    max_workers=max_workers,
+                    progress_callback=progress_callback
+                )
         else:
-            outputs = stitcher.process_all(progress_callback=progress_callback)
+            print("Using sequential processing")
+            if generate_comparison:
+                outputs = stitcher.process_all_with_comparison(progress_callback=progress_callback, generate_comparison=True)
+            else:
+                outputs = stitcher.process_all(progress_callback=progress_callback)
 
         with stitch_jobs_lock:
             # Check if we were stopped
@@ -1767,7 +1980,32 @@ def start_stitch_process():
             "R3": "/path/to/r3.mp4"
         },
         "race_name": "u12_run1",  // Optional
-        "output_dir": "/path/to/output"  // Optional
+        "race_title": "Western Division Ranking - SL",  // Optional, for video overlay (deprecated, use race_info)
+        "race_info": {  // Optional, for manifest metadata and title overlay
+            "event": "Western Division Ranking",
+            "discipline": "SL",
+            "age_group": "U14",
+            "run": "Run 1",
+            "date": "Sunday, 2026/02/01",
+            "course": "Flying Yankee",
+            "location": "Ragged Mountain, NH",
+            "type": "USSA/NHARA",
+            "vertical_drop": "85m",
+            "length": "305m",
+            "gates": "35",
+            "snow": "Packed Powder"
+        },
+        "selected_logos": [  // Optional, logo filenames in order (left to right)
+            "US-Ski-Snowboard.png",
+            "NHARA_logo.png",
+            "RMST_logo.png",
+            "Ragged_logo.png",
+            "Skiframes-com_logo.png"
+        ],
+        "output_dir": "/path/to/output",  // Optional
+        "generate_comparison": false,  // Optional, generate vs fastest videos
+        "parallel": true,  // Optional, use parallel processing (default: true for M1 Mac)
+        "max_workers": 4   // Optional, number of concurrent workers (default: 4 for M1 Max)
     }
     """
     data = request.get_json() or {}
@@ -1812,6 +2050,8 @@ def start_stitch_process():
         'video_paths': video_paths,
         'race_name': data.get('race_name', 'race'),
         'race_title': data.get('race_title', ''),  # e.g., "Western Division U14 Ranking - SL"
+        'race_info': data.get('race_info', {}),  # Structured race metadata for manifest
+        'selected_logos': data.get('selected_logos'),  # Logo filenames in order (left to right)
         'output_dir': data.get('output_dir', str(Path(__file__).parent.parent / 'output')),
         'generate_comparison': data.get('generate_comparison', False)  # Generate videos vs fastest racer
     }

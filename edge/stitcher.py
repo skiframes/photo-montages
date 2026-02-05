@@ -11,8 +11,10 @@ import tempfile
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Callable, Union
+from typing import Dict, List, Optional, Callable, Union, Tuple
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 
 @dataclass
@@ -33,6 +35,8 @@ class Racer:
     start_time_sec: float  # Seconds since midnight
     finish_time_sec: float  # Seconds since midnight
     duration: float  # Run duration in seconds
+    ussa_id: str = ""  # USSA member ID (e.g., "7225120")
+    status: str = "finished"  # "finished", "DSQ", "DNF", "DNS"
 
     @property
     def start_time_str(self) -> str:
@@ -41,6 +45,13 @@ class Racer:
         m = int((self.start_time_sec % 3600) // 60)
         s = int(self.start_time_sec % 60)
         return f"{h:02d}:{m:02d}:{s:02d}"
+
+    @property
+    def ussa_profile_url(self) -> Optional[str]:
+        """Get USSA profile URL if ussa_id is set."""
+        if self.ussa_id:
+            return f"https://www.usskiandsnowboard.org/public-tools/members/{self.ussa_id}"
+        return None
 
 
 @dataclass
@@ -185,6 +196,8 @@ class VideoStitcher:
         race_name: str = "race",
         logo_dir: Optional[str] = None,
         race_title: str = "",
+        race_info: Optional[Dict] = None,
+        selected_logos: Optional[List[str]] = None,
         stop_flag: Optional[Callable[[], bool]] = None
     ):
         """
@@ -198,6 +211,9 @@ class VideoStitcher:
             race_name: Name for output folder (e.g., "u12_run1")
             logo_dir: Directory containing logo PNG files
             race_title: Title to overlay on video (e.g., "Western Division U14 Ranking - SL")
+            race_info: Optional dict with race metadata (event, discipline, age_group, run,
+                      date, course, location, type, vertical_drop, length, gates, snow)
+            selected_logos: Optional list of logo filenames in order (left to right)
             stop_flag: Optional callable that returns True if processing should stop
         """
         self.racers = racers
@@ -206,6 +222,8 @@ class VideoStitcher:
         self.race_name = race_name
         self.logo_dir = Path(logo_dir) if logo_dir else Path(__file__).parent.parent / 'logos'
         self.race_title = race_title
+        self.race_info = race_info or {}
+        self.selected_logos = selected_logos  # User-selected logos in order
         self.stop_flag = stop_flag
         self.event_date: Optional[str] = None  # Will be extracted from video filenames
 
@@ -693,15 +711,33 @@ class VideoStitcher:
         Uses PIL for overlay images and M1 hardware encoding for speed.
         Returns True on success.
         """
-        # Build title text - use event date from video filename, fallback to today
-        date_str = self.event_date or datetime.now().strftime("%Y-%m-%d")
+        # Build title text from race_info
+        # Format: "Western Division Ranking | SL | U14 | Run 1"
+        event = self.race_info.get("event", "")
+        discipline = self.race_info.get("discipline", "")
+        age_group = self.race_info.get("age_group", "")
+        run_str = self.race_info.get("run", "")
 
-        if self.race_title:
-            title_text = f"Skiframes.com | {self.race_title} | {date_str}"
-        else:
-            age_group = "U12" if "u12" in self.race_name.lower() else "U14" if "u14" in self.race_name.lower() else ""
-            default_title = f"Western Divisional {age_group} Ranking - SL" if age_group else "Western Divisional Ranking - SL"
-            title_text = f"Skiframes.com | {default_title} | {date_str}"
+        # Build title parts (skip empty ones) - no date in title
+        title_parts = []
+        if event:
+            title_parts.append(event)
+        if discipline:
+            title_parts.append(discipline)
+        if age_group:
+            title_parts.append(age_group)
+        if run_str:
+            title_parts.append(run_str)
+
+        title_text = " | ".join(title_parts)
+
+        # Fallback to old format if no race_info provided
+        if not event and not discipline and not age_group:
+            if self.race_title:
+                title_text = self.race_title
+            else:
+                age_group_fallback = "U12" if "u12" in self.race_name.lower() else "U14" if "u14" in self.race_name.lower() else ""
+                title_text = f"Western Divisional {age_group_fallback} Ranking - SL" if age_group_fallback else "Western Divisional Ranking - SL"
 
         # Unique ID for this racer's temp files (prevents conflicts between racers)
         racer_id = f"bib{racer.bib}" + ("_cmp" if comparison_racer else "")
@@ -727,13 +763,29 @@ class VideoStitcher:
         else:
             timer_video_path = self._create_timer_frames(racer.duration, video_duration, racer_id=racer_id)
 
-        # Check which logos exist
-        logo_files = ['NHARA_logo.png', 'RMST_logo.png', 'Ragged_logo.png']
+        # Get logos to use - either user-selected or default
         existing_logos = []
-        for logo_file in logo_files:
-            logo_path = self.logo_dir / logo_file
-            if logo_path.exists():
-                existing_logos.append(str(logo_path))
+        if self.selected_logos:
+            # Use user-selected logos in specified order
+            for logo_file in self.selected_logos:
+                logo_path = self.logo_dir / logo_file
+                if logo_path.exists():
+                    existing_logos.append(str(logo_path))
+                else:
+                    print(f"    Warning: Logo not found: {logo_file}")
+        else:
+            # Default logos: US Ski & Snowboard first, Skiframes.com last
+            default_logos = [
+                'US-Ski-Snowboard.png',
+                'NHARA_logo.png',
+                'RMST_logo.png',
+                'Ragged_logo.png',
+                'Skiframes-com_logo.png'
+            ]
+            for logo_file in default_logos:
+                logo_path = self.logo_dir / logo_file
+                if logo_path.exists():
+                    existing_logos.append(str(logo_path))
 
         print(f"    Overlays: title={title_overlay_path is not None}, timer={timer_video_path is not None}, logos={len(existing_logos)}")
 
@@ -780,15 +832,27 @@ class VideoStitcher:
 
             # Add logos at bottom left
             # shortest=1 ends when base video ends (images loop forever via -loop 1)
+            # Scale logos to 60px height, calculate actual width for proper spacing
             x_offset = 20
+            logo_height = 60
+            logo_gap = 15  # Gap between logos
             for i, logo_path in enumerate(existing_logos):
+                # Calculate actual scaled width for this logo
+                try:
+                    from PIL import Image
+                    with Image.open(logo_path) as img:
+                        orig_w, orig_h = img.size
+                        scaled_w = int(orig_w * logo_height / orig_h)
+                except:
+                    scaled_w = 90  # Fallback
+
                 scale_label = f"scaled{i}"
                 out_label = f"v{current_idx}" if i < len(existing_logos) - 1 else "out"
-                filter_parts.append(f"[{current_idx}:v]scale=-1:80[{scale_label}]")  # 120px height (doubled from 60)
+                filter_parts.append(f"[{current_idx}:v]scale=-1:{logo_height}[{scale_label}]")
                 filter_parts.append(f"[{prev_label}][{scale_label}]overlay=x={x_offset}:y=H-h-20:shortest=1[{out_label}]")
                 prev_label = out_label
                 current_idx += 1
-                x_offset += 100  # Increased spacing for larger logos
+                x_offset += scaled_w + logo_gap
 
             # Handle case where we have overlays but no logos
             if not existing_logos and (timer_video_path or title_overlay_path):
@@ -875,16 +939,16 @@ class VideoStitcher:
                     # Try to find continuation
                     next_video_path, _, _ = self._find_video_and_offset(cut.camera, video_end_sec + 0.1)
                     if next_video_path and next_video_path != video_path:
-                        # Extract from both files
+                        # Extract from both files - use both bib numbers for unique filenames in parallel
                         missing = segment_duration - available
-                        first_path = os.path.join(temp_dir, f"ghost_{i:02d}_{cut.camera}_p1.mp4")
-                        second_path = os.path.join(temp_dir, f"ghost_{i:02d}_{cut.camera}_p2.mp4")
+                        first_path = os.path.join(temp_dir, f"ghost_bib{current_racer.bib}_g{ghost_racer.bib}_{i:02d}_{cut.camera}_p1.mp4")
+                        second_path = os.path.join(temp_dir, f"ghost_bib{current_racer.bib}_g{ghost_racer.bib}_{i:02d}_{cut.camera}_p2.mp4")
 
                         self._extract_segment(video_path, offset, available, first_path)
                         self._extract_segment(next_video_path, 0.1, missing, second_path)
 
                         # Concatenate parts
-                        segment_path = os.path.join(temp_dir, f"ghost_{i:02d}_{cut.camera}.mp4")
+                        segment_path = os.path.join(temp_dir, f"ghost_bib{current_racer.bib}_g{ghost_racer.bib}_{i:02d}_{cut.camera}.mp4")
                         if os.path.exists(first_path) and os.path.exists(second_path):
                             self._concatenate_segments([first_path, second_path], segment_path)
                             ghost_segment_paths.append(segment_path)
@@ -894,7 +958,7 @@ class VideoStitcher:
                     else:
                         segment_duration = available
 
-                segment_path = os.path.join(temp_dir, f"ghost_{i:02d}_{cut.camera}.mp4")
+                segment_path = os.path.join(temp_dir, f"ghost_bib{current_racer.bib}_g{ghost_racer.bib}_{i:02d}_{cut.camera}.mp4")
                 if self._extract_segment(video_path, offset, segment_duration, segment_path):
                     ghost_segment_paths.append(segment_path)
 
@@ -906,7 +970,7 @@ class VideoStitcher:
             return None
 
         # Concatenate ghost segments (no time scaling - ghost finishes at real speed)
-        ghost_concat_path = os.path.join(temp_dir, f"ghost_concat_{ghost_racer.bib}.mp4")
+        ghost_concat_path = os.path.join(temp_dir, f"ghost_concat_bib{current_racer.bib}_g{ghost_racer.bib}.mp4")
         if not self._concatenate_segments(ghost_segment_paths, ghost_concat_path):
             print(f"      Failed to concatenate ghost segments")
             return None
@@ -985,11 +1049,22 @@ class VideoStitcher:
             # Add logos one at a time
             # Use -loop 1 to repeat static PNGs forever, shortest=1 to end with video
             x_offset = 20
+            logo_height = 60
+            logo_gap = 15  # Gap between logos
             for i, logo_path in enumerate(logos):
+                # Calculate actual scaled width for this logo
+                try:
+                    from PIL import Image
+                    with Image.open(logo_path) as img:
+                        orig_w, orig_h = img.size
+                        scaled_w = int(orig_w * logo_height / orig_h)
+                except:
+                    scaled_w = 90  # Fallback
+
                 temp_out = os.path.join(tempfile.gettempdir(), f"skiframes_l{i}_{os.getpid()}.mp4")
                 cmd = [
                     'ffmpeg', '-y', '-i', current_input, '-loop', '1', '-i', logo_path,
-                    '-filter_complex', f'[1:v]scale=-1:80[logo];[0:v][logo]overlay=x={x_offset}:y=H-h-20:shortest=1[out]',
+                    '-filter_complex', f'[1:v]scale=-1:{logo_height}[logo];[0:v][logo]overlay=x={x_offset}:y=H-h-20:shortest=1[out]',
                     '-map', '[out]',
                     '-c:v', 'h264_videotoolbox', '-b:v', '8M',
                     temp_out
@@ -998,7 +1073,7 @@ class VideoStitcher:
                 if result.returncode == 0:
                     temp_files.append(temp_out)
                     current_input = temp_out
-                x_offset += 80
+                x_offset += scaled_w + logo_gap
 
             # Copy final result to output
             if current_input != input_path:
@@ -1074,48 +1149,78 @@ class VideoStitcher:
         Generate output path with proper folder structure and filename.
 
         Folder structure: {output_dir}/stitch_{date}_{race}/Team/Gender/U12_Run1/
-        Filename: Name_bib#_U12_Run1.mp4
-        For comparison videos: Name_bib#_U12_vs_Bib3.mp4
+        Filename: Name_Bib#_Run#_YYYY-MM-DD.mp4
+        For comparison videos: Name_Bib#_Run#_YYYY-MM-DD_vs_Bib3.mp4
         """
-        # Parse age group and run from race_name (e.g., "u12_run_1" -> "U12", "Run1")
+        # Parse age group and run from race_name or race_info
         race_upper = self.race_name.upper()
-        age_group = ""
+        age_group = self.race_info.get("age_group", "")
+        run_str = self.race_info.get("run", "")  # e.g., "Run 1" or "Run 2"
+
+        # Fallback: parse from race_name if not in race_info
+        if not age_group:
+            if "U12" in race_upper:
+                age_group = "U12"
+            elif "U14" in race_upper:
+                age_group = "U14"
+            elif "U16" in race_upper:
+                age_group = "U16"
+
+        # Parse run number
         run_num = "Run1"
-
-        if "U12" in race_upper:
-            age_group = "U12"
-        elif "U14" in race_upper:
-            age_group = "U14"
-        elif "U16" in race_upper:
-            age_group = "U16"
-
-        if "RUN_2" in race_upper or "RUN2" in race_upper:
+        if run_str:
+            # Extract number from "Run 1", "Run 2", etc.
+            run_match = re.search(r'(\d+)', run_str)
+            if run_match:
+                run_num = f"Run{run_match.group(1)}"
+        elif "RUN_2" in race_upper or "RUN2" in race_upper or "RUN 2" in race_upper:
             run_num = "Run2"
 
         age_run = f"{age_group}_{run_num}" if age_group else run_num
 
-        # Build folder path: Team/Gender/U12_Run1 (or U12_Run1_vs_Fastest for comparison)
-        session_base = self.output_dir / f"stitch_{datetime.now().strftime('%Y-%m-%d')}_{self.race_name}"
+        # Get date in condensed format YYYY-MM-DD
+        # Try race_info date first, then event_date, then today
+        date_str = self.race_info.get("date", "")
+        if date_str:
+            # Parse various date formats and convert to YYYY-MM-DD
+            # Handle "Sunday, 2026/02/01" or "2026-02-01" or "02-01-2026"
+            date_match = re.search(r'(\d{4})[-/](\d{2})[-/](\d{2})', date_str)
+            if date_match:
+                date_condensed = f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
+            else:
+                date_match = re.search(r'(\d{2})[-/](\d{2})[-/](\d{4})', date_str)
+                if date_match:
+                    date_condensed = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+                else:
+                    date_condensed = self.event_date or datetime.now().strftime("%Y-%m-%d")
+        else:
+            date_condensed = self.event_date or datetime.now().strftime("%Y-%m-%d")
 
+        # Build folder path: Team/Gender/U12_Run1 (or U12_Run1_vs_Fastest for comparison)
+        session_base = self.output_dir / f"stitch_{date_condensed}_{self.race_name}"
+
+        folder_age_run = age_run
         if comparison_racer:
-            age_run = f"{age_run}_vs_Bib{comparison_racer.bib}"
+            folder_age_run = f"{age_run}_vs_Bib{comparison_racer.bib}"
 
         if racer.team and racer.gender:
-            folder_path = session_base / racer.team / racer.gender / age_run
+            folder_path = session_base / racer.team / racer.gender / folder_age_run
         elif racer.team:
-            folder_path = session_base / racer.team / age_run
+            folder_path = session_base / racer.team / folder_age_run
         else:
-            folder_path = session_base / age_run
+            folder_path = session_base / folder_age_run
 
         folder_path.mkdir(parents=True, exist_ok=True)
 
-        # Build filename: Name_Bib#.mp4 or Name_Bib#_vs_Bib3.mp4
-        # Clean name - remove any non-alphanumeric characters
-        clean_name = re.sub(r'[^\w]', '', racer.name) if racer.name else f"Racer"
+        # Build filename: Name_Bib#_Run#_YYYY-MM-DD.mp4
+        # Replace spaces with underscores, remove other non-alphanumeric characters
+        clean_name = re.sub(r'[^\w\s]', '', racer.name) if racer.name else "Racer"
+        clean_name = re.sub(r'\s+', '_', clean_name)  # Replace spaces with underscores
+
         if comparison_racer:
-            filename = f"{clean_name}_Bib{racer.bib}_vs_Bib{comparison_racer.bib}.mp4"
+            filename = f"{clean_name}_Bib{racer.bib}_{run_num}_{date_condensed}_vs_Bib{comparison_racer.bib}.mp4"
         else:
-            filename = f"{clean_name}_Bib{racer.bib}.mp4"
+            filename = f"{clean_name}_Bib{racer.bib}_{run_num}_{date_condensed}.mp4"
 
         return folder_path / filename
 
@@ -1200,7 +1305,8 @@ class VideoStitcher:
                         print(f"    No continuation video found - truncating segment to {available_in_this_video:.1f}s")
                         segment_duration = available_in_this_video
 
-                segment_path = os.path.join(temp_dir, f"segment_{i:02d}_{cut.camera}.mp4")
+                # Use bib number in temp file names to avoid collisions in parallel processing
+                segment_path = os.path.join(temp_dir, f"segment_bib{racer.bib}_{i:02d}_{cut.camera}.mp4")
 
                 # Convert absolute time to HH:MM:SS for debugging
                 abs_start_h = int(segment_start_abs // 3600)
@@ -1210,8 +1316,8 @@ class VideoStitcher:
 
                 if next_video_path and next_video_duration > 0:
                     # Need to extract from two video files and concatenate them
-                    first_segment_path = os.path.join(temp_dir, f"segment_{i:02d}_{cut.camera}_part1.mp4")
-                    second_segment_path = os.path.join(temp_dir, f"segment_{i:02d}_{cut.camera}_part2.mp4")
+                    first_segment_path = os.path.join(temp_dir, f"segment_bib{racer.bib}_{i:02d}_{cut.camera}_part1.mp4")
+                    second_segment_path = os.path.join(temp_dir, f"segment_bib{racer.bib}_{i:02d}_{cut.camera}_part2.mp4")
 
                     print(f"    Extracting part 1: {segment_duration:.1f}s from {os.path.basename(video_path)}")
                     first_ok = self._extract_segment(video_path, offset, segment_duration, first_segment_path)
@@ -1313,6 +1419,195 @@ class VideoStitcher:
                 return output_path
             return None
 
+    def _get_condensed_date(self) -> str:
+        """Get date in condensed YYYY-MM-DD format from race_info or event_date."""
+        date_str = self.race_info.get("date", "")
+        if date_str:
+            # Parse various date formats and convert to YYYY-MM-DD
+            date_match = re.search(r'(\d{4})[-/](\d{2})[-/](\d{2})', date_str)
+            if date_match:
+                return f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
+            date_match = re.search(r'(\d{2})[-/](\d{2})[-/](\d{4})', date_str)
+            if date_match:
+                return f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+        return self.event_date or datetime.now().strftime("%Y-%m-%d")
+
+    def _generate_manifest(self, output_paths: List[Path], fastest_by_gender: Optional[Dict[str, 'Racer']] = None) -> Path:
+        """
+        Generate a manifest.json file for the stitched videos.
+
+        Args:
+            output_paths: List of generated video paths
+            fastest_by_gender: Optional dict of fastest racers by gender (for comparison info)
+
+        Returns:
+            Path to the manifest file
+        """
+        date_condensed = self._get_condensed_date()
+
+        # Find the session directory (parent of Team folders or direct parent)
+        if output_paths:
+            # Walk up to find the stitch_* directory
+            session_dir = output_paths[0].parent
+            while session_dir.name and not session_dir.name.startswith('stitch_'):
+                session_dir = session_dir.parent
+        else:
+            session_dir = self.output_dir / f"stitch_{date_condensed}_{self.race_name}"
+
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        # Pre-compute rankings per gender (bib -> rank)
+        bib_to_rank: Dict[int, int] = {}
+        for gender in set(r.gender for r in self.racers if r.gender):
+            gender_racers = [r for r in self.racers if r.gender == gender and r.status == 'finished']
+            gender_racers.sort(key=lambda r: r.duration)
+            for i, r in enumerate(gender_racers):
+                bib_to_rank[r.bib] = i + 1
+
+        # Build video entries
+        videos = []
+        for path in output_paths:
+            # Find matching racer by parsing filename
+            filename = path.stem  # e.g., "JohnDoe_Bib24" or "JohnDoe_Bib24_vs_Bib3"
+            is_comparison = "_vs_Bib" in filename
+
+            # Extract bib number
+            bib_match = re.search(r'_Bib(\d+)', filename)
+            bib = int(bib_match.group(1)) if bib_match else 0
+
+            # Find racer
+            racer = next((r for r in self.racers if r.bib == bib), None)
+
+            # Extract comparison bib if present
+            comparison_bib = None
+            if is_comparison:
+                cmp_match = re.search(r'_vs_Bib(\d+)', filename)
+                comparison_bib = int(cmp_match.group(1)) if cmp_match else None
+
+            video_entry = {
+                "filename": path.name,
+                "path": str(path.relative_to(session_dir)) if path.is_relative_to(session_dir) else str(path),
+                "bib": bib,
+                "name": racer.name if racer else "",
+                "team": racer.team if racer else "",
+                "gender": racer.gender if racer else "",
+                "rank": bib_to_rank.get(bib),  # None for DSQ/DNF/DNS
+                "duration": round(racer.duration, 2) if racer else 0,
+                "ussa_id": racer.ussa_id if racer else "",
+                "ussa_profile_url": racer.ussa_profile_url if racer else None,
+                "status": racer.status if racer else "finished",
+                "is_comparison": is_comparison,
+                "comparison_bib": comparison_bib,
+                "file_size_mb": round(path.stat().st_size / (1024 * 1024), 2) if path.exists() else 0,
+            }
+            videos.append(video_entry)
+
+        # Build fastest racer info
+        fastest_info = {}
+        if fastest_by_gender:
+            for gender, racer in fastest_by_gender.items():
+                fastest_info[gender] = {
+                    "bib": racer.bib,
+                    "name": racer.name,
+                    "ussa_id": racer.ussa_id,
+                    "ussa_profile_url": racer.ussa_profile_url,
+                    "duration": round(racer.duration, 2),
+                }
+
+        # Compute rankings per gender (only for finished racers)
+        rankings_by_gender = {}
+        for gender in set(r.gender for r in self.racers if r.gender):
+            gender_racers = [r for r in self.racers if r.gender == gender and r.status == 'finished']
+            gender_racers.sort(key=lambda r: r.duration)
+            rankings_by_gender[gender] = [
+                {
+                    "rank": i + 1,
+                    "bib": r.bib,
+                    "name": r.name,
+                    "team": r.team,
+                    "ussa_id": r.ussa_id,
+                    "ussa_profile_url": r.ussa_profile_url,
+                    "duration": round(r.duration, 2),
+                    "gap": round(r.duration - gender_racers[0].duration, 2) if i > 0 else 0,
+                }
+                for i, r in enumerate(gender_racers)
+            ]
+
+        # Add DSQ/DNF racers to rankings (unranked) - DNS excluded as not relevant
+        dsq_dnf_by_gender = {}
+        for gender in set(r.gender for r in self.racers if r.gender):
+            dsq_dnf = [r for r in self.racers if r.gender == gender and r.status in ('DSQ', 'DNF')]
+            if dsq_dnf:
+                dsq_dnf_by_gender[gender] = [
+                    {
+                        "bib": r.bib,
+                        "name": r.name,
+                        "team": r.team,
+                        "ussa_id": r.ussa_id,
+                        "ussa_profile_url": r.ussa_profile_url,
+                        "status": r.status,
+                    }
+                    for r in dsq_dnf
+                ]
+
+        # Build structured manifest
+        manifest = {
+            "session_id": f"stitch_{date_condensed}_{self.race_name}",
+            "created_at": datetime.now().isoformat(),
+
+            # Race information
+            "race": {
+                "event": self.race_info.get("event", self.race_title or ""),
+                "discipline": self.race_info.get("discipline", ""),
+                "age_group": self.race_info.get("age_group", ""),
+                "run": self.race_info.get("run", ""),
+                "date": date_condensed,
+                "date_display": self.race_info.get("date", date_condensed),  # Original format for display
+                "type": self.race_info.get("type", ""),
+            },
+
+            # Course information
+            "course": {
+                "name": self.race_info.get("course", ""),
+                "location": self.race_info.get("location", ""),
+                "vertical_drop": self.race_info.get("vertical_drop", ""),
+                "length": self.race_info.get("length", ""),
+                "gates": self.race_info.get("gates", ""),
+                "snow": self.race_info.get("snow", ""),
+            },
+
+            # Processing summary
+            "summary": {
+                "total_racers": len([r for r in self.racers if r.status != 'DNS']),  # Exclude DNS
+                "total_videos": len(videos),
+                "finished": len([r for r in self.racers if r.status == 'finished']),
+                "dsq": len([r for r in self.racers if r.status == 'DSQ']),
+                "dnf": len([r for r in self.racers if r.status == 'DNF']),
+                "fastest_by_gender": fastest_info,
+            },
+
+            # Rankings per gender (searchable)
+            "rankings": {
+                "by_gender": rankings_by_gender,
+                "dsq_dnf": dsq_dnf_by_gender,
+            },
+
+            # Technical details
+            "processing": {
+                "cuts": [{"camera": c.camera, "start_pct": c.start_pct, "end_pct": c.end_pct} for c in self.cuts],
+            },
+
+            # Video list
+            "videos": videos,
+        }
+
+        manifest_path = session_dir / "manifest.json"
+        with open(manifest_path, 'w') as f:
+            json.dump(manifest, f, indent=2)
+
+        print(f"\nManifest created: {manifest_path}")
+        return manifest_path
+
     def process_all(
         self,
         progress_callback: Optional[Callable[[int, int, str], None]] = None
@@ -1354,6 +1649,10 @@ class VideoStitcher:
                 if output_path:
                     output_paths.append(output_path)
                     print(f"  Output: {output_path}")
+
+        # Generate manifest
+        if output_paths:
+            self._generate_manifest(output_paths)
 
         return output_paths
 
@@ -1455,6 +1754,228 @@ class VideoStitcher:
                         output_paths.append(output_path)
                         print(f"  Output: {output_path}")
 
+        # Generate manifest with fastest racer info
+        if output_paths:
+            self._generate_manifest(output_paths, fastest_by_gender)
+
+        return output_paths
+
+    def _process_single_racer(
+        self,
+        racer: Racer,
+        temp_dir: str,
+        comparison_racer: Optional[Racer] = None
+    ) -> Tuple[Optional[Path], str]:
+        """
+        Process a single racer (thread-safe helper for parallel processing).
+
+        Returns:
+            Tuple of (output_path or None, status_message)
+        """
+        try:
+            label = f"{racer.name} (bib {racer.bib})"
+            if comparison_racer:
+                label += f" vs Bib {comparison_racer.bib}"
+
+            output_path = self.stitch_racer(racer, temp_dir, comparison_racer)
+            if output_path:
+                return (output_path, f"✓ {label}")
+            else:
+                return (None, f"✗ {label} - failed")
+        except Exception as e:
+            return (None, f"✗ {racer.name} (bib {racer.bib}) - error: {e}")
+
+    def process_all_parallel(
+        self,
+        max_workers: int = 4,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None
+    ) -> List[Path]:
+        """
+        Process all racers in parallel for faster throughput on M1 Mac.
+
+        Uses ThreadPoolExecutor to run multiple ffmpeg processes concurrently.
+        M1 Max can handle 4-6 concurrent video processing tasks efficiently.
+
+        Args:
+            max_workers: Number of concurrent workers (default 4 for M1 Max)
+            progress_callback: Called with (current_index, total, racer_name)
+
+        Returns:
+            List of output video paths
+        """
+        output_paths = []
+        total = len(self.racers)
+        completed = 0
+        lock = threading.Lock()
+
+        print(f"\n=== Parallel processing with {max_workers} workers ===")
+        print(f"Total racers: {total}")
+
+        # Create a persistent temp directory for the session
+        with tempfile.TemporaryDirectory(prefix='skiframes_stitch_parallel_') as temp_dir:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks
+                future_to_racer = {
+                    executor.submit(self._process_single_racer, racer, temp_dir, None): racer
+                    for racer in self.racers
+                }
+
+                # Process results as they complete
+                for future in as_completed(future_to_racer):
+                    if self._should_stop():
+                        print("\nProcessing stopped by user - cancelling remaining tasks")
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        break
+
+                    racer = future_to_racer[future]
+                    result_path, status = future.result()
+
+                    with lock:
+                        completed += 1
+                        if result_path:
+                            output_paths.append(result_path)
+
+                        if progress_callback:
+                            progress_callback(completed, total, racer.name)
+
+                        print(f"[{completed}/{total}] {status}")
+
+        # Generate manifest
+        if output_paths:
+            self._generate_manifest(output_paths)
+
+        print(f"\n=== Completed: {len(output_paths)}/{total} videos ===")
+        return output_paths
+
+    def process_all_with_comparison_parallel(
+        self,
+        max_workers: int = 4,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
+        generate_comparison: bool = True
+    ) -> List[Path]:
+        """
+        Process all racers in parallel, generating both regular and comparison videos.
+
+        Two-phase approach:
+        1. First process all regular videos in parallel
+        2. Then process all comparison videos in parallel
+
+        This ensures fastest racers are identified before comparisons.
+
+        Args:
+            max_workers: Number of concurrent workers (default 4 for M1 Max)
+            progress_callback: Called with (current_index, total, racer_name)
+            generate_comparison: If True, also generate comparison videos vs fastest
+
+        Returns:
+            List of output video paths
+        """
+        output_paths = []
+        lock = threading.Lock()
+
+        # Find fastest racer per gender
+        fastest_by_gender: Dict[str, Racer] = {}
+        for racer in self.racers:
+            if racer.status != 'finished':
+                continue  # Skip DSQ/DNF/DNS for fastest calculation
+            gender = racer.gender or "Unknown"
+            if gender not in fastest_by_gender or racer.duration < fastest_by_gender[gender].duration:
+                fastest_by_gender[gender] = racer
+
+        print(f"\nFastest racers by gender:")
+        for gender, fastest in fastest_by_gender.items():
+            print(f"  {gender}: Bib {fastest.bib} ({fastest.name}) - {fastest.duration:.2f}s")
+
+        # Calculate total videos
+        total_regular = len(self.racers)
+        total_comparison = 0
+        if generate_comparison:
+            for racer in self.racers:
+                gender = racer.gender or "Unknown"
+                fastest = fastest_by_gender.get(gender)
+                if fastest and racer.bib != fastest.bib:
+                    total_comparison += 1
+
+        total = total_regular + total_comparison
+        completed = 0
+
+        print(f"\n=== Parallel processing with {max_workers} workers ===")
+        print(f"Regular videos: {total_regular}")
+        print(f"Comparison videos: {total_comparison}")
+        print(f"Total: {total}")
+
+        # Create a persistent temp directory for the session
+        with tempfile.TemporaryDirectory(prefix='skiframes_stitch_parallel_') as temp_dir:
+
+            # Phase 1: Process regular videos
+            print(f"\n--- Phase 1: Regular videos ---")
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_racer = {
+                    executor.submit(self._process_single_racer, racer, temp_dir, None): racer
+                    for racer in self.racers
+                }
+
+                for future in as_completed(future_to_racer):
+                    if self._should_stop():
+                        print("\nProcessing stopped by user")
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        break
+
+                    racer = future_to_racer[future]
+                    result_path, status = future.result()
+
+                    with lock:
+                        completed += 1
+                        if result_path:
+                            output_paths.append(result_path)
+
+                        if progress_callback:
+                            progress_callback(completed, total, f"{racer.name} (regular)")
+
+                        print(f"[{completed}/{total}] {status}")
+
+            # Phase 2: Process comparison videos
+            if generate_comparison and not self._should_stop():
+                print(f"\n--- Phase 2: Comparison videos ---")
+
+                # Build list of comparison tasks
+                comparison_tasks = []
+                for racer in self.racers:
+                    gender = racer.gender or "Unknown"
+                    fastest = fastest_by_gender.get(gender)
+                    if fastest and racer.bib != fastest.bib:
+                        comparison_tasks.append((racer, fastest))
+
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_task = {
+                        executor.submit(self._process_single_racer, racer, temp_dir, fastest): (racer, fastest)
+                        for racer, fastest in comparison_tasks
+                    }
+
+                    for future in as_completed(future_to_task):
+                        if self._should_stop():
+                            print("\nProcessing stopped by user")
+                            executor.shutdown(wait=False, cancel_futures=True)
+                            break
+
+                        racer, fastest = future_to_task[future]
+                        result_path, status = future.result()
+
+                        with lock:
+                            completed += 1
+                            if result_path:
+                                output_paths.append(result_path)
+
+                            if progress_callback:
+                                progress_callback(completed, total, f"{racer.name} (vs Bib {fastest.bib})")
+
+                            print(f"[{completed}/{total}] {status}")
+
+        # Generate manifest with fastest racer info
+        if output_paths:
+            self._generate_manifest(output_paths, fastest_by_gender)
+
+        print(f"\n=== Completed: {len(output_paths)}/{total} videos ===")
         return output_paths
 
 
