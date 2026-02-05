@@ -6,6 +6,7 @@ Creates broadcast-style sequential cuts from 4 camera angles into a single video
 
 import os
 import re
+import sys
 import json
 import tempfile
 import subprocess
@@ -15,6 +16,52 @@ from typing import Dict, List, Optional, Callable, Union, Tuple
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+
+# Detect platform for hardware acceleration
+IS_MACOS = sys.platform == 'darwin'
+HAS_NVENC = False
+NUM_GPUS = 0
+_gpu_counter = 0
+_gpu_lock = threading.Lock()
+
+# Check for NVIDIA GPU with NVENC support on Linux
+if not IS_MACOS:
+    try:
+        result = subprocess.run(['nvidia-smi'], capture_output=True, timeout=5)
+        if result.returncode == 0:
+            # Verify ffmpeg has nvenc support
+            result = subprocess.run(['ffmpeg', '-encoders'], capture_output=True, text=True, timeout=5)
+            if 'h264_nvenc' in result.stdout:
+                HAS_NVENC = True
+                # Count available GPUs
+                result = subprocess.run(['nvidia-smi', '-L'], capture_output=True, text=True, timeout=5)
+                NUM_GPUS = len([l for l in result.stdout.strip().split('\n') if l.startswith('GPU ')])
+                print(f"NVIDIA NVENC detected - using GPU encoding ({NUM_GPUS} GPUs available)")
+    except Exception:
+        pass
+
+def _get_next_gpu():
+    """Round-robin GPU selection for parallel encoding."""
+    global _gpu_counter
+    if NUM_GPUS <= 1:
+        return 0
+    with _gpu_lock:
+        gpu_id = _gpu_counter % NUM_GPUS
+        _gpu_counter += 1
+        return gpu_id
+
+def get_encoder_args(gpu_id: int = None):
+    """Get the appropriate encoder arguments for the current platform."""
+    if IS_MACOS:
+        return ['-c:v', 'h264_videotoolbox', '-b:v', '8M']
+    elif HAS_NVENC:
+        # Use specified GPU or round-robin
+        if gpu_id is None:
+            gpu_id = _get_next_gpu()
+        # NVENC with quality settings comparable to CRF 18
+        return ['-gpu', str(gpu_id), '-c:v', 'h264_nvenc', '-preset', 'p4', '-cq', '18', '-b:v', '0']
+    else:
+        return ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18']
 
 
 @dataclass
@@ -50,7 +97,9 @@ class Racer:
     def ussa_profile_url(self) -> Optional[str]:
         """Get USSA profile URL if ussa_id is set."""
         if self.ussa_id:
-            return f"https://www.usskiandsnowboard.org/public-tools/members/{self.ussa_id}"
+            # Strip leading 'E' prefix from USSA ID for the profile URL
+            numeric_id = self.ussa_id.lstrip('E')
+            return f"https://www.usskiandsnowboard.org/public-tools/members/{numeric_id}"
         return None
 
 
@@ -198,7 +247,9 @@ class VideoStitcher:
         race_title: str = "",
         race_info: Optional[Dict] = None,
         selected_logos: Optional[List[str]] = None,
-        stop_flag: Optional[Callable[[], bool]] = None
+        stop_flag: Optional[Callable[[], bool]] = None,
+        pre_buffer_sec: float = 2.0,
+        post_buffer_sec: float = 2.0
     ):
         """
         Initialize the stitcher.
@@ -215,9 +266,13 @@ class VideoStitcher:
                       date, course, location, type, vertical_drop, length, gates, snow)
             selected_logos: Optional list of logo filenames in order (left to right)
             stop_flag: Optional callable that returns True if processing should stop
+            pre_buffer_sec: Seconds before racer start to begin video (default: 2.0)
+            post_buffer_sec: Seconds after racer finish to end video (default: 2.0)
         """
         self.racers = racers
         self.cuts = sorted(cuts, key=lambda c: c.start_pct)  # Ensure chronological order
+        self.pre_buffer_sec = pre_buffer_sec
+        self.post_buffer_sec = post_buffer_sec
         self.output_dir = Path(output_dir)
         self.race_name = race_name
         self.logo_dir = Path(logo_dir) if logo_dir else Path(__file__).parent.parent / 'logos'
@@ -318,12 +373,14 @@ class VideoStitcher:
             '-t', str(duration_sec),
             '-an',  # No audio - faster processing
             '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30',
-            '-c:v', 'h264_videotoolbox',  # M1 hardware acceleration
-            '-b:v', '8M',  # Bitrate for hardware encoder (no CRF support)
+        ]
+        # Use hardware encoding based on platform
+        cmd.extend(get_encoder_args())
+        cmd.extend([
             '-movflags', '+faststart',
             '-avoid_negative_ts', 'make_zero',
             output_path
-        ]
+        ])
 
         try:
             result = subprocess.run(
@@ -370,12 +427,9 @@ class VideoStitcher:
             '-t', str(duration_sec),
             '-an',
             '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30',
-            '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-crf', '18',
-            '-movflags', '+faststart',
-            output_path
         ]
+        cmd.extend(get_encoder_args())
+        cmd.extend(['-movflags', '+faststart', output_path])
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
@@ -386,12 +440,19 @@ class VideoStitcher:
             return False
 
     def _get_font(self, size: int = 24):
-        """Get a font for PIL drawing."""
+        """Get a font for PIL drawing. Works on both Mac and Linux."""
         from PIL import ImageFont
         font_paths = [
+            # Mac fonts
             '/System/Library/Fonts/Helvetica.ttc',
             '/System/Library/Fonts/HelveticaNeue.ttc',
             '/Library/Fonts/Arial.ttf',
+            # Linux fonts (common locations)
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+            '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
+            '/usr/share/fonts/TTF/DejaVuSans.ttf',
+            '/usr/share/fonts/dejavu/DejaVuSans.ttf',
         ]
         for fp in font_paths:
             if os.path.exists(fp):
@@ -399,6 +460,11 @@ class VideoStitcher:
                     return ImageFont.truetype(fp, size)
                 except:
                     continue
+        # Last resort: try to use PIL's default with size parameter if available
+        try:
+            return ImageFont.truetype("DejaVuSans.ttf", size)
+        except:
+            pass
         return ImageFont.load_default()
 
     def _create_title_overlay(self, title_text: str, racer_id: str = "", width: int = 1920, height: int = 1080) -> Optional[str]:
@@ -447,10 +513,11 @@ class VideoStitcher:
             print(f"    Title overlay creation failed: {e}")
             return None
 
-    def _create_timer_frames(self, run_duration_sec: float, video_duration_sec: float, racer_id: str = "", fps: int = 30, width: int = 1920, height: int = 1080) -> Optional[str]:
+    def _create_timer_frames(self, run_duration_sec: float, video_duration_sec: float, racer_id: str = "", fps: int = 30, width: int = 1920, height: int = 1080, pre_buffer_sec: float = 0.0) -> Optional[str]:
         """
         Create a video with timer overlay (top right) using PIL frames.
-        Timer stops at run_duration_sec (finish time) even if video continues.
+        Timer starts at -pre_buffer_sec (showing negative time before racer starts),
+        shows 0:00.0 when racer actually starts, and stops at run_duration_sec.
         Returns path to temporary video file.
         """
         try:
@@ -467,19 +534,26 @@ class VideoStitcher:
             font = self._get_font(48)  # Bigger font
             total_frames = int(video_duration_sec * fps) + 1
 
-            print(f"    Creating {total_frames} timer frames (stops at {run_duration_sec:.1f}s)...")
+            print(f"    Creating {total_frames} timer frames (pre-buffer: {pre_buffer_sec:.1f}s, run: {run_duration_sec:.1f}s)...")
 
             for frame_num in range(total_frames):
-                # Calculate time for this frame - stop at run_duration
-                time_sec = min(frame_num / fps, run_duration_sec)
-                minutes = int(time_sec // 60)
-                seconds = time_sec % 60
+                # Calculate time for this frame
+                # Video starts at -pre_buffer_sec, racer starts at 0, finishes at run_duration_sec
+                raw_time_sec = (frame_num / fps) - pre_buffer_sec
+
+                # Clamp: don't go below -pre_buffer_sec or above run_duration_sec
+                time_sec = max(-pre_buffer_sec, min(raw_time_sec, run_duration_sec))
+
+                # Format time - handle negative values
+                is_negative = time_sec < 0
+                abs_time = abs(time_sec)
+                minutes = int(abs_time // 60)
+                seconds = abs_time % 60
 
                 # Format as M:SS.s - truncate (not round) the decimal
-                # Use int() on tenths to truncate instead of round
                 whole_sec = int(seconds)
                 tenths = int((seconds - whole_sec) * 10)  # Truncate, not round
-                timer_text = f"{minutes}:{whole_sec:02d}.{tenths}"
+                timer_text = f"{'-' if is_negative else ''}{minutes}:{whole_sec:02d}.{tenths}"
 
                 # Create transparent image
                 img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
@@ -545,14 +619,16 @@ class VideoStitcher:
         racer_id: str = "",
         fps: int = 30,
         width: int = 1920,
-        height: int = 1080
+        height: int = 1080,
+        pre_buffer_sec: float = 0.0
     ) -> Optional[str]:
         """
         Create a video with two timer overlays:
         - Main timer at top right showing current run time
         - Comparison timer below showing time difference vs fastest racer
 
-        Timer stops at run_duration_sec (finish time) even if video continues.
+        Timer starts at -pre_buffer_sec (showing negative time before racer starts),
+        shows 0:00.0 when racer actually starts, and stops at run_duration_sec.
         Returns path to temporary video file.
         """
         try:
@@ -571,24 +647,35 @@ class VideoStitcher:
             font_label = self._get_font(20)  # Label font
             total_frames = int(video_duration_sec * fps) + 1
 
-            print(f"    Creating {total_frames} comparison timer frames (vs bib {fastest_bib})...")
+            print(f"    Creating {total_frames} comparison timer frames (vs bib {fastest_bib}, pre-buffer: {pre_buffer_sec:.1f}s)...")
 
             for frame_num in range(total_frames):
-                # Calculate time for this frame - stop at run_duration
-                time_sec = min(frame_num / fps, run_duration_sec)
-                minutes = int(time_sec // 60)
-                seconds = time_sec % 60
+                # Calculate time for this frame
+                # Video starts at -pre_buffer_sec, racer starts at 0, finishes at run_duration_sec
+                raw_time_sec = (frame_num / fps) - pre_buffer_sec
+
+                # Clamp: don't go below -pre_buffer_sec or above run_duration_sec
+                time_sec = max(-pre_buffer_sec, min(raw_time_sec, run_duration_sec))
+
+                # Format time - handle negative values
+                is_negative = time_sec < 0
+                abs_time = abs(time_sec)
+                minutes = int(abs_time // 60)
+                seconds = abs_time % 60
 
                 # Format main timer as M:SS.s - truncate (not round) the decimal
                 whole_sec = int(seconds)
                 tenths = int((seconds - whole_sec) * 10)
-                timer_text = f"{minutes}:{whole_sec:02d}.{tenths}"
+                timer_text = f"{'-' if is_negative else ''}{minutes}:{whole_sec:02d}.{tenths}"
 
                 # Calculate time difference vs fastest
                 # At the same point in their run, how far ahead/behind are they?
                 # Negative = behind (slower), Positive = ahead (faster)
                 # We compare at same elapsed time percentage
-                if fastest_duration_sec > 0 and run_duration_sec > 0:
+                # During pre-buffer (time_sec < 0), show no difference yet
+                if time_sec <= 0:
+                    time_diff = 0
+                elif fastest_duration_sec > 0 and run_duration_sec > 0:
                     # At this point in the run, fastest racer would be at:
                     pct_complete = time_sec / run_duration_sec if run_duration_sec > 0 else 0
                     fastest_time_at_pct = pct_complete * fastest_duration_sec
@@ -753,15 +840,20 @@ class VideoStitcher:
         video_duration = (float(duration_result.stdout.strip()) if duration_result.returncode == 0 else racer.duration) + 1.0
 
         # Timer stops at racer's finish time, but video may be longer
+        # Timer starts at -pre_buffer_sec and shows 0:00 when racer actually starts
         # Use comparison timer if comparing against fastest racer
         if comparison_racer:
             timer_video_path = self._create_comparison_timer_frames(
                 racer.duration, video_duration,
                 comparison_racer.duration, comparison_racer.bib,
-                racer_id=racer_id
+                racer_id=racer_id,
+                pre_buffer_sec=self.pre_buffer_sec
             )
         else:
-            timer_video_path = self._create_timer_frames(racer.duration, video_duration, racer_id=racer_id)
+            timer_video_path = self._create_timer_frames(
+                racer.duration, video_duration, racer_id=racer_id,
+                pre_buffer_sec=self.pre_buffer_sec
+            )
 
         # Get logos to use - either user-selected or default
         existing_logos = []
@@ -865,13 +957,9 @@ class VideoStitcher:
             filter_graph = ";".join(filter_parts)
             cmd.extend(['-filter_complex', filter_graph, '-map', '[out]' if prev_label == "out" else f'[{prev_label}]'])
 
-            # Use hardware encoding
-            cmd.extend([
-                '-c:v', 'h264_videotoolbox',
-                '-b:v', '8M',
-                '-movflags', '+faststart',
-                output_path
-            ])
+            # Use hardware encoding based on platform
+            cmd.extend(get_encoder_args())
+            cmd.extend(['-movflags', '+faststart', output_path])
 
             print(f"    Running overlay composition...")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
@@ -912,11 +1000,27 @@ class VideoStitcher:
         # Extract each segment for the ghost racer using their actual timing
         ghost_segment_paths = []
 
-        for i, cut in enumerate(self.cuts):
+        # Filter out skipped cuts (0% duration) to determine first/last active cut
+        active_cuts = [(i, cut) for i, cut in enumerate(self.cuts) if cut.start_pct != cut.end_pct]
+
+        for cut_idx, (i, cut) in enumerate(active_cuts):
+            is_first_cut = (cut_idx == 0)
+            is_last_cut = (cut_idx == len(active_cuts) - 1)
+
             try:
-                # Calculate absolute time for ghost racer's segment using ghost's own duration
-                segment_start_abs = ghost_racer.start_time_sec + (cut.start_pct * ghost_racer.duration)
-                segment_end_abs = ghost_racer.start_time_sec + (cut.end_pct * ghost_racer.duration)
+                # Calculate absolute time for ghost racer's segment
+                # First cut: use pre_buffer_sec before ghost start
+                # Last cut: use post_buffer_sec after ghost finish
+                if is_first_cut:
+                    segment_start_abs = ghost_racer.start_time_sec - self.pre_buffer_sec
+                else:
+                    segment_start_abs = ghost_racer.start_time_sec + (cut.start_pct * ghost_racer.duration)
+
+                if is_last_cut:
+                    segment_end_abs = ghost_racer.start_time_sec + ghost_racer.duration + self.post_buffer_sec
+                else:
+                    segment_end_abs = ghost_racer.start_time_sec + (cut.end_pct * ghost_racer.duration)
+
                 segment_duration = segment_end_abs - segment_start_abs
 
                 # Find the right video file for this time
@@ -1008,11 +1112,10 @@ class VideoStitcher:
             # Overlay ghost on main - eof_action=pass means continue main when ghost ends
             f'[0:v][ghost]overlay=x=0:y=0:eof_action=pass[out]',
             '-map', '[out]',
-            '-c:v', 'h264_videotoolbox',
-            '-b:v', '8M',
-            '-movflags', '+faststart',
-            output_path
         ]
+        # Use hardware encoding based on platform
+        cmd.extend(get_encoder_args())
+        cmd.extend(['-movflags', '+faststart', output_path])
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
@@ -1032,16 +1135,19 @@ class VideoStitcher:
         try:
             # Add title overlay first (full frame transparent PNG)
             # Use -loop 1 to repeat the static PNG forever, shortest=1 to end with video
+            # Encoding args based on platform
+            enc_args = get_encoder_args()
+
             if title_overlay_path and os.path.exists(title_overlay_path):
                 temp_out = os.path.join(tempfile.gettempdir(), f"skiframes_t_{os.getpid()}.mp4")
                 cmd = [
                     'ffmpeg', '-y', '-i', current_input, '-loop', '1', '-i', title_overlay_path,
                     '-filter_complex', '[0:v][1:v]overlay=x=0:y=0:shortest=1[out]',
                     '-map', '[out]',
-                    '-c:v', 'h264_videotoolbox', '-b:v', '8M',
+                    *enc_args,
                     temp_out
                 ]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
                 if result.returncode == 0:
                     temp_files.append(temp_out)
                     current_input = temp_out
@@ -1066,10 +1172,10 @@ class VideoStitcher:
                     'ffmpeg', '-y', '-i', current_input, '-loop', '1', '-i', logo_path,
                     '-filter_complex', f'[1:v]scale=-1:{logo_height}[logo];[0:v][logo]overlay=x={x_offset}:y=H-h-20:shortest=1[out]',
                     '-map', '[out]',
-                    '-c:v', 'h264_videotoolbox', '-b:v', '8M',
+                    *enc_args,
                     temp_out
                 ]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
                 if result.returncode == 0:
                     temp_files.append(temp_out)
                     current_input = temp_out
@@ -1122,14 +1228,16 @@ class VideoStitcher:
 
         try:
             # Re-encode during concat to fix timestamp issues that cause freezes
+            # Use hardware encoding based on platform
+            encoder_args = get_encoder_args()
+
             cmd = [
                 'ffmpeg', '-y',
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concat_file,
                 '-vf', 'fps=30',  # Ensure consistent frame rate
-                '-c:v', 'h264_videotoolbox',  # Hardware encoding
-                '-b:v', '8M',
+                *encoder_args,
                 '-movflags', '+faststart',
                 output_path
             ]
@@ -1138,7 +1246,7 @@ class VideoStitcher:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=120  # Longer timeout for software encoding
             )
             return result.returncode == 0
         finally:
@@ -1243,15 +1351,36 @@ class VideoStitcher:
 
         # Extract each segment
         segment_paths = []
-        for i, cut in enumerate(self.cuts):
+        # Filter out skipped cuts (0% duration) to determine first/last active cut
+        active_cuts = [(i, cut) for i, cut in enumerate(self.cuts) if cut.start_pct != cut.end_pct]
+
+        for cut_idx, (i, cut) in enumerate(active_cuts):
             if self._should_stop():
                 return None
 
+            is_first_cut = (cut_idx == 0)
+            is_last_cut = (cut_idx == len(active_cuts) - 1)
+
             try:
                 # Calculate absolute time for this segment
-                segment_start_abs = racer.start_time_sec + (cut.start_pct * racer.duration)
-                segment_end_abs = racer.start_time_sec + (cut.end_pct * racer.duration)
+                # First cut: use pre_buffer_sec before racer start
+                # Last cut: use post_buffer_sec after racer finish
+                # Middle cuts: use percentage-based timing
+                if is_first_cut:
+                    segment_start_abs = racer.start_time_sec - self.pre_buffer_sec
+                else:
+                    segment_start_abs = racer.start_time_sec + (cut.start_pct * racer.duration)
+
+                if is_last_cut:
+                    segment_end_abs = racer.start_time_sec + racer.duration + self.post_buffer_sec
+                else:
+                    segment_end_abs = racer.start_time_sec + (cut.end_pct * racer.duration)
+
                 segment_duration = segment_end_abs - segment_start_abs
+
+                # Skip if duration is zero or negative
+                if segment_duration <= 0:
+                    continue
 
                 # Find the right video file for this time
                 video_path, offset, video_end_sec = self._find_video_and_offset(cut.camera, segment_start_abs)

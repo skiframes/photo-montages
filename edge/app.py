@@ -73,8 +73,12 @@ CAMERAS = {
     },
 }
 
-# Vola Excel file location (external drive, outside git repo)
-VOLA_DIR = Path('/Volumes/OWC_48/data/vola')
+# Data directory - configurable via environment variable
+# Mac: /Volumes/OWC_48/data, Server: /home/pa91/data
+DATA_BASE_DIR = Path(os.environ.get('SKIFRAMES_DATA_DIR', '/Volumes/OWC_48/data'))
+
+# Vola Excel file location
+VOLA_DIR = DATA_BASE_DIR / 'vola'
 
 # Session types and groups
 SESSION_TYPES = ['training', 'race']
@@ -271,16 +275,16 @@ def parse_results_pdf(pdf_path: str) -> dict:
                         continue
 
                     # Parse ranked finishers
-                    # Pattern: rank bib ussa_id lastname firstname year club run1 run2 total [gap]
+                    # Pattern: rank bib [ussa_id] lastname firstname year club run1 run2 total [gap]
                     # Example: "1 132 E7031024 Nelson Coulee 2012 PROC 26.89 31.13 58.02"
                     ranked_match = re.match(
-                        r'(\d+)\s+(\d+)\s+(E\d{7})\s+((?:[A-Za-z\'\-]+\s+)+)(\d{4})\s+([A-Z]{2,4})\s+([\d:.]+)\s+([\d:.]+)\s+([\d:.]+)',
+                        r'(\d+)\s+(\d+)\s+(?:(E\d{7})\s+)?((?:[A-Za-z\'\-]+\s+)+)(\d{4})\s+([A-Z]{2,4})\s+([\d:.]+)\s+([\d:.]+)\s+([\d:.]+)',
                         line
                     )
                     if ranked_match:
                         rank = int(ranked_match.group(1))
                         bib = int(ranked_match.group(2))
-                        ussa_id = ranked_match.group(3)
+                        ussa_id = ranked_match.group(3) or ''
                         name_parts = ranked_match.group(4).strip().split()
                         year = ranked_match.group(5)
                         team = ranked_match.group(6)
@@ -310,16 +314,16 @@ def parse_results_pdf(pdf_path: str) -> dict:
                         continue
 
                     # Parse DSQ/DNF/DNS entries (no rank, may have partial times)
-                    # Pattern: bib ussa_id lastname firstname year club [times...]
+                    # Pattern: bib [ussa_id] lastname firstname year club [times...]
                     # Example: "133 E7090134 Morton Julia 2012 SUN"
                     # Example: "129 E6997139 O'Brien Madison 2012 PROC 32.18"
                     unranked_match = re.match(
-                        r'(\d+)\s+(E\d{7})\s+((?:[A-Za-z\'\-]+\s+)+)(\d{4})\s+([A-Z]{2,4})(?:\s+([\d:.]+))?',
+                        r'(\d+)\s+(?:(E\d{7})\s+)?((?:[A-Za-z\'\-]+\s+)+)(\d{4})\s+([A-Z]{2,4})(?:\s+([\d:.]+))?',
                         line
                     )
                     if unranked_match and current_status != 'finished':
                         bib = int(unranked_match.group(1))
-                        ussa_id = unranked_match.group(2)
+                        ussa_id = unranked_match.group(2) or ''
                         name_parts = unranked_match.group(3).strip().split()
                         year = unranked_match.group(4)
                         team = unranked_match.group(5)
@@ -971,8 +975,8 @@ def list_videos():
     return jsonify(sorted(unique_videos, key=lambda v: v['name']))
 
 
-# External recordings drive path
-RECORDINGS_DIR = Path('/Volumes/OWC_48/data/recordings')
+# External recordings drive path (uses DATA_BASE_DIR from environment)
+RECORDINGS_DIR = DATA_BASE_DIR / 'recordings'
 
 
 def parse_reolink_video_times(filename: str) -> tuple:
@@ -1514,6 +1518,9 @@ def list_available_logos():
             'RMST_logo.png',
             'Ragged_logo.png',
             'Skiframes-com_logo.png'
+        ],
+        'excluded_by_default': [
+            'skieast_logo.png'
         ]
     })
 
@@ -1754,7 +1761,7 @@ def parse_racers_for_stitch():
                 'team': team,
                 'gender': gender,
                 'ussa_id': ussa_id,
-                'ussa_profile_url': f"https://www.usskiandsnowboard.org/public-tools/members/{ussa_id}" if ussa_id else None,
+                'ussa_profile_url': f"https://www.usskiandsnowboard.org/public-tools/members/{ussa_id.lstrip('E')}" if ussa_id else None,
                 'start_time_sec': start_sec,
                 'start_time_str': seconds_to_time_str(start_sec),
                 'finish_time_sec': start_sec + run_duration,
@@ -1926,8 +1933,10 @@ def run_stitch_job(job_id: str, config: dict):
                 }
 
         # Get parallel processing options
-        parallel = config.get('parallel', True)  # Default to parallel for M1 Mac
-        max_workers = config.get('max_workers', 8)  # Default 8 workers for M1 Max (8 perf cores)
+        # Default workers: 8 for M1 Max, override via env SKIFRAMES_MAX_WORKERS for server
+        default_workers = int(os.environ.get('SKIFRAMES_MAX_WORKERS', 8))
+        parallel = config.get('parallel', True)
+        max_workers = config.get('max_workers', default_workers)
 
         if parallel:
             print(f"Using parallel processing with {max_workers} workers")
@@ -2085,6 +2094,97 @@ def stop_stitch_job(job_id):
         stitch_jobs[job_id]['status'] = 'stopping'
 
     return jsonify({'success': True})
+
+
+@app.route('/api/stitch/server-command', methods=['POST'])
+def generate_server_command():
+    """
+    Generate a command to run batch processing on the remote server (4T).
+    Returns the command string that can be copied and run via SSH.
+
+    Request body includes all UI settings: cuts, race_info, logos, etc.
+    """
+    data = request.get_json() or {}
+    race = data.get('race', 'U14 run 1')
+    date = data.get('date', '20260201')
+    workers = data.get('workers', 16)
+    test_count = data.get('test_count', 0)
+    generate_comparison = data.get('generate_comparison', False)
+    vola_file = data.get('vola_file')
+    results_file = data.get('results_file')
+    cuts = data.get('cuts', [])
+    race_info = data.get('race_info', {})
+    selected_logos = data.get('selected_logos', [])
+    pre_buffer = data.get('pre_buffer', 2.0)
+    post_buffer = data.get('post_buffer', 2.0)
+
+    # Build command
+    cmd_parts = [
+        'cd /home/pa91/skiframes/photo-montages',
+        'source venv/bin/activate',
+        'export PATH=/home/pa91/bin:$PATH',  # Use NVENC-enabled ffmpeg
+        'export SKIFRAMES_DATA_DIR=/home/pa91/data',
+        f'python3 edge/batch_stitch.py --race "{race}" --date {date} --workers {workers}'
+    ]
+
+    # Add pre/post buffer settings
+    cmd_parts[-1] += f' --pre-buffer {pre_buffer} --post-buffer {post_buffer}'
+
+    if test_count > 0:
+        cmd_parts[-1] += f' --test {test_count}'
+
+    if generate_comparison:
+        cmd_parts[-1] += ' --comparison'
+
+    if vola_file:
+        # Convert local path to server path
+        server_vola = vola_file.replace('/Volumes/OWC_48/data', '/home/pa91/data')
+        cmd_parts[-1] += f' --vola "{server_vola}"'
+
+    if results_file:
+        # Convert local path to server path
+        server_results = results_file.replace('/Volumes/OWC_48/data', '/home/pa91/data')
+        cmd_parts[-1] += f' --results "{server_results}"'
+
+    # Add cut percentages if provided (for middle cameras - first/last use pre/post buffer)
+    if cuts:
+        for cut in cuts:
+            camera = cut.get('camera', '').lower()
+            start = cut.get('start_pct', 0) * 100
+            end = cut.get('end_pct', 0) * 100
+            if camera == 'r1':
+                cmd_parts[-1] += f' --r1-start {start:.0f} --r1-end {end:.0f}'
+            elif camera == 'axis':
+                cmd_parts[-1] += f' --axis-start {start:.0f} --axis-end {end:.0f}'
+            elif camera == 'r2':
+                cmd_parts[-1] += f' --r2-start {start:.0f} --r2-end {end:.0f}'
+            elif camera == 'r3':
+                cmd_parts[-1] += f' --r3-start {start:.0f} --r3-end {end:.0f}'
+
+    # Add race info
+    if race_info.get('event'):
+        cmd_parts[-1] += f' --event "{race_info["event"]}"'
+    if race_info.get('discipline'):
+        cmd_parts[-1] += f' --discipline "{race_info["discipline"]}"'
+
+    # Add logos
+    if selected_logos:
+        cmd_parts[-1] += f' --logos "{",".join(selected_logos)}"'
+
+    full_command = ' && '.join(cmd_parts)
+
+    # Also provide SSH command for easy copy-paste
+    # Use single quotes around the whole command to preserve inner double quotes
+    ssh_command = f"ssh 4t '{full_command}'"
+
+    return jsonify({
+        'command': full_command,
+        'ssh_command': ssh_command,
+        'server': '4t',
+        'race': race,
+        'date': date,
+        'workers': workers
+    })
 
 
 if __name__ == '__main__':

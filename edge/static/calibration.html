@@ -549,7 +549,7 @@
                         </div>
                         <div>
                             <label for="raceInfoDate" style="font-size: 12px; margin-bottom: 2px;">Date</label>
-                            <input type="text" id="raceInfoDate" value="Sunday, 2026/02/01" style="font-size: 13px;">
+                            <input type="text" id="raceInfoDate" value="2026-02-01" style="font-size: 13px;">
                         </div>
                         <div>
                             <label for="raceInfoType" style="font-size: 12px; margin-bottom: 2px;">Type</label>
@@ -586,7 +586,16 @@
                         </div>
                     </div>
 
-                    <div class="help-text" style="margin-top: 8px;">Title overlay: Event | Discipline | Age Group | Run | Date</div>
+                    <div class="help-text" style="margin-top: 8px;">Title overlay: Event | Discipline | Age Group | Run</div>
+                </div>
+
+                <!-- Logo Selection -->
+                <div style="margin-top: 12px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #334155;">Logo Selection</div>
+                    <div class="help-text" style="margin-bottom: 8px;">Drag to reorder. Uncheck to hide.</div>
+                    <div id="logoList" style="display: flex; flex-direction: column; gap: 4px;">
+                        <!-- Logos will be populated dynamically -->
+                    </div>
                 </div>
 
                 <div style="margin-top: 12px;">
@@ -602,6 +611,18 @@
                     <input type="number" id="stitchTestCount" value="3" min="0" max="100" style="width: 80px; display: inline-block; margin-left: 10px; margin-bottom: 0;">
                     <div class="help-text">Number of athletes to process for testing. Set to 0 to process all.</div>
                 </div>
+
+                <div style="margin-top: 12px; display: flex; gap: 20px;">
+                    <div>
+                        <label for="stitchPreBuffer" style="display: inline-block; margin-bottom: 0;">Pre-buffer (sec)</label>
+                        <input type="number" id="stitchPreBuffer" value="2" min="0" max="10" step="0.5" style="width: 70px; display: inline-block; margin-left: 10px;">
+                    </div>
+                    <div>
+                        <label for="stitchPostBuffer" style="display: inline-block; margin-bottom: 0;">Post-buffer (sec)</label>
+                        <input type="number" id="stitchPostBuffer" value="2" min="0" max="10" step="0.5" style="width: 70px; display: inline-block; margin-left: 10px;">
+                    </div>
+                </div>
+                <div class="help-text">Seconds before start and after finish to include in video. Timer shows 0:00 at racer start.</div>
 
                 <button id="stitchLoadRacers" class="btn btn-primary" style="margin-top: 12px;">
                     Load Racers
@@ -638,41 +659,41 @@
                 <div style="margin-top: 16px;">
                     <p class="help-text" style="margin-bottom: 12px;">
                         Set when each camera's segment starts/ends as a percentage of run time.
-                        Example: R1 from -5% to 5% means R1 shows from 2 seconds before start to 2 seconds after (for a 40s run).
+                        R1 start uses pre-buffer setting, R3 end uses post-buffer setting.
                     </p>
 
                     <div id="stitchCutsContainer">
-                        <!-- R1 -->
+                        <!-- R1 (start controlled by pre-buffer) -->
                         <div class="cut-row" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
                             <label style="width: 60px; margin: 0;">R1</label>
-                            <input type="number" id="stitchCutR1Start" value="-5" step="1" style="width: 70px; margin: 0;">
-                            <span>% to</span>
-                            <input type="number" id="stitchCutR1End" value="5" step="1" style="width: 70px; margin: 0;">
+                            <input type="hidden" id="stitchCutR1Start" value="0">
+                            <span style="color: #6b7280; font-size: 13px;">(pre-buffer) to</span>
+                            <input type="number" id="stitchCutR1End" value="7" step="1" style="width: 70px; margin: 0;">
                             <span>%</span>
                         </div>
                         <!-- Axis -->
                         <div class="cut-row" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
                             <label style="width: 60px; margin: 0;">Axis</label>
-                            <input type="number" id="stitchCutAxisStart" value="5" step="1" style="width: 70px; margin: 0;">
+                            <input type="number" id="stitchCutAxisStart" value="7" step="1" style="width: 70px; margin: 0;">
                             <span>% to</span>
-                            <input type="number" id="stitchCutAxisEnd" value="55" step="0.5" style="width: 70px; margin: 0;">
+                            <input type="number" id="stitchCutAxisEnd" value="51" step="0.5" style="width: 70px; margin: 0;">
                             <span>%</span>
                         </div>
                         <!-- R2 -->
                         <div class="cut-row" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
                             <label style="width: 60px; margin: 0;">R2</label>
-                            <input type="number" id="stitchCutR2Start" value="55" step="0.5" style="width: 70px; margin: 0;">
+                            <input type="number" id="stitchCutR2Start" value="51" step="0.5" style="width: 70px; margin: 0;">
                             <span>% to</span>
                             <input type="number" id="stitchCutR2End" value="72" step="0.5" style="width: 70px; margin: 0;">
                             <span>%</span>
                         </div>
-                        <!-- R3 -->
+                        <!-- R3 (end controlled by post-buffer) -->
                         <div class="cut-row" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
                             <label style="width: 60px; margin: 0;">R3</label>
                             <input type="number" id="stitchCutR3Start" value="72" step="0.5" style="width: 70px; margin: 0;">
                             <span>% to</span>
-                            <input type="number" id="stitchCutR3End" value="105" step="1" style="width: 70px; margin: 0;">
-                            <span>%</span>
+                            <input type="hidden" id="stitchCutR3End" value="100">
+                            <span style="color: #6b7280; font-size: 13px;">(post-buffer)</span>
                         </div>
                     </div>
 
@@ -710,13 +731,37 @@
             <div class="card" id="stitchProcessCard" style="display: none;">
                 <div class="card-title">4. Generate Stitched Videos</div>
 
-                <button id="stitchStartProcess" class="btn btn-success" style="font-size: 18px; padding: 16px;">
-                    Start Processing
-                </button>
+                <label for="stitchProcessLocation">Processing Location</label>
+                <select id="stitchProcessLocation" style="margin-bottom: 12px;">
+                    <option value="local">Local (M1 Mac - 8 workers)</option>
+                    <option value="server" selected>Remote Server (4T - 16 workers)</option>
+                </select>
 
-                <button id="stitchStopProcess" class="btn btn-danger" style="display: none; margin-top: 12px; font-size: 16px; padding: 14px;">
-                    Stop Processing
-                </button>
+                <div id="localProcessingControls" style="display: none;">
+                    <button id="stitchStartProcess" class="btn btn-success" style="font-size: 18px; padding: 16px;">
+                        Start Processing
+                    </button>
+
+                    <button id="stitchStopProcess" class="btn btn-danger" style="display: none; margin-top: 12px; font-size: 16px; padding: 14px;">
+                        Stop Processing
+                    </button>
+                </div>
+
+                <div id="serverProcessingControls">
+                    <p style="color: #6b7280; font-size: 14px; margin-bottom: 12px;">
+                        Generate command to run on Tesla GPU server (4T). Copy and paste into terminal.
+                    </p>
+                    <button id="stitchGenerateCommand" class="btn btn-primary" style="font-size: 16px; padding: 14px;">
+                        Generate Server Command
+                    </button>
+                    <div id="serverCommandOutput" style="display: none; margin-top: 12px;">
+                        <label>SSH Command (copy this):</label>
+                        <textarea id="serverCommandText" readonly style="width: 100%; height: 80px; font-family: monospace; font-size: 12px; background: #1e293b; color: #22c55e; padding: 10px; border-radius: 6px; border: none;"></textarea>
+                        <button id="copyServerCommand" class="btn" style="margin-top: 8px; background: #475569; color: white;">
+                            Copy to Clipboard
+                        </button>
+                    </div>
+                </div>
 
                 <div id="stitchProgress" style="display: none; margin-top: 16px;">
                     <div style="background: #e5e7eb; border-radius: 8px; height: 24px; overflow: hidden;">
@@ -1026,6 +1071,8 @@
             numAthletes: 5,  // Number of athletes to process (0 = all)
             raceDate: '',  // Date extracted from Vola file
             cameras: [],  // Camera list with offset percentages
+            selectedLogos: [],  // List of selected logo filenames in order
+            availableLogos: [],  // All available logos
         };
 
         // DOM Elements
@@ -1125,8 +1172,11 @@
             raceInfoLength: document.getElementById('raceInfoLength'),
             raceInfoGates: document.getElementById('raceInfoGates'),
             raceInfoSnow: document.getElementById('raceInfoSnow'),
+            logoList: document.getElementById('logoList'),
             stitchGenerateComparison: document.getElementById('stitchGenerateComparison'),
             stitchTestCount: document.getElementById('stitchTestCount'),
+            stitchPreBuffer: document.getElementById('stitchPreBuffer'),
+            stitchPostBuffer: document.getElementById('stitchPostBuffer'),
             stitchLoadRacers: document.getElementById('stitchLoadRacers'),
             stitchRacersInfo: document.getElementById('stitchRacersInfo'),
             stitchRacerCount: document.getElementById('stitchRacerCount'),
@@ -1150,8 +1200,15 @@
             stitchVideoR3Display: document.getElementById('stitchVideoR3Display'),
             stitchVideosMissing: document.getElementById('stitchVideosMissing'),
             stitchProcessCard: document.getElementById('stitchProcessCard'),
+            stitchProcessLocation: document.getElementById('stitchProcessLocation'),
+            localProcessingControls: document.getElementById('localProcessingControls'),
+            serverProcessingControls: document.getElementById('serverProcessingControls'),
             stitchStartProcess: document.getElementById('stitchStartProcess'),
             stitchStopProcess: document.getElementById('stitchStopProcess'),
+            stitchGenerateCommand: document.getElementById('stitchGenerateCommand'),
+            serverCommandOutput: document.getElementById('serverCommandOutput'),
+            serverCommandText: document.getElementById('serverCommandText'),
+            copyServerCommand: document.getElementById('copyServerCommand'),
             stitchProgress: document.getElementById('stitchProgress'),
             stitchProgressBar: document.getElementById('stitchProgressBar'),
             stitchProgressText: document.getElementById('stitchProgressText'),
@@ -2045,6 +2102,7 @@
                 // Load stitch-specific data
                 loadStitchVolaFiles();
                 loadStitchConfigs();
+                loadLogos();
             }
         }
 
@@ -2079,6 +2137,143 @@
             } catch (e) {
                 console.error('Error loading stitch configs:', e);
             }
+        }
+
+        async function loadLogos() {
+            try {
+                const res = await fetch('/api/stitch/logos');
+                const data = await res.json();
+                const logos = data.logos || [];
+                const defaultOrder = data.default_order || [];
+                const excludedByDefault = data.excluded_by_default || [];
+
+                state.availableLogos = logos;
+
+                // Use default order from API, filter to only existing logos
+                state.selectedLogos = defaultOrder.filter(name => logos.some(l => l.filename === name));
+
+                // Add any logos not in default order (before the last one), except excluded ones
+                logos.forEach(l => {
+                    if (!state.selectedLogos.includes(l.filename) && !excludedByDefault.includes(l.filename)) {
+                        const insertAt = state.selectedLogos.length > 0 ? state.selectedLogos.length - 1 : 0;
+                        state.selectedLogos.splice(insertAt, 0, l.filename);
+                    }
+                });
+
+                renderLogoList();
+            } catch (e) {
+                console.error('Error loading logos:', e);
+            }
+        }
+
+        function renderLogoList() {
+            const container = elements.logoList;
+            container.innerHTML = state.selectedLogos.map((filename, index) => {
+                const logo = state.availableLogos.find(l => l.filename === filename);
+                return `
+                    <div class="logo-item" draggable="true" data-filename="${filename}" data-index="${index}"
+                         style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: white; border: 1px solid #d1d5db; border-radius: 4px; cursor: grab;">
+                        <input type="checkbox" checked onchange="toggleLogo('${filename}')" style="width: 16px; height: 16px;">
+                        <img src="/api/stitch/logo/${filename}" alt="${filename}" style="height: 24px; max-width: 60px; object-fit: contain;">
+                        <span style="flex: 1; font-size: 12px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${filename.replace(/_/g, ' ').replace('.png', '')}</span>
+                        <span style="color: #94a3b8; font-size: 14px;">☰</span>
+                    </div>
+                `;
+            }).join('');
+
+            // Also show unselected logos
+            const unselected = state.availableLogos.filter(l => !state.selectedLogos.includes(l.filename));
+            if (unselected.length > 0) {
+                container.innerHTML += unselected.map(logo => `
+                    <div class="logo-item" data-filename="${logo.filename}"
+                         style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; opacity: 0.6;">
+                        <input type="checkbox" onchange="toggleLogo('${logo.filename}')" style="width: 16px; height: 16px;">
+                        <img src="/api/stitch/logo/${logo.filename}" alt="${logo.filename}" style="height: 24px; max-width: 60px; object-fit: contain;">
+                        <span style="flex: 1; font-size: 12px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${logo.filename.replace(/_/g, ' ').replace('.png', '')}</span>
+                    </div>
+                `).join('');
+            }
+
+            // Add drag and drop handlers
+            setupLogoDragDrop();
+        }
+
+        function toggleLogo(filename) {
+            const index = state.selectedLogos.indexOf(filename);
+            if (index >= 0) {
+                state.selectedLogos.splice(index, 1);
+            } else {
+                // Add before the last logo (Skiframes-com)
+                const lastIdx = state.selectedLogos.length > 0 ? state.selectedLogos.length - 1 : 0;
+                state.selectedLogos.splice(lastIdx, 0, filename);
+            }
+            renderLogoList();
+        }
+
+        function setupLogoDragDrop() {
+            const items = document.querySelectorAll('.logo-item[draggable="true"]');
+            let draggedItem = null;
+
+            items.forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedItem = item;
+                    item.style.opacity = '0.5';
+                });
+
+                item.addEventListener('dragend', () => {
+                    draggedItem.style.opacity = '1';
+                    draggedItem = null;
+                });
+
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    if (draggedItem && draggedItem !== item) {
+                        const rect = item.getBoundingClientRect();
+                        const midY = rect.top + rect.height / 2;
+                        if (e.clientY < midY) {
+                            item.style.borderTop = '2px solid #3b82f6';
+                            item.style.borderBottom = '';
+                        } else {
+                            item.style.borderBottom = '2px solid #3b82f6';
+                            item.style.borderTop = '';
+                        }
+                    }
+                });
+
+                item.addEventListener('dragleave', () => {
+                    item.style.borderTop = '';
+                    item.style.borderBottom = '';
+                });
+
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    item.style.borderTop = '';
+                    item.style.borderBottom = '';
+
+                    if (draggedItem && draggedItem !== item) {
+                        const fromFilename = draggedItem.dataset.filename;
+                        const toFilename = item.dataset.filename;
+                        const fromIndex = state.selectedLogos.indexOf(fromFilename);
+                        let toIndex = state.selectedLogos.indexOf(toFilename);
+
+                        if (fromIndex >= 0 && toIndex >= 0) {
+                            // Remove from old position
+                            state.selectedLogos.splice(fromIndex, 1);
+                            // Adjust toIndex if needed
+                            if (fromIndex < toIndex) toIndex--;
+
+                            // Determine if dropping before or after
+                            const rect = item.getBoundingClientRect();
+                            const midY = rect.top + rect.height / 2;
+                            if (e.clientY >= midY) toIndex++;
+
+                            // Insert at new position
+                            state.selectedLogos.splice(toIndex, 0, fromFilename);
+                            renderLogoList();
+                        }
+                    }
+                });
+            });
         }
 
         async function loadStitchRacers() {
@@ -2300,7 +2495,8 @@
                         video_paths: videoPaths,
                         race_name: raceName,
                         race_info: raceInfo,
-                        generate_comparison: generateComparison
+                        generate_comparison: generateComparison,
+                        selected_logos: state.selectedLogos
                     })
                 });
 
@@ -2427,6 +2623,77 @@
             elements.stitchStopProcess.addEventListener('click', stopStitchProcess);
             // Update race info fields when race selection changes
             elements.stitchRace.addEventListener('change', updateRaceInfoFromSelection);
+
+            // Processing location toggle
+            elements.stitchProcessLocation.addEventListener('change', function() {
+                const isLocal = this.value === 'local';
+                elements.localProcessingControls.style.display = isLocal ? 'block' : 'none';
+                elements.serverProcessingControls.style.display = isLocal ? 'none' : 'block';
+            });
+
+            // Generate server command
+            elements.stitchGenerateCommand.addEventListener('click', generateServerCommand);
+            elements.copyServerCommand.addEventListener('click', function() {
+                elements.serverCommandText.select();
+                document.execCommand('copy');
+                this.textContent = 'Copied!';
+                setTimeout(() => { this.textContent = 'Copy to Clipboard'; }, 2000);
+            });
+        }
+
+        // Generate command for server processing
+        async function generateServerCommand() {
+            const race = elements.stitchRace.value;
+            const testCount = parseInt(elements.stitchTestCount.value) || 0;
+            const generateComparison = elements.stitchGenerateComparison.checked;
+            const preBuffer = parseFloat(elements.stitchPreBuffer.value) || 2.0;
+            const postBuffer = parseFloat(elements.stitchPostBuffer.value) || 2.0;
+
+            // Extract date from vola path (format: U12_U14_02-01-2026)
+            const volaPath = elements.stitchVolaFile.value;
+            let date = '20260201';
+            const dateMatch = volaPath.match(/(\d{2})-(\d{2})-(\d{4})/);
+            if (dateMatch) {
+                date = dateMatch[3] + dateMatch[1] + dateMatch[2];
+            }
+
+            // Get all the settings from UI
+            const cuts = getStitchCuts();
+            const raceInfo = {
+                event: elements.raceInfoEvent.value.trim(),
+                discipline: elements.raceInfoDiscipline.value.trim(),
+                age_group: elements.raceInfoAgeGroup.value.trim(),
+                run: elements.raceInfoRun.value.trim(),
+                date: elements.raceInfoDate.value.trim(),
+                type: elements.raceInfoType.value.trim(),
+            };
+
+            try {
+                const res = await fetch('/api/stitch/server-command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        race: race,
+                        date: date,
+                        workers: 8,
+                        test_count: testCount,
+                        generate_comparison: generateComparison,
+                        pre_buffer: preBuffer,
+                        post_buffer: postBuffer,
+                        vola_file: volaPath,
+                        results_file: elements.stitchResultsFile ? elements.stitchResultsFile.value : null,
+                        cuts: cuts,
+                        race_info: raceInfo,
+                        selected_logos: state.selectedLogos
+                    })
+                });
+
+                const data = await res.json();
+                elements.serverCommandText.value = data.ssh_command;
+                elements.serverCommandOutput.style.display = 'block';
+            } catch (e) {
+                showStatus('Error generating command: ' + e.message, 'error');
+            }
         }
 
         // Initialize on load
