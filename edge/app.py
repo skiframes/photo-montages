@@ -348,6 +348,67 @@ def parse_results_pdf(pdf_path: str) -> dict:
                             'total_time': None,
                         }
 
+        # Fallback: try table extraction for bibs missed by text parsing
+        # Some PDF rows overlap with page headers, garbling text extraction
+        # but table extraction can still find the cell contents
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                tables = page.extract_tables()
+                for table in tables:
+                    for row in table:
+                        if not row:
+                            continue
+                        bib = None
+                        ussa_id = ''
+                        name_cell = ''
+                        team = ''
+                        for cell in row:
+                            if cell is None:
+                                continue
+                            cell = str(cell).strip()
+                            if not bib and re.match(r'^\d{3}$', cell):
+                                candidate = int(cell)
+                                if 100 <= candidate <= 220 and candidate not in bib_to_racer:
+                                    bib = candidate
+                            if not bib:
+                                bib_in_cell = re.search(r'\b(1[1-9]\d|20\d|21\d|220)\b', cell)
+                                if bib_in_cell:
+                                    candidate = int(bib_in_cell.group(1))
+                                    if candidate not in bib_to_racer:
+                                        bib = candidate
+                            ussa_match = re.search(r'(E\d{7})', cell)
+                            if ussa_match:
+                                ussa_id = ussa_match.group(1)
+                            name_match = re.search(r'([A-Z][a-z]+(?:[\'\\-][A-Z][a-z]+)?\s+[A-Z][a-z]+)', cell)
+                            if name_match and not name_cell:
+                                name_cell = name_match.group(1)
+                            team_match = re.search(r'\b([A-Z]{2,4})\b', cell)
+                            if team_match and team_match.group(1) not in ('None', 'THE', 'AND', 'FOR'):
+                                candidate_team = team_match.group(1)
+                                if candidate_team in ('SUN', 'PROC', 'RMS', 'FS', 'CMS'):
+                                    team = candidate_team
+
+                        if bib and bib not in bib_to_racer and (ussa_id or name_cell):
+                            name = ''
+                            if name_cell:
+                                parts = name_cell.split()
+                                if len(parts) >= 2:
+                                    name = f"{parts[-1]} {' '.join(parts[:-1])}"
+                                else:
+                                    name = name_cell
+                            bib_to_racer[bib] = {
+                                'ussa_id': ussa_id,
+                                'name': name,  # Leave empty if not found; startlist can fill it
+                                'team': team,
+                                'gender': get_gender_from_bib(bib),
+                                'rank': None,
+                                'status': 'finished',
+                                'run1_time': None,
+                                'run2_time': None,
+                                'total_time': None,
+                            }
+                            print(f"  Table fallback: Bib {bib} -> {name or '(no name)'} ({team}) ussa={ussa_id}")
+
     except Exception as e:
         print(f"Error parsing results PDF {pdf_path}: {e}")
 

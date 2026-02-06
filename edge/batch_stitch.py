@@ -325,10 +325,144 @@ def parse_results_pdf(pdf_path: str) -> dict:
                             'gender': current_gender or get_gender_from_bib(bib),
                             'status': current_status
                         }
+        # Fallback: try table extraction for bibs missed by text parsing
+        # Some PDF rows overlap with page headers, garbling text extraction
+        # but table extraction can still find the cell contents
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                tables = page.extract_tables()
+                for table in tables:
+                    for row in table:
+                        if not row:
+                            continue
+                        # Find bib number in row cells
+                        bib = None
+                        ussa_id = ''
+                        name_cell = ''
+                        team = ''
+                        for cell in row:
+                            if cell is None:
+                                continue
+                            cell = str(cell).strip()
+                            # Look for bib number (3 digit, in range 100-220)
+                            if not bib and re.match(r'^\d{3}$', cell):
+                                candidate = int(cell)
+                                if 100 <= candidate <= 220 and candidate not in bib_to_racer:
+                                    bib = candidate
+                            # Also check cells with newlines (garbled with headers)
+                            if not bib:
+                                bib_in_cell = re.search(r'\b(1[1-9]\d|20\d|21\d|220)\b', cell)
+                                if bib_in_cell:
+                                    candidate = int(bib_in_cell.group(1))
+                                    if candidate not in bib_to_racer:
+                                        bib = candidate
+                            # Look for USSA ID
+                            ussa_match = re.search(r'(E\d{7})', cell)
+                            if ussa_match:
+                                ussa_id = ussa_match.group(1)
+                            # Look for name (Lastname Firstname pattern)
+                            name_match = re.search(r'([A-Z][a-z]+(?:[\'\\-][A-Z][a-z]+)?\s+[A-Z][a-z]+)', cell)
+                            if name_match and not name_cell:
+                                name_cell = name_match.group(1)
+                            # Look for team (2-4 uppercase letters alone)
+                            team_match = re.search(r'\b([A-Z]{2,4})\b', cell)
+                            if team_match and team_match.group(1) not in ('None', 'THE', 'AND', 'FOR'):
+                                # Only set if looks like a team code
+                                candidate_team = team_match.group(1)
+                                if candidate_team in ('SUN', 'PROC', 'RMS', 'FS', 'CMS'):
+                                    team = candidate_team
+
+                        if bib and bib not in bib_to_racer and (ussa_id or name_cell):
+                            # Parse name: "Lastname Firstname" -> "Firstname Lastname"
+                            name = ''
+                            if name_cell:
+                                parts = name_cell.split()
+                                if len(parts) >= 2:
+                                    name = f"{parts[-1]} {' '.join(parts[:-1])}"
+                                else:
+                                    name = name_cell
+
+                            bib_to_racer[bib] = {
+                                'name': name,  # Leave empty if not found; startlist can fill it
+                                'team': team,
+                                'ussa_id': ussa_id,
+                                'gender': get_gender_from_bib(bib),
+                                'status': 'finished'  # Can't determine from garbled table
+                            }
+                            print(f"  Table fallback: Bib {bib} -> {name or '(no name)'} ({team}) ussa={ussa_id}")
+
     except Exception as e:
         print(f"Error parsing results PDF {pdf_path}: {e}")
 
     return bib_to_racer
+
+
+def parse_startlist_pdf(pdf_path: str) -> dict:
+    """
+    Parse a start list PDF to extract bib-to-racer mapping.
+
+    Start list format: "111 Stellato Brigid 2013 SUN"
+    (bib lastname firstname year team)
+
+    Returns dict mapping bib number to {'name': 'Firstname Lastname', 'team': 'SUN', 'gender': 'Women'}
+    """
+    if not HAS_PDFPLUMBER:
+        return {}
+
+    bib_to_racer = {}
+
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if not text:
+                    continue
+
+                for line in text.split('\n'):
+                    matches = re.findall(r'(\d+)\s+((?:[A-Za-z\'\-]+\s+){1,3}[A-Za-z\'\-]+)\s+(\d{4})\s+([A-Z]{2,4})', line)
+                    for match in matches:
+                        bib = int(match[0])
+                        name_parts = match[1].strip().split()
+                        team = match[3]
+
+                        if len(name_parts) >= 2:
+                            firstname = name_parts[-1]
+                            lastname = ' '.join(name_parts[:-1])
+                        else:
+                            firstname = name_parts[0] if name_parts else ''
+                            lastname = ''
+
+                        bib_to_racer[bib] = {
+                            'name': f"{firstname} {lastname}".strip(),
+                            'team': team,
+                            'gender': get_gender_from_bib(bib)
+                        }
+    except Exception as e:
+        print(f"Error parsing start list PDF {pdf_path}: {e}")
+
+    return bib_to_racer
+
+
+def find_startlist_pdf(race: str = None):
+    """Find a start list PDF in the vola directory."""
+    pdf_files = list(VOLA_DIR.glob('**/*.pdf'))
+    startlist_files = [f for f in pdf_files if 'start' in f.name.lower()]
+
+    if race and startlist_files:
+        race_lower = race.lower()
+        # Match run number
+        if 'run 1' in race_lower:
+            run1_files = [f for f in startlist_files if 'run-1' in f.name.lower() or 'run1' in f.name.lower()]
+            if run1_files:
+                return max(run1_files, key=lambda f: f.stat().st_mtime)
+        elif 'run 2' in race_lower:
+            run2_files = [f for f in startlist_files if 'run-2' in f.name.lower() or 'run2' in f.name.lower()]
+            if run2_files:
+                return max(run2_files, key=lambda f: f.stat().st_mtime)
+
+    if startlist_files:
+        return max(startlist_files, key=lambda f: f.stat().st_mtime)
+    return None
 
 
 def find_results_pdf(race: str = None):
@@ -460,18 +594,39 @@ def main():
     racers = parse_vola_excel(vola_file, race)
     print(f"Found {len(racers)} racers with valid timing")
 
-    # Merge in names from results PDF
-    if bib_to_info:
-        for racer in racers:
-            info = bib_to_info.get(racer.bib, {})
-            if info.get('name'):
-                racer.name = info['name']
-            if info.get('team'):
-                racer.team = info['team']
-            if info.get('ussa_id'):
-                racer.ussa_id = info['ussa_id']
-            if info.get('gender'):
-                racer.gender = info['gender']
+    # Also find start list PDF for supplementary name data
+    startlist_pdf = find_startlist_pdf(race)
+    startlist_info = {}
+    if startlist_pdf and startlist_pdf.exists():
+        print(f"Start list PDF: {startlist_pdf}")
+        startlist_info = parse_startlist_pdf(str(startlist_pdf))
+        print(f"  Found {len(startlist_info)} racers in start list")
+
+    # Merge in names: results PDF takes priority, startlist fills gaps
+    for racer in racers:
+        info = bib_to_info.get(racer.bib, {})
+        sl_info = startlist_info.get(racer.bib, {})
+
+        # Name: prefer results, fallback to startlist
+        name = info.get('name') or sl_info.get('name')
+        if name:
+            racer.name = name
+        # Team: prefer results, fallback to startlist
+        team = info.get('team') or sl_info.get('team')
+        if team:
+            racer.team = team
+        # USSA ID: only from results PDF
+        if info.get('ussa_id'):
+            racer.ussa_id = info['ussa_id']
+        # Gender: prefer results, fallback to startlist, fallback to bib range
+        gender = info.get('gender') or sl_info.get('gender')
+        if gender:
+            racer.gender = gender
+
+    # Report any racers still without names
+    unnamed = [r for r in racers if r.name.startswith('Bib')]
+    if unnamed:
+        print(f"  Warning: {len(unnamed)} racers still without names: {[r.bib for r in unnamed]}")
 
     if args.list_only:
         print("\nRacers:")
