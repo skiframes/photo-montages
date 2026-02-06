@@ -153,9 +153,11 @@ class FrameBuffer:
 
     def get_recent(self, seconds: float) -> List[tuple]:
         """Get frames from the last N seconds."""
-        if not self.buffer:
+        if not self.buffer or seconds <= 0:
             return []
         count = int(seconds * self.fps)
+        if count <= 0:
+            return []
         return list(self.buffer)[-count:]
 
 
@@ -401,7 +403,7 @@ class DetectionEngine:
         self.last_start_trigger = 0
 
         # Initialize frame buffer
-        buffer_seconds = self.config.pre_buffer_seconds + 5  # Extra buffer
+        buffer_seconds = (self.config.pre_buffer_seconds or 0) + 5  # Extra buffer
         self.frame_buffer = FrameBuffer(buffer_seconds, fps)
 
         # Use provided video start time, or try to extract from filename, or fall back to mtime

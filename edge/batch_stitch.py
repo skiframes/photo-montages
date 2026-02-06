@@ -24,6 +24,17 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
+# Use larger temp directory if available (avoid filling up small /tmp partitions)
+_alt_tmp = os.path.expanduser('~/tmp')
+if os.path.isdir(_alt_tmp) and not os.environ.get('TMPDIR'):
+    os.environ['TMPDIR'] = _alt_tmp
+    os.environ['TEMP'] = _alt_tmp
+    os.environ['TMP'] = _alt_tmp
+    # Also set tempfile.tempdir directly to override any cached value
+    import tempfile
+    tempfile.tempdir = _alt_tmp
+    print(f"[batch] Using temp directory: {_alt_tmp}")
+
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -180,16 +191,21 @@ def parse_vola_excel(vola_file: Path, race: str):
 
     # Build racer list
     racers = []
+    default_dnf_duration = 60.0  # Default duration for DSQ/DNF racers (no finish time)
     for bib in sorted(start_times.keys()):
-        if bib not in end_times:
-            continue
-
         start_sec = start_times[bib]
-        end_sec = end_times[bib]
-        duration = end_sec - start_sec
 
-        if duration <= 0:
-            continue
+        if bib in end_times:
+            end_sec = end_times[bib]
+            duration = end_sec - start_sec
+            if duration <= 0:
+                continue
+            status = 'finished'
+        else:
+            # DSQ/DNF/DNS: no finish time, use default duration
+            duration = default_dnf_duration
+            end_sec = start_sec + duration
+            status = 'DNF'
 
         # Determine gender from bib using NHARA bib ranges
         gender = get_gender_from_bib(bib)
@@ -203,7 +219,7 @@ def parse_vola_excel(vola_file: Path, race: str):
             finish_time_sec=end_sec,
             duration=duration,
             ussa_id='',
-            status='finished'
+            status=status
         ))
 
     return racers
@@ -503,6 +519,7 @@ def main():
     parser.add_argument('--test', type=int, default=0, help='Only process first N racers (0 = all)')
     parser.add_argument('--comparison', action='store_true', help='Generate comparison videos vs fastest')
     parser.add_argument('--list-only', action='store_true', help='List racers without processing')
+    parser.add_argument('--bibs', type=str, help='Comma-separated list of bib numbers to process (e.g., "181,182,187")')
     # Pre/post buffer in seconds (for first and last camera)
     parser.add_argument('--pre-buffer', type=float, default=2.0, help='Seconds before racer start (default: 2.0)')
     parser.add_argument('--post-buffer', type=float, default=2.0, help='Seconds after racer finish (default: 2.0)')
@@ -622,6 +639,15 @@ def main():
         gender = info.get('gender') or sl_info.get('gender')
         if gender:
             racer.gender = gender
+        # Status: update from results PDF (DSQ/DNF/DNS) if available
+        if info.get('status'):
+            racer.status = info['status']
+
+    # Remove DNS racers (Did Not Start - no video to process)
+    dns_racers = [r for r in racers if r.status == 'DNS']
+    if dns_racers:
+        print(f"  Removing {len(dns_racers)} DNS racers: {[r.bib for r in dns_racers]}")
+        racers = [r for r in racers if r.status != 'DNS']
 
     # Report any racers still without names
     unnamed = [r for r in racers if r.name.startswith('Bib')]
@@ -631,7 +657,8 @@ def main():
     if args.list_only:
         print("\nRacers:")
         for r in racers:
-            print(f"  Bib {r.bib}: {r.name} ({r.team}) - {r.duration:.2f}s ({r.gender})")
+            status_str = f" [{r.status}]" if r.status != 'finished' else ""
+            print(f"  Bib {r.bib}: {r.name} ({r.team}) - {r.duration:.2f}s ({r.gender}){status_str}")
         sys.exit(0)
 
     # Find video recordings
@@ -646,6 +673,15 @@ def main():
         print(f"\nWarning: Missing videos for: {missing}")
         response = input("Continue anyway? [y/N] ")
         if response.lower() != 'y':
+            sys.exit(1)
+
+    # Filter to specific bibs if requested
+    if args.bibs:
+        bib_filter = set(int(b.strip()) for b in args.bibs.split(','))
+        racers = [r for r in racers if r.bib in bib_filter]
+        print(f"\nFiltering to {len(racers)} racers with bibs: {sorted(bib_filter)}")
+        if not racers:
+            print("ERROR: No matching racers found for specified bibs")
             sys.exit(1)
 
     # Limit racers if test mode
