@@ -2437,14 +2437,24 @@ def compute_calibration_endpoint():
 
     gate_spec = GATE_SPECS.get(discipline, GATE_SPECS['sl_adult'])
 
+    # GPS world coordinates (Mode B) — None falls back to Mode A
+    world_coords = data.get('world_coords')
+
     try:
-        calibration = compute_calibration(gates, gate_spec, frame.shape)
+        calibration = compute_calibration(gates, gate_spec, frame.shape, world_coords=world_coords)
     except Exception as e:
         return jsonify({'error': f'Calibration failed: {str(e)}'}), 500
 
     calibration['camera_id'] = camera_id
     calibration['discipline'] = discipline
     calibration['frame_id'] = frame_id
+
+    # Store GPS metadata if provided
+    if data.get('gps_data'):
+        calibration['gps_data'] = data['gps_data']
+        calibration['calibration_mode'] = 'gps'
+    else:
+        calibration['calibration_mode'] = 'pixel'
 
     # Generate calibration ID
     ts = datetime.now().strftime('%Y-%m-%d_%H%M')

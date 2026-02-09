@@ -532,6 +532,157 @@
             transform: translate(-50%, -50%);
             font-weight: bold;
         }
+
+        /* GPS styles */
+        .gps-section {
+            margin-top: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .gps-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: #f0fdf4;
+            cursor: pointer;
+        }
+        .gps-toggle-row label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            cursor: pointer;
+        }
+        .gps-body {
+            padding: 10px 12px;
+            display: none;
+            font-size: 13px;
+        }
+        .gps-body.visible { display: block; }
+        .gps-accuracy {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        .gps-accuracy.rtk { background: #dcfce7; color: #15803d; }
+        .gps-accuracy.good { background: #dbeafe; color: #1d4ed8; }
+        .gps-accuracy.fair { background: #fef3c7; color: #92400e; }
+        .gps-accuracy.poor { background: #fecaca; color: #991b1b; }
+        .gps-camera-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .gps-status-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #94a3b8;
+        }
+        .gps-status-dot.captured { background: #16a34a; }
+        .gps-status-dot.watching { background: #f59e0b; animation: gpsPulse 1.5s infinite; }
+        @keyframes gpsPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* GPS walk overlay */
+        .gps-walk-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.92);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: white;
+        }
+        .gps-walk-overlay.visible { display: flex; }
+        .gps-walk-gate-label {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .gps-walk-accuracy {
+            font-size: 48px;
+            font-weight: 700;
+            margin: 16px 0;
+        }
+        .gps-walk-quality-bar {
+            width: 200px;
+            height: 6px;
+            border-radius: 3px;
+            background: #334155;
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+        .gps-walk-quality-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s, background 0.3s;
+        }
+        .gps-walk-buttons {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .gps-walk-buttons .btn {
+            min-width: 120px;
+            padding: 16px 24px;
+            font-size: 18px;
+        }
+        .gps-walk-dots {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+        .gps-walk-dot {
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: #475569;
+        }
+        .gps-walk-dot.captured { background: #16a34a; }
+        .gps-walk-dot.current { background: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.6); }
+        .gps-walk-cancel {
+            color: #94a3b8;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        .gps-walk-cancel:hover { color: white; }
+
+        /* GPS dot on gate pins */
+        .gate-pin-gps {
+            position: absolute;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #16a34a;
+            border: 1.5px solid white;
+            top: -3px; right: -3px;
+            z-index: 13;
+            pointer-events: none;
+        }
+
+        /* GPS summary in review card */
+        .gps-summary {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .gps-summary-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 0;
+        }
     </style>
 </head>
 <body>
@@ -907,7 +1058,37 @@
                 <div class="card" id="gatesDetectionCard" style="display: none;">
                     <div class="card-title">2. Gate Detection</div>
 
-                    <label for="gatesDiscipline">Discipline / Gate Type</label>
+                    <!-- GPS Section -->
+                    <div class="gps-section" id="gpsSection">
+                        <div class="gps-toggle-row" id="gpsToggleRow">
+                            <label for="gpsEnable">
+                                <span class="gps-status-dot" id="gpsStatusDot"></span>
+                                GPS Mode (Bad Elf)
+                            </label>
+                            <input type="checkbox" id="gpsEnable" style="width: 18px; height: 18px;">
+                        </div>
+                        <div class="gps-body" id="gpsBody">
+                            <div style="margin-bottom: 8px;">
+                                <span style="color: var(--text-muted);">Live accuracy:</span>
+                                <span class="gps-accuracy" id="gpsLiveAccuracy">—</span>
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+                                Camera Position
+                                <span style="font-style: italic;">— stand at the camera, tap Capture</span>
+                            </div>
+                            <div class="gps-camera-row">
+                                <button class="btn btn-sm btn-primary" id="gpsCaptureCamera">Capture Camera GPS</button>
+                                <button class="btn btn-sm btn-outline" id="gpsLoadSaved" style="display: none;">Use Saved</button>
+                            </div>
+                            <div id="gpsCameraInfo" style="display: none; margin-top: 6px; font-size: 12px; color: var(--success);">
+                                <span class="gps-status-dot captured"></span>
+                                Camera: <span id="gpsCameraLat"></span>, <span id="gpsCameraLon"></span>
+                                ±<span id="gpsCameraAcc"></span>m
+                            </div>
+                        </div>
+                    </div>
+
+                    <label for="gatesDiscipline" style="margin-top: 12px;">Discipline / Gate Type</label>
                     <select id="gatesDiscipline">
                         <option value="sl_youth">Slalom - Youth (U10-U12)</option>
                         <option value="sl_adult" selected>Slalom - Junior/Adult</option>
@@ -961,6 +1142,14 @@
 
                     <div id="gatesMinWarning" style="display: none; margin-top: 8px; padding: 8px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;">
                         Need at least 4 gates for calibration.
+                    </div>
+
+                    <!-- GPS Walk Gates -->
+                    <button class="btn btn-outline" id="gpsWalkGatesBtn" style="display: none; margin-top: 8px; width: 100%;">
+                        Walk Gates for GPS
+                    </button>
+                    <div id="gpsGateSummary" class="gps-summary" style="display: none;">
+                        <!-- Populated by JS after walking -->
                     </div>
 
                     <button class="btn btn-primary" id="gatesComputeBtn" style="margin-top: 12px; width: 100%;" disabled>
@@ -1250,6 +1439,24 @@
         Tap and drag to draw zone
     </div>
 
+    <!-- GPS Walk Gates Overlay -->
+    <div class="gps-walk-overlay" id="gpsWalkOverlay">
+        <div class="gps-walk-gate-label" id="gpsWalkGateLabel">Gate 1 (red)</div>
+        <div style="color: #94a3b8; font-size: 14px;">Walk to gate, wait for accuracy, tap Capture</div>
+        <div class="gps-walk-accuracy" id="gpsWalkAccuracy">—</div>
+        <div class="gps-walk-quality-bar">
+            <div class="gps-walk-quality-fill" id="gpsWalkQualityFill" style="width: 0%; background: #ef4444;"></div>
+        </div>
+        <div class="gps-walk-buttons">
+            <button class="btn btn-primary" id="gpsWalkCaptureBtn" style="background: #16a34a;">Capture</button>
+            <button class="btn btn-outline" id="gpsWalkSkipBtn" style="color: white; border-color: #475569;">Skip</button>
+        </div>
+        <div class="gps-walk-dots" id="gpsWalkDots">
+            <!-- Populated by JS -->
+        </div>
+        <div class="gps-walk-cancel" id="gpsWalkCancelBtn">Cancel Walk</div>
+    </div>
+
     <script>
         // State
         let state = {
@@ -1304,6 +1511,15 @@
             addGatePending: null,  // {top: [x,y]} while waiting for base tap
             gatesCalibrationId: null,
             gatesUploadedVideoPath: null,
+            // GPS state (Bad Elf GNSS)
+            gpsEnabled: false,
+            gpsCameraPosition: null,   // {lat, lon, alt, accuracy, timestamp}
+            gpsGatePositions: {},      // gate index → {lat, lon, alt, accuracy, timestamp}
+            gpsWatchId: null,          // from navigator.geolocation.watchPosition
+            gpsCurrentReading: null,   // latest live GPS reading
+            gpsWalkActive: false,      // walk-gates mode active
+            gpsWalkGateList: [],       // ordered list of active gate indices
+            gpsWalkCurrentIdx: 0,      // current position in walk list
         };
 
         // DOM Elements
@@ -3037,6 +3253,27 @@
             readjustBtn: document.getElementById('gatesReadjustBtn'),
             acceptBtn: document.getElementById('gatesAcceptBtn'),
             statusList: document.getElementById('gatesStatusList'),
+            // GPS elements
+            gpsEnable: document.getElementById('gpsEnable'),
+            gpsBody: document.getElementById('gpsBody'),
+            gpsStatusDot: document.getElementById('gpsStatusDot'),
+            gpsLiveAccuracy: document.getElementById('gpsLiveAccuracy'),
+            gpsCaptureCamera: document.getElementById('gpsCaptureCamera'),
+            gpsLoadSaved: document.getElementById('gpsLoadSaved'),
+            gpsCameraInfo: document.getElementById('gpsCameraInfo'),
+            gpsCameraLat: document.getElementById('gpsCameraLat'),
+            gpsCameraLon: document.getElementById('gpsCameraLon'),
+            gpsCameraAcc: document.getElementById('gpsCameraAcc'),
+            gpsWalkGatesBtn: document.getElementById('gpsWalkGatesBtn'),
+            gpsGateSummary: document.getElementById('gpsGateSummary'),
+            gpsWalkOverlay: document.getElementById('gpsWalkOverlay'),
+            gpsWalkGateLabel: document.getElementById('gpsWalkGateLabel'),
+            gpsWalkAccuracy: document.getElementById('gpsWalkAccuracy'),
+            gpsWalkQualityFill: document.getElementById('gpsWalkQualityFill'),
+            gpsWalkCaptureBtn: document.getElementById('gpsWalkCaptureBtn'),
+            gpsWalkSkipBtn: document.getElementById('gpsWalkSkipBtn'),
+            gpsWalkDots: document.getElementById('gpsWalkDots'),
+            gpsWalkCancelBtn: document.getElementById('gpsWalkCancelBtn'),
         };
 
         let gatesVideoDuration = 0;
@@ -3240,11 +3477,16 @@
                 }
 
                 state.gates = data.gates.map(g => ({ ...g, dismissed: false }));
+                state.gpsGatePositions = {};  // Clear GPS on re-detection
 
                 // Show review card with the original frame (pins rendered on top)
                 gatesEl.reviewCard.style.display = 'block';
                 gatesEl.frameImage.src = `/api/frame/${state.gatesFrameId}?t=${Date.now()}`;
                 gatesEl.frameImage.onload = () => renderGatePins();
+
+                // Show GPS walk button if GPS enabled
+                gatesEl.gpsWalkGatesBtn.style.display = state.gpsEnabled ? '' : 'none';
+                gatesEl.gpsGateSummary.style.display = 'none';
 
                 // Hide verify card
                 gatesEl.verifyCard.style.display = 'none';
@@ -3294,6 +3536,13 @@
                 topPin.style.top = topY + 'px';
                 topPin.dataset.gateIdx = idx;
                 topPin.dataset.point = 'top';
+                // GPS indicator dot
+                if (state.gpsEnabled && state.gpsGatePositions[idx]) {
+                    const gpsDot = document.createElement('div');
+                    gpsDot.className = 'gate-pin-gps';
+                    topPin.style.position = 'absolute';  // ensure relative positioning for child
+                    topPin.appendChild(gpsDot);
+                }
                 gatesEl.frameContainer.appendChild(topPin);
 
                 // Base pin
@@ -3474,6 +3723,13 @@
                 ? gatesEl.cameraSelect.value
                 : 'uploaded';
 
+            // Compute GPS world coordinates if available
+            const worldCoords = gpsComputeWorldCoords();
+            const gpsData = state.gpsEnabled && state.gpsCameraPosition ? {
+                camera_position: state.gpsCameraPosition,
+                gate_positions: state.gpsGatePositions,
+            } : null;
+
             try {
                 const res = await fetch('/api/calibrate/compute', {
                     method: 'POST',
@@ -3483,6 +3739,8 @@
                         camera_id: cameraId,
                         discipline: gatesEl.discipline.value,
                         gates: activeGates,
+                        world_coords: worldCoords,
+                        gps_data: gpsData,
                     }),
                 });
                 const data = await res.json();
@@ -3591,6 +3849,309 @@
             }
         }
 
+        // ========================================
+        // GPS Functions (Bad Elf GNSS)
+        // ========================================
+
+        function gpsGetAccuracyClass(meters) {
+            if (meters <= 0.2) return 'rtk';
+            if (meters <= 1.0) return 'good';
+            if (meters <= 3.0) return 'fair';
+            return 'poor';
+        }
+
+        function gpsGetAccuracyLabel(meters) {
+            const cls = gpsGetAccuracyClass(meters);
+            const labels = { rtk: 'RTK Fix', good: 'Good', fair: 'Fair', poor: 'Poor' };
+            return `±${meters.toFixed(2)}m (${labels[cls]})`;
+        }
+
+        function gpsStartWatching() {
+            if (state.gpsWatchId !== null) return;
+            if (!navigator.geolocation) {
+                showStatus('Geolocation not available', 'error');
+                return;
+            }
+            gatesEl.gpsStatusDot.classList.add('watching');
+            state.gpsWatchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    state.gpsCurrentReading = {
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude,
+                        alt: pos.coords.altitude || 0,
+                        accuracy: pos.coords.accuracy,
+                        timestamp: pos.timestamp,
+                    };
+                    gpsUpdateLiveDisplay();
+                },
+                (err) => {
+                    console.error('GPS error:', err);
+                    gatesEl.gpsLiveAccuracy.textContent = 'Error: ' + err.message;
+                    gatesEl.gpsLiveAccuracy.className = 'gps-accuracy poor';
+                },
+                { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+            );
+        }
+
+        function gpsStopWatching() {
+            if (state.gpsWatchId !== null) {
+                navigator.geolocation.clearWatch(state.gpsWatchId);
+                state.gpsWatchId = null;
+            }
+            gatesEl.gpsStatusDot.classList.remove('watching');
+        }
+
+        function gpsUpdateLiveDisplay() {
+            const r = state.gpsCurrentReading;
+            if (!r) {
+                gatesEl.gpsLiveAccuracy.textContent = '—';
+                gatesEl.gpsLiveAccuracy.className = 'gps-accuracy';
+                return;
+            }
+            const cls = gpsGetAccuracyClass(r.accuracy);
+            gatesEl.gpsLiveAccuracy.textContent = gpsGetAccuracyLabel(r.accuracy);
+            gatesEl.gpsLiveAccuracy.className = `gps-accuracy ${cls}`;
+
+            // Update walk overlay if active
+            if (state.gpsWalkActive) {
+                gatesEl.gpsWalkAccuracy.textContent = `±${r.accuracy.toFixed(2)}m`;
+                gatesEl.gpsWalkAccuracy.style.color = cls === 'rtk' ? '#4ade80' : cls === 'good' ? '#60a5fa' : cls === 'fair' ? '#fbbf24' : '#f87171';
+                // Quality bar: 100% at 0.05m, 0% at 5m (log scale)
+                const pct = Math.max(0, Math.min(100, (1 - Math.log10(r.accuracy / 0.05) / Math.log10(5 / 0.05)) * 100));
+                gatesEl.gpsWalkQualityFill.style.width = pct + '%';
+                gatesEl.gpsWalkQualityFill.style.background = cls === 'rtk' ? '#4ade80' : cls === 'good' ? '#60a5fa' : cls === 'fair' ? '#fbbf24' : '#f87171';
+            }
+        }
+
+        function gpsCaptureCamera() {
+            const r = state.gpsCurrentReading;
+            if (!r) {
+                showStatus('No GPS reading yet — wait for signal', 'error');
+                return;
+            }
+            state.gpsCameraPosition = { ...r };
+            // Save to localStorage for reuse
+            try {
+                localStorage.setItem('skiframes_gps_camera', JSON.stringify(state.gpsCameraPosition));
+            } catch (e) { /* ignore */ }
+            gpsShowCameraInfo();
+            showStatus(`Camera GPS captured: ±${r.accuracy.toFixed(2)}m`, 'success');
+        }
+
+        function gpsLoadSavedCamera() {
+            try {
+                const saved = JSON.parse(localStorage.getItem('skiframes_gps_camera'));
+                if (saved && saved.lat) {
+                    state.gpsCameraPosition = saved;
+                    gpsShowCameraInfo();
+                    showStatus('Loaded saved camera GPS position', 'success');
+                }
+            } catch (e) {
+                showStatus('No saved camera position found', 'error');
+            }
+        }
+
+        function gpsShowCameraInfo() {
+            const p = state.gpsCameraPosition;
+            if (!p) return;
+            gatesEl.gpsCameraLat.textContent = p.lat.toFixed(6);
+            gatesEl.gpsCameraLon.textContent = p.lon.toFixed(6);
+            gatesEl.gpsCameraAcc.textContent = p.accuracy.toFixed(2);
+            gatesEl.gpsCameraInfo.style.display = 'block';
+            gatesEl.gpsStatusDot.classList.add('captured');
+        }
+
+        function gpsCheckSavedCamera() {
+            try {
+                const saved = JSON.parse(localStorage.getItem('skiframes_gps_camera'));
+                if (saved && saved.lat) {
+                    gatesEl.gpsLoadSaved.style.display = '';
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        // --- Walk Gates Mode ---
+
+        function gpsStartWalkGates() {
+            const activeGates = state.gates
+                .map((g, idx) => ({ gate: g, idx }))
+                .filter(item => !item.gate.dismissed);
+            if (activeGates.length < 4) {
+                showStatus('Need at least 4 active gates to walk', 'error');
+                return;
+            }
+            if (!state.gpsCameraPosition) {
+                showStatus('Capture camera GPS position first', 'error');
+                return;
+            }
+            if (!state.gpsCurrentReading) {
+                showStatus('Waiting for GPS signal...', 'error');
+                return;
+            }
+
+            state.gpsWalkActive = true;
+            state.gpsWalkGateList = activeGates;
+            state.gpsWalkCurrentIdx = 0;
+
+            gpsWalkRenderUI();
+            gatesEl.gpsWalkOverlay.classList.add('visible');
+        }
+
+        function gpsWalkRenderUI() {
+            const list = state.gpsWalkGateList;
+            const cur = state.gpsWalkCurrentIdx;
+            const gate = list[cur].gate;
+
+            // Gate label
+            gatesEl.gpsWalkGateLabel.textContent = `Gate ${gate.id} (${gate.color})`;
+            gatesEl.gpsWalkGateLabel.style.color = gate.color === 'red' ? '#f87171' : '#60a5fa';
+
+            // Progress dots
+            let dotsHtml = '';
+            list.forEach((item, i) => {
+                const cls = i < cur ? 'captured' : i === cur ? 'current' : '';
+                dotsHtml += `<div class="gps-walk-dot ${cls}"></div>`;
+            });
+            gatesEl.gpsWalkDots.innerHTML = dotsHtml;
+        }
+
+        function gpsWalkCaptureCurrent() {
+            const r = state.gpsCurrentReading;
+            if (!r) {
+                showStatus('No GPS reading', 'error');
+                return;
+            }
+            const item = state.gpsWalkGateList[state.gpsWalkCurrentIdx];
+            state.gpsGatePositions[item.idx] = { ...r };
+            gpsWalkAdvance();
+        }
+
+        function gpsWalkSkipCurrent() {
+            gpsWalkAdvance();
+        }
+
+        function gpsWalkAdvance() {
+            state.gpsWalkCurrentIdx++;
+            if (state.gpsWalkCurrentIdx >= state.gpsWalkGateList.length) {
+                gpsWalkFinish();
+            } else {
+                gpsWalkRenderUI();
+            }
+        }
+
+        function gpsWalkFinish() {
+            state.gpsWalkActive = false;
+            gatesEl.gpsWalkOverlay.classList.remove('visible');
+
+            // Count captured
+            const captured = Object.keys(state.gpsGatePositions).length;
+            const total = state.gpsWalkGateList.length;
+            showStatus(`GPS captured for ${captured}/${total} gates`, captured === total ? 'success' : 'warning');
+
+            // Show summary
+            gpsRenderSummary();
+            // Re-render pins to show GPS indicators
+            renderGatePins();
+        }
+
+        function gpsRenderSummary() {
+            const activeGates = state.gates
+                .map((g, idx) => ({ gate: g, idx }))
+                .filter(item => !item.gate.dismissed);
+
+            let html = '<div style="font-weight: 600; margin-bottom: 4px;">GPS Positions:</div>';
+            activeGates.forEach(item => {
+                const gps = state.gpsGatePositions[item.idx];
+                if (gps) {
+                    const cls = gpsGetAccuracyClass(gps.accuracy);
+                    html += `<div class="gps-summary-item">
+                        <span class="gps-status-dot captured"></span>
+                        ${item.gate.id}: <span class="gps-accuracy ${cls}" style="font-size: 11px; padding: 0 4px;">±${gps.accuracy.toFixed(2)}m</span>
+                    </div>`;
+                } else {
+                    html += `<div class="gps-summary-item">
+                        <span class="gps-status-dot"></span>
+                        ${item.gate.id}: <span style="color: var(--text-muted);">skipped</span>
+                    </div>`;
+                }
+            });
+            gatesEl.gpsGateSummary.innerHTML = html;
+            gatesEl.gpsGateSummary.style.display = 'block';
+        }
+
+        // --- WGS84 → Local ENU Conversion ---
+
+        function gpsToENU(lat, lon, alt, refLat, refLon, refAlt) {
+            // WGS84 ellipsoid constants
+            const a = 6378137.0;             // semi-major axis (m)
+            const f = 1 / 298.257223563;     // flattening
+            const e2 = 2 * f - f * f;        // eccentricity squared
+
+            const degToRad = Math.PI / 180;
+            const latR = lat * degToRad;
+            const lonR = lon * degToRad;
+            const refLatR = refLat * degToRad;
+            const refLonR = refLon * degToRad;
+
+            // Convert both to ECEF
+            function toECEF(latR, lonR, h) {
+                const sinLat = Math.sin(latR);
+                const cosLat = Math.cos(latR);
+                const sinLon = Math.sin(lonR);
+                const cosLon = Math.cos(lonR);
+                const N = a / Math.sqrt(1 - e2 * sinLat * sinLat);
+                return {
+                    x: (N + h) * cosLat * cosLon,
+                    y: (N + h) * cosLat * sinLon,
+                    z: (N * (1 - e2) + h) * sinLat,
+                };
+            }
+
+            const ref = toECEF(refLatR, refLonR, refAlt);
+            const pt = toECEF(latR, lonR, alt);
+
+            // Difference in ECEF
+            const dx = pt.x - ref.x;
+            const dy = pt.y - ref.y;
+            const dz = pt.z - ref.z;
+
+            // Rotation matrix ECEF → ENU
+            const sinRefLat = Math.sin(refLatR);
+            const cosRefLat = Math.cos(refLatR);
+            const sinRefLon = Math.sin(refLonR);
+            const cosRefLon = Math.cos(refLonR);
+
+            const east  = -sinRefLon * dx + cosRefLon * dy;
+            const north = -sinRefLat * cosRefLon * dx - sinRefLat * sinRefLon * dy + cosRefLat * dz;
+            const up    =  cosRefLat * cosRefLon * dx + cosRefLat * sinRefLon * dy + sinRefLat * dz;
+
+            return { east, north, up };
+        }
+
+        function gpsComputeWorldCoords() {
+            if (!state.gpsEnabled || !state.gpsCameraPosition) return null;
+
+            const activeGates = state.gates
+                .map((g, idx) => ({ gate: g, idx }))
+                .filter(item => !item.gate.dismissed);
+
+            // Check all active gates have GPS
+            for (const item of activeGates) {
+                if (!state.gpsGatePositions[item.idx]) {
+                    return null; // Fallback to Mode A
+                }
+            }
+
+            const cam = state.gpsCameraPosition;
+            const coords = activeGates.map(item => {
+                const gps = state.gpsGatePositions[item.idx];
+                const enu = gpsToENU(gps.lat, gps.lon, gps.alt, cam.lat, cam.lon, cam.alt);
+                return [enu.east, enu.north, enu.up];
+            });
+
+            return coords;
+        }
+
         function setupGatesEventListeners() {
             // Source type toggle
             gatesEl.sourceRtsp.addEventListener('click', () => gatesSwitchSource('rtsp'));
@@ -3670,6 +4231,41 @@
                 if (state.mode === 'gates' && state.gates.length > 0) {
                     renderGatePins();
                 }
+            });
+
+            // --- GPS Event Listeners ---
+            gatesEl.gpsEnable.addEventListener('change', (e) => {
+                state.gpsEnabled = e.target.checked;
+                gatesEl.gpsBody.classList.toggle('visible', state.gpsEnabled);
+                if (state.gpsEnabled) {
+                    gpsStartWatching();
+                    gpsCheckSavedCamera();
+                    // Show walk gates button if review card is visible
+                    if (gatesEl.reviewCard.style.display !== 'none') {
+                        gatesEl.gpsWalkGatesBtn.style.display = '';
+                    }
+                } else {
+                    gpsStopWatching();
+                    gatesEl.gpsWalkGatesBtn.style.display = 'none';
+                }
+            });
+
+            // Toggle row click (not just checkbox)
+            document.getElementById('gpsToggleRow').addEventListener('click', (e) => {
+                if (e.target !== gatesEl.gpsEnable) {
+                    gatesEl.gpsEnable.checked = !gatesEl.gpsEnable.checked;
+                    gatesEl.gpsEnable.dispatchEvent(new Event('change'));
+                }
+            });
+
+            gatesEl.gpsCaptureCamera.addEventListener('click', gpsCaptureCamera);
+            gatesEl.gpsLoadSaved.addEventListener('click', gpsLoadSavedCamera);
+            gatesEl.gpsWalkGatesBtn.addEventListener('click', gpsStartWalkGates);
+            gatesEl.gpsWalkCaptureBtn.addEventListener('click', gpsWalkCaptureCurrent);
+            gatesEl.gpsWalkSkipBtn.addEventListener('click', gpsWalkSkipCurrent);
+            gatesEl.gpsWalkCancelBtn.addEventListener('click', () => {
+                state.gpsWalkActive = false;
+                gatesEl.gpsWalkOverlay.classList.remove('visible');
             });
         }
 
