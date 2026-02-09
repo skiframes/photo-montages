@@ -1,0 +1,7 @@
+[Unit]
+Description=Sync skiframes montages to S3
+
+[Service]
+Type=oneshot
+User=paul
+ExecStart=/home/paul/skiframes/photo-montages/infrastructure/sync-montages.sh --auto

@@ -1,0 +1,9 @@
+[Unit]
+Description=Sync skiframes montages to S3 every 5 seconds
+
+[Timer]
+OnBootSec=10
+OnUnitActiveSec=5
+
+[Install]
+WantedBy=timers.target
