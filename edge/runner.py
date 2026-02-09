@@ -383,15 +383,27 @@ class SkiFramesRunner:
                 "variants": {}
             }
             for variant, m in pair.results.items():
+                # Use relative paths from session dir (e.g., "thumbnails/run_001_thumb.jpg")
+                # to preserve subdirectory structure for S3 upload
+                try:
+                    thumb_rel = os.path.relpath(m.thumbnail_path, self.session_dir)
+                    full_rel = os.path.relpath(m.fullres_path, self.session_dir)
+                except ValueError:
+                    thumb_rel = os.path.basename(m.thumbnail_path)
+                    full_rel = os.path.basename(m.fullres_path)
                 run_entry["variants"][variant] = {
-                    "thumbnail": os.path.basename(m.thumbnail_path),
-                    "fullres": os.path.basename(m.fullres_path),
+                    "thumbnail": thumb_rel,
+                    "fullres": full_rel,
                     "frame_count": m.frame_count,
                 }
             runs.append(run_entry)
 
         manifest = {
             "session_id": self.config.session_id,
+            "event_type": self.raw_config.get('session_type', 'training'),
+            "discipline": self.raw_config.get('discipline', 'freeski'),
+            "group": self.raw_config.get('group', ''),
+            "event_date": self.race_date,
             "generated_at": datetime.now().isoformat(),
             "runs": runs,
         }

@@ -474,6 +474,64 @@
             color: var(--text-muted);
             margin-top: 4px;
         }
+
+        /* Gate calibration pins */
+        .gate-pin {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid white;
+            transform: translate(-50%, -50%);
+            cursor: grab;
+            z-index: 10;
+            touch-action: none;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+        .gate-pin:active, .gate-pin.dragging {
+            cursor: grabbing;
+            box-shadow: 0 0 8px rgba(255,255,255,0.8);
+            transform: translate(-50%, -50%) scale(1.3);
+        }
+        .gate-pin.red { background: rgba(220, 38, 38, 0.85); }
+        .gate-pin.blue { background: rgba(37, 99, 235, 0.85); }
+        .gate-pin.dismissed { opacity: 0.25; pointer-events: none; }
+
+        .gate-label {
+            position: absolute;
+            background: rgba(0,0,0,0.75);
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 1px 5px;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 11;
+            transform: translate(8px, -50%);
+        }
+
+        .gate-line {
+            position: absolute;
+            pointer-events: none;
+            z-index: 9;
+        }
+
+        .gate-dismiss {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: rgba(220, 38, 38, 0.9);
+            color: white;
+            font-size: 12px;
+            line-height: 18px;
+            text-align: center;
+            cursor: pointer;
+            z-index: 12;
+            border: none;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -785,9 +843,167 @@
         </div>
 
         <!-- ============================================ -->
-        <!-- PHOTO MONTAGE MODE UI (original)           -->
+        <!-- PHOTO MONTAGE MODE (Gates + Free Skiing)   -->
         <!-- ============================================ -->
         <div id="montageMode">
+
+            <!-- Sub-mode toggle: Gates / Race (default) vs Free Skiing -->
+            <div class="card">
+                <div class="card-title">Photo Montage Mode</div>
+                <div class="btn-group">
+                    <button class="btn btn-primary mode-btn" id="subModeGates">Gates / Race</button>
+                    <button class="btn btn-outline mode-btn" id="subModeFreeSki">Free Skiing</button>
+                </div>
+            </div>
+
+            <!-- ======= GATES / RACE SUB-MODE ======= -->
+            <div id="gatesMode">
+                <!-- Card 1: Frame Source -->
+                <div class="card">
+                    <div class="card-title">1. Frame Source</div>
+
+                    <label for="gatesSourceType">Source</label>
+                    <div class="btn-group" style="margin-bottom: 12px;">
+                        <button class="btn btn-primary btn-sm" id="gatesSourceRtsp">RTSP</button>
+                        <button class="btn btn-outline btn-sm" id="gatesSourceVideo">Video File</button>
+                    </div>
+
+                    <div id="gatesRtspSection">
+                        <label for="gatesCameraSelect">Camera</label>
+                        <select id="gatesCameraSelect"></select>
+                    </div>
+
+                    <div id="gatesVideoSection" style="display: none;">
+                        <label for="gatesVideoDropdown">Video File</label>
+                        <select id="gatesVideoDropdown">
+                            <option value="">Select a video...</option>
+                        </select>
+
+                        <label>Seek Position</label>
+                        <input type="range" id="gatesSeekPosition" min="0" max="100" value="0" step="0.1">
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted);">
+                            <span id="gatesSeekTime">0:00</span>
+                            <span id="gatesVideoDuration">0:00</span>
+                        </div>
+
+                        <div style="margin-top: 8px;">
+                            <input type="file" id="gatesVideoUploadInput" accept="video/*" style="display:none">
+                            <button class="btn btn-outline btn-sm" id="gatesUploadVideo">Upload Test Video</button>
+                            <div id="gatesUploadProgress" style="display:none; margin-top: 8px;">
+                                <div style="background: var(--border); border-radius: 4px; height: 6px; overflow: hidden;">
+                                    <div id="gatesUploadFill" style="background: var(--primary); height: 100%; width: 0%; transition: width 0.3s;"></div>
+                                </div>
+                                <span id="gatesUploadStatus" style="font-size: 12px; color: var(--text-muted);">Uploading...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" id="gatesGrabFrame" style="margin-top: 12px; width: 100%;">
+                        Grab Frame
+                    </button>
+                </div>
+
+                <!-- Card 2: Detection Settings -->
+                <div class="card" id="gatesDetectionCard" style="display: none;">
+                    <div class="card-title">2. Gate Detection</div>
+
+                    <label for="gatesDiscipline">Discipline / Gate Type</label>
+                    <select id="gatesDiscipline">
+                        <option value="sl_youth">Slalom - Youth (U10-U12)</option>
+                        <option value="sl_adult" selected>Slalom - Junior/Adult</option>
+                        <option value="gs_panel">GS Panel</option>
+                        <option value="sg_panel">Super-G Panel</option>
+                    </select>
+
+                    <div style="margin-top: 8px;">
+                        <a href="#" id="gatesAdvancedToggle" style="font-size: 13px; color: var(--text-muted); text-decoration: none;">
+                            Advanced Detection Settings <span id="gatesAdvancedArrow">&#9654;</span>
+                        </a>
+                        <div id="gatesAdvancedSettings" style="display: none; margin-top: 8px;">
+                            <label>Min Gate Height (px): <span id="gatesMinHeightVal">30</span></label>
+                            <input type="range" id="gatesMinHeight" min="10" max="200" value="30">
+                            <label>Max Gate Height (px): <span id="gatesMaxHeightVal">800</span></label>
+                            <input type="range" id="gatesMaxHeight" min="100" max="2000" value="800">
+                            <label>Saturation Threshold: <span id="gatesSatThreshVal">120</span></label>
+                            <input type="range" id="gatesSatThresh" min="50" max="255" value="120">
+                            <label>Value Threshold: <span id="gatesValThreshVal">80</span></label>
+                            <input type="range" id="gatesValThresh" min="30" max="255" value="80">
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" id="gatesDetectBtn" style="margin-top: 12px; width: 100%;">
+                        Detect Gates
+                    </button>
+                </div>
+
+                <!-- Card 3: Gate Review -->
+                <div class="card" id="gatesReviewCard" style="display: none;">
+                    <div class="card-title">3. Review & Adjust Gates</div>
+
+                    <div id="gatesFrameContainer" style="position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: none;">
+                        <img id="gatesFrameImage" style="display: block; width: 100%; user-select: none; -webkit-user-drag: none;" draggable="false">
+                        <!-- Gate pins are dynamically added here -->
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                        <div id="gatesCount" style="font-size: 14px; color: var(--text-muted);">
+                            0 gates detected
+                        </div>
+                        <div>
+                            <button class="btn btn-outline btn-sm" id="gatesAddBtn">+ Add Gate</button>
+                        </div>
+                    </div>
+
+                    <div id="gatesAddInstructions" style="display: none; margin-top: 8px; padding: 8px; background: #f0f9ff; border-radius: 6px; font-size: 13px; color: var(--primary);">
+                        Tap the <strong>top</strong> of the gate pole, then tap the <strong>base</strong>.
+                        <button class="btn btn-outline btn-sm" id="gatesCancelAdd" style="margin-left: 8px; font-size: 11px;">Cancel</button>
+                    </div>
+
+                    <div id="gatesMinWarning" style="display: none; margin-top: 8px; padding: 8px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;">
+                        Need at least 4 gates for calibration.
+                    </div>
+
+                    <button class="btn btn-primary" id="gatesComputeBtn" style="margin-top: 12px; width: 100%;" disabled>
+                        Compute Calibration
+                    </button>
+                </div>
+
+                <!-- Card 4: Verification -->
+                <div class="card" id="gatesVerifyCard" style="display: none;">
+                    <div class="card-title">4. Verify Calibration</div>
+
+                    <div style="border-radius: 8px; overflow: hidden; background: #000;">
+                        <img id="gatesVerifyImage" style="display: block; width: 100%;">
+                    </div>
+
+                    <div style="margin-top: 8px; font-size: 14px;">
+                        Reprojection Error: <strong id="gatesReprojError">—</strong> px
+                        <span id="gatesReprojQuality" style="margin-left: 8px;"></span>
+                        <br><span style="font-size: 12px; color: var(--text-muted);">Focal length: <span id="gatesFocalLength">—</span> px</span>
+                    </div>
+                    <div id="gatesPerGateErrors" style="display: none; margin-top: 6px; font-size: 12px; line-height: 1.6;"></div>
+
+                    <div style="display: flex; gap: 8px; margin-top: 12px;">
+                        <button class="btn btn-outline" id="gatesReadjustBtn" style="flex: 1;">
+                            Re-adjust Gates
+                        </button>
+                        <button class="btn btn-primary" id="gatesAcceptBtn" style="flex: 1;">
+                            Accept Calibration
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card 5: Calibration Status -->
+                <div class="card" id="gatesStatusCard">
+                    <div class="card-title">Calibration Status</div>
+                    <div id="gatesStatusList" style="font-size: 14px; color: var(--text-muted);">
+                        Loading...
+                    </div>
+                </div>
+            </div><!-- end gatesMode -->
+
+            <!-- ======= FREE SKIING SUB-MODE ======= -->
+            <div id="freeSkiMode" style="display: none;">
             <!-- Active Session Warning -->
             <div id="activeSession" class="active-session" style="display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1025,6 +1241,7 @@
                 Stop Processing
             </button>
         </div>
+        </div><!-- end freeSkiMode -->
         </div><!-- end montageMode -->
     </div>
 
@@ -1037,6 +1254,7 @@
         // State
         let state = {
             mode: 'montage',  // 'montage' or 'stitch'
+            montageSubMode: 'gates',  // 'gates' or 'freeski'
             frameId: null,
             frameWidth: 0,
             frameHeight: 0,
@@ -1073,6 +1291,19 @@
             cameras: [],  // Camera list with offset percentages
             selectedLogos: [],  // List of selected logo filenames in order
             availableLogos: [],  // All available logos
+            // Gates mode state
+            gatesSourceType: 'rtsp',
+            gatesFrameId: null,
+            gatesFrameWidth: 0,
+            gatesFrameHeight: 0,
+            gates: [],
+            gatesDiscipline: 'sl_adult',
+            draggingPin: null,  // {gateIdx, point: 'top'|'base'}
+            addGateMode: false,
+            addGateTapCount: 0,  // 0=waiting for top, 1=waiting for base
+            addGatePending: null,  // {top: [x,y]} while waiting for base tap
+            gatesCalibrationId: null,
+            gatesUploadedVideoPath: null,
         };
 
         // DOM Elements
@@ -1154,6 +1385,11 @@
             modeStitch: document.getElementById('modeStitch'),
             montageMode: document.getElementById('montageMode'),
             stitchMode: document.getElementById('stitchMode'),
+            // Sub-mode elements (inside Photo Montage)
+            subModeGates: document.getElementById('subModeGates'),
+            subModeFreeSki: document.getElementById('subModeFreeSki'),
+            gatesMode: document.getElementById('gatesMode'),
+            freeSkiMode: document.getElementById('freeSkiMode'),
             // Stitch elements
             stitchVolaFile: document.getElementById('stitchVolaFile'),
             stitchStartlistFile: document.getElementById('stitchStartlistFile'),
@@ -1232,6 +1468,8 @@
             if (elements.sourceType.value === 'rtsp') {
                 await checkActiveSession();
             }
+            // Default to Gates sub-mode within Photo Montage
+            switchSubMode('gates');
         }
 
         async function loadVideos() {
@@ -1868,11 +2106,17 @@
                 }
                 console.log('cameraId:', cameraId);
 
+                // Determine discipline: gates mode uses the dropdown, freeski mode is 'freeski'
+                const discipline = state.montageSubMode === 'gates'
+                    ? document.getElementById('gatesDiscipline').value
+                    : 'freeski';
+
                 const config = {
                     camera_id: cameraId,
                     calibration_frame_id: state.frameId,
                     session_type: elements.sessionType.value,
                     group: elements.group.value,
+                    discipline: discipline,
                     start_zone: state.startZone,
                     end_zone: state.endMode === 'zone' ? state.endZone : null,  // Only include if zone mode
                     crop_zone: state.cropZone || null,  // Optional - if set, overrides trigger zone crop calculation
@@ -1963,11 +2207,31 @@
                         showStatus(`Processing started. Job ID: ${processData.job_id}`, 'info');
                     }
                 } else {
-                    // For RTSP, just show session started
-                    showStatus(`Live session started: ${data.session_id}`, 'success');
-                    elements.activeSession.style.display = 'block';
-                    elements.activeSessionId.textContent = data.session_id;
-                    elements.activeSessionEnd.textContent = new Date(config.session_end_time).toLocaleTimeString();
+                    // For RTSP, launch live detection process
+                    showStatus(`Config saved: ${data.session_id}. Starting live detection...`, 'info');
+
+                    const processRes = await fetch('/api/process/rtsp', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ config_path: data.config_path })
+                    });
+
+                    const processData = await processRes.json();
+                    console.log('RTSP process response:', processData);
+
+                    if (processData.error) {
+                        showStatus(`Detection error: ${processData.error}`, 'error');
+                    } else {
+                        state.currentJobId = processData.job_id;
+                        elements.processingStatus.style.display = 'block';
+                        elements.processingStatusText.textContent = 'Monitoring RTSP stream...';
+                        elements.processingRuns.textContent = '0';
+                        startStatusPolling();
+                        showStatus(`Live detection started. Job ID: ${processData.job_id}`, 'success');
+                        elements.activeSession.style.display = 'block';
+                        elements.activeSessionId.textContent = data.session_id;
+                        elements.activeSessionEnd.textContent = new Date(config.session_end_time).toLocaleTimeString();
+                    }
                 }
 
             } catch (e) {
@@ -2085,24 +2349,49 @@
 
         function switchMode(mode) {
             state.mode = mode;
+            // Hide all mode divs
+            elements.montageMode.style.display = 'none';
+            elements.stitchMode.style.display = 'none';
+            // Reset all mode buttons
+            [elements.modeCalibration, elements.modeStitch].forEach(btn => {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-outline');
+            });
+
             if (mode === 'montage') {
                 elements.montageMode.style.display = 'block';
-                elements.stitchMode.style.display = 'none';
                 elements.modeCalibration.classList.add('btn-primary');
                 elements.modeCalibration.classList.remove('btn-outline');
-                elements.modeStitch.classList.remove('btn-primary');
-                elements.modeStitch.classList.add('btn-outline');
-            } else {
-                elements.montageMode.style.display = 'none';
+                // Initialize the active sub-mode
+                switchSubMode(state.montageSubMode || 'gates');
+            } else if (mode === 'stitch') {
                 elements.stitchMode.style.display = 'block';
                 elements.modeStitch.classList.add('btn-primary');
                 elements.modeStitch.classList.remove('btn-outline');
-                elements.modeCalibration.classList.remove('btn-primary');
-                elements.modeCalibration.classList.add('btn-outline');
                 // Load stitch-specific data
                 loadStitchVolaFiles();
                 loadStitchConfigs();
                 loadLogos();
+            }
+        }
+
+        function switchSubMode(subMode) {
+            state.montageSubMode = subMode;
+            // Toggle sub-mode buttons
+            elements.subModeGates.classList.remove('btn-primary', 'btn-outline');
+            elements.subModeFreeSki.classList.remove('btn-primary', 'btn-outline');
+            // Toggle sub-mode content
+            if (subMode === 'gates') {
+                elements.subModeGates.classList.add('btn-primary');
+                elements.subModeFreeSki.classList.add('btn-outline');
+                elements.gatesMode.style.display = 'block';
+                elements.freeSkiMode.style.display = 'none';
+                initGatesMode();
+            } else {
+                elements.subModeFreeSki.classList.add('btn-primary');
+                elements.subModeGates.classList.add('btn-outline');
+                elements.gatesMode.style.display = 'none';
+                elements.freeSkiMode.style.display = 'block';
             }
         }
 
@@ -2614,6 +2903,8 @@
         function setupStitchEventListeners() {
             elements.modeCalibration.addEventListener('click', () => switchMode('montage'));
             elements.modeStitch.addEventListener('click', () => switchMode('stitch'));
+            elements.subModeGates.addEventListener('click', () => switchSubMode('gates'));
+            elements.subModeFreeSki.addEventListener('click', () => switchSubMode('freeski'));
             elements.stitchLoadRacers.addEventListener('click', loadStitchRacers);
             elements.stitchConfigSelect.addEventListener('change', () => {
                 loadStitchConfigValues(elements.stitchConfigSelect.value);
@@ -2696,9 +2987,696 @@
             }
         }
 
+        // ============================================
+        // GATES CALIBRATION MODE FUNCTIONS
+        // ============================================
+
+        const gatesEl = {
+            sourceRtsp: document.getElementById('gatesSourceRtsp'),
+            sourceVideo: document.getElementById('gatesSourceVideo'),
+            rtspSection: document.getElementById('gatesRtspSection'),
+            videoSection: document.getElementById('gatesVideoSection'),
+            cameraSelect: document.getElementById('gatesCameraSelect'),
+            videoDropdown: document.getElementById('gatesVideoDropdown'),
+            seekPosition: document.getElementById('gatesSeekPosition'),
+            seekTime: document.getElementById('gatesSeekTime'),
+            videoDuration: document.getElementById('gatesVideoDuration'),
+            grabFrame: document.getElementById('gatesGrabFrame'),
+            uploadVideo: document.getElementById('gatesUploadVideo'),
+            videoUploadInput: document.getElementById('gatesVideoUploadInput'),
+            uploadProgress: document.getElementById('gatesUploadProgress'),
+            uploadFill: document.getElementById('gatesUploadFill'),
+            uploadStatus: document.getElementById('gatesUploadStatus'),
+            detectionCard: document.getElementById('gatesDetectionCard'),
+            discipline: document.getElementById('gatesDiscipline'),
+            advancedToggle: document.getElementById('gatesAdvancedToggle'),
+            advancedArrow: document.getElementById('gatesAdvancedArrow'),
+            advancedSettings: document.getElementById('gatesAdvancedSettings'),
+            minHeight: document.getElementById('gatesMinHeight'),
+            minHeightVal: document.getElementById('gatesMinHeightVal'),
+            maxHeight: document.getElementById('gatesMaxHeight'),
+            maxHeightVal: document.getElementById('gatesMaxHeightVal'),
+            satThresh: document.getElementById('gatesSatThresh'),
+            satThreshVal: document.getElementById('gatesSatThreshVal'),
+            valThresh: document.getElementById('gatesValThresh'),
+            valThreshVal: document.getElementById('gatesValThreshVal'),
+            detectBtn: document.getElementById('gatesDetectBtn'),
+            reviewCard: document.getElementById('gatesReviewCard'),
+            frameContainer: document.getElementById('gatesFrameContainer'),
+            frameImage: document.getElementById('gatesFrameImage'),
+            gatesCount: document.getElementById('gatesCount'),
+            addBtn: document.getElementById('gatesAddBtn'),
+            addInstructions: document.getElementById('gatesAddInstructions'),
+            cancelAdd: document.getElementById('gatesCancelAdd'),
+            minWarning: document.getElementById('gatesMinWarning'),
+            computeBtn: document.getElementById('gatesComputeBtn'),
+            verifyCard: document.getElementById('gatesVerifyCard'),
+            verifyImage: document.getElementById('gatesVerifyImage'),
+            reprojError: document.getElementById('gatesReprojError'),
+            reprojQuality: document.getElementById('gatesReprojQuality'),
+            readjustBtn: document.getElementById('gatesReadjustBtn'),
+            acceptBtn: document.getElementById('gatesAcceptBtn'),
+            statusList: document.getElementById('gatesStatusList'),
+        };
+
+        let gatesVideoDuration = 0;
+
+        async function initGatesMode() {
+            // Populate camera dropdown
+            try {
+                const res = await fetch('/api/cameras');
+                const cameras = await res.json();
+                gatesEl.cameraSelect.innerHTML = cameras.map(c =>
+                    `<option value="${c.id}">${c.name}</option>`
+                ).join('');
+            } catch (e) { console.error('Failed to load cameras:', e); }
+
+            // Load calibration status
+            loadCalibrationStatus();
+        }
+
+        function gatesSwitchSource(type) {
+            state.gatesSourceType = type;
+            if (type === 'rtsp') {
+                gatesEl.sourceRtsp.classList.add('btn-primary');
+                gatesEl.sourceRtsp.classList.remove('btn-outline');
+                gatesEl.sourceVideo.classList.remove('btn-primary');
+                gatesEl.sourceVideo.classList.add('btn-outline');
+                gatesEl.rtspSection.style.display = 'block';
+                gatesEl.videoSection.style.display = 'none';
+            } else {
+                gatesEl.sourceVideo.classList.add('btn-primary');
+                gatesEl.sourceVideo.classList.remove('btn-outline');
+                gatesEl.sourceRtsp.classList.remove('btn-primary');
+                gatesEl.sourceRtsp.classList.add('btn-outline');
+                gatesEl.rtspSection.style.display = 'none';
+                gatesEl.videoSection.style.display = 'block';
+                loadGatesVideoList();
+            }
+        }
+
+        async function loadGatesVideoList() {
+            try {
+                const res = await fetch('/api/videos');
+                const videos = await res.json();
+                gatesEl.videoDropdown.innerHTML = '<option value="">Select a video...</option>' +
+                    videos.map(v => `<option value="${v.path}">${v.name}</option>`).join('');
+                // If we have an uploaded video, add it to the list
+                if (state.gatesUploadedVideoPath) {
+                    const name = state.gatesUploadedVideoPath.split('/').pop();
+                    gatesEl.videoDropdown.innerHTML += `<option value="${state.gatesUploadedVideoPath}" selected>${name} (uploaded)</option>`;
+                }
+            } catch (e) { console.error('Failed to load videos:', e); }
+        }
+
+        async function gatesLoadVideoInfo() {
+            const videoPath = gatesEl.videoDropdown.value;
+            if (!videoPath) return;
+            try {
+                const res = await fetch('/api/video/info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video_path: videoPath }),
+                });
+                const info = await res.json();
+                if (info.duration) {
+                    gatesVideoDuration = info.duration;
+                    gatesEl.videoDuration.textContent = formatTime(info.duration);
+                    gatesEl.seekPosition.max = info.duration;
+                }
+            } catch (e) { console.error('Failed to get video info:', e); }
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        async function gatesGrabFrame() {
+            gatesEl.grabFrame.disabled = true;
+            gatesEl.grabFrame.textContent = 'Grabbing...';
+
+            const body = { source_type: state.gatesSourceType };
+            if (state.gatesSourceType === 'rtsp') {
+                body.camera_id = gatesEl.cameraSelect.value;
+            } else {
+                body.video_path = gatesEl.videoDropdown.value;
+                body.seek_seconds = parseFloat(gatesEl.seekPosition.value) || 0;
+            }
+
+            try {
+                const res = await fetch('/api/frame/grab', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    return;
+                }
+                state.gatesFrameId = data.frame_id;
+                state.gatesFrameWidth = data.width;
+                state.gatesFrameHeight = data.height;
+
+                // Show the grabbed frame immediately
+                gatesEl.reviewCard.style.display = 'block';
+                gatesEl.frameImage.src = `/api/frame/${data.frame_id}?t=${Date.now()}`;
+                // Clear old pins
+                document.querySelectorAll('.gate-pin, .gate-label, .gate-line, .gate-dismiss').forEach(el => el.remove());
+
+                // Show detection card
+                gatesEl.detectionCard.style.display = 'block';
+
+                // Reset verify
+                gatesEl.verifyCard.style.display = 'none';
+                state.gates = [];
+                updateGatesCount();
+
+                showStatus('Frame grabbed. Select discipline and detect gates.', 'success');
+            } catch (e) {
+                showStatus('Error grabbing frame: ' + e.message, 'error');
+            } finally {
+                gatesEl.grabFrame.disabled = false;
+                gatesEl.grabFrame.textContent = 'Grab Frame';
+            }
+        }
+
+        async function gatesUploadVideo() {
+            const file = gatesEl.videoUploadInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('video', file);
+
+            gatesEl.uploadProgress.style.display = 'block';
+            gatesEl.uploadFill.style.width = '0%';
+            gatesEl.uploadStatus.textContent = 'Uploading...';
+
+            const xhr = new XMLHttpRequest();
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const pct = (e.loaded / e.total * 100).toFixed(0);
+                    gatesEl.uploadFill.style.width = pct + '%';
+                    gatesEl.uploadStatus.textContent = `Uploading... ${pct}%`;
+                }
+            });
+            xhr.addEventListener('load', () => {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    if (data.success) {
+                        state.gatesUploadedVideoPath = data.video_path;
+                        gatesEl.uploadStatus.textContent = `Uploaded: ${data.filename} (${data.size_mb}MB)`;
+                        // Add to video dropdown and select it
+                        const opt = document.createElement('option');
+                        opt.value = data.video_path;
+                        opt.textContent = `${data.filename} (uploaded)`;
+                        opt.selected = true;
+                        gatesEl.videoDropdown.appendChild(opt);
+                        // Switch to video source
+                        gatesSwitchSource('video');
+                        gatesLoadVideoInfo();
+                    } else {
+                        gatesEl.uploadStatus.textContent = 'Error: ' + (data.error || 'Upload failed');
+                    }
+                } catch (e) {
+                    gatesEl.uploadStatus.textContent = 'Error parsing response';
+                }
+            });
+            xhr.addEventListener('error', () => {
+                gatesEl.uploadStatus.textContent = 'Upload failed';
+            });
+            xhr.open('POST', '/api/video/upload');
+            xhr.send(formData);
+        }
+
+        async function gatesDetect() {
+            if (!state.gatesFrameId) {
+                showStatus('Grab a frame first', 'error');
+                return;
+            }
+
+            gatesEl.detectBtn.disabled = true;
+            gatesEl.detectBtn.textContent = 'Detecting...';
+
+            try {
+                const res = await fetch('/api/calibrate/detect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        frame_id: state.gatesFrameId,
+                        discipline: gatesEl.discipline.value,
+                        min_height: parseInt(gatesEl.minHeight.value),
+                        max_height: parseInt(gatesEl.maxHeight.value),
+                        sat_thresh: parseInt(gatesEl.satThresh.value),
+                        val_thresh: parseInt(gatesEl.valThresh.value),
+                    }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    return;
+                }
+
+                state.gates = data.gates.map(g => ({ ...g, dismissed: false }));
+
+                // Show review card with the original frame (pins rendered on top)
+                gatesEl.reviewCard.style.display = 'block';
+                gatesEl.frameImage.src = `/api/frame/${state.gatesFrameId}?t=${Date.now()}`;
+                gatesEl.frameImage.onload = () => renderGatePins();
+
+                // Hide verify card
+                gatesEl.verifyCard.style.display = 'none';
+
+                updateGatesCount();
+                showStatus(`Detected ${data.gate_count} gates`, 'success');
+            } catch (e) {
+                showStatus('Error detecting gates: ' + e.message, 'error');
+            } finally {
+                gatesEl.detectBtn.disabled = false;
+                gatesEl.detectBtn.textContent = 'Detect Gates';
+            }
+        }
+
+        function renderGatePins() {
+            // Remove existing pin elements
+            document.querySelectorAll('.gate-pin, .gate-label, .gate-line, .gate-dismiss').forEach(el => el.remove());
+
+            const img = gatesEl.frameImage;
+            if (!img.naturalWidth) return;
+
+            const displayWidth = img.clientWidth;
+            const displayHeight = img.clientHeight;
+            const scaleX = displayWidth / state.gatesFrameWidth;
+            const scaleY = displayHeight / state.gatesFrameHeight;
+
+            state.gates.forEach((gate, idx) => {
+                if (gate.dismissed) return;
+
+                const topX = gate.top[0] * scaleX;
+                const topY = gate.top[1] * scaleY;
+                const baseX = gate.base[0] * scaleX;
+                const baseY = gate.base[1] * scaleY;
+
+                // SVG line connecting top and base
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                line.classList.add('gate-line');
+                line.style.cssText = `position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:9;`;
+                line.innerHTML = `<line x1="${topX}" y1="${topY}" x2="${baseX}" y2="${baseY}"
+                    stroke="${gate.color === 'red' ? '#dc2626' : '#2563eb'}" stroke-width="2" stroke-dasharray="4,3" opacity="0.7"/>`;
+                gatesEl.frameContainer.appendChild(line);
+
+                // Top pin
+                const topPin = document.createElement('div');
+                topPin.className = `gate-pin ${gate.color}`;
+                topPin.style.left = topX + 'px';
+                topPin.style.top = topY + 'px';
+                topPin.dataset.gateIdx = idx;
+                topPin.dataset.point = 'top';
+                gatesEl.frameContainer.appendChild(topPin);
+
+                // Base pin
+                const basePin = document.createElement('div');
+                basePin.className = `gate-pin ${gate.color}`;
+                basePin.style.left = baseX + 'px';
+                basePin.style.top = baseY + 'px';
+                basePin.dataset.gateIdx = idx;
+                basePin.dataset.point = 'base';
+                gatesEl.frameContainer.appendChild(basePin);
+
+                // Label near top
+                const label = document.createElement('div');
+                label.className = 'gate-label';
+                label.textContent = gate.id;
+                label.style.left = topX + 'px';
+                label.style.top = topY + 'px';
+                gatesEl.frameContainer.appendChild(label);
+
+                // Dismiss button (X) near top-right of top pin
+                const dismiss = document.createElement('button');
+                dismiss.className = 'gate-dismiss';
+                dismiss.textContent = '\u00d7';
+                dismiss.style.left = (topX + 14) + 'px';
+                dismiss.style.top = (topY - 14) + 'px';
+                dismiss.dataset.gateIdx = idx;
+                dismiss.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    dismissGate(parseInt(e.target.dataset.gateIdx));
+                });
+                gatesEl.frameContainer.appendChild(dismiss);
+            });
+        }
+
+        function setupGatesPinDrag() {
+            const container = gatesEl.frameContainer;
+
+            function getPointerPos(e) {
+                const rect = container.getBoundingClientRect();
+                const touch = e.touches ? e.touches[0] : e;
+                return {
+                    x: touch.clientX - rect.left,
+                    y: touch.clientY - rect.top,
+                };
+            }
+
+            function onStart(e) {
+                const pin = e.target.closest('.gate-pin');
+                if (!pin) {
+                    // Check if we're in add gate mode
+                    if (state.addGateMode) {
+                        handleAddGateTap(e);
+                    }
+                    return;
+                }
+                e.preventDefault();
+                pin.classList.add('dragging');
+                state.draggingPin = {
+                    gateIdx: parseInt(pin.dataset.gateIdx),
+                    point: pin.dataset.point,
+                };
+            }
+
+            function onMove(e) {
+                if (!state.draggingPin) return;
+                e.preventDefault();
+                const pos = getPointerPos(e);
+                const { gateIdx, point } = state.draggingPin;
+                const gate = state.gates[gateIdx];
+                if (!gate) return;
+
+                const img = gatesEl.frameImage;
+                const scaleX = state.gatesFrameWidth / img.clientWidth;
+                const scaleY = state.gatesFrameHeight / img.clientHeight;
+
+                // Update gate coords in original frame space
+                gate[point][0] = Math.round(pos.x * scaleX);
+                gate[point][1] = Math.round(pos.y * scaleY);
+
+                renderGatePins();
+            }
+
+            function onEnd(e) {
+                if (state.draggingPin) {
+                    document.querySelectorAll('.gate-pin.dragging').forEach(p => p.classList.remove('dragging'));
+                    state.draggingPin = null;
+                }
+            }
+
+            container.addEventListener('mousedown', onStart);
+            container.addEventListener('mousemove', onMove);
+            container.addEventListener('mouseup', onEnd);
+            container.addEventListener('mouseleave', onEnd);
+            container.addEventListener('touchstart', onStart, { passive: false });
+            container.addEventListener('touchmove', onMove, { passive: false });
+            container.addEventListener('touchend', onEnd);
+        }
+
+        function handleAddGateTap(e) {
+            const container = gatesEl.frameContainer;
+            const rect = container.getBoundingClientRect();
+            const touch = e.touches ? e.touches[0] : e;
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+
+            const img = gatesEl.frameImage;
+            const scaleX = state.gatesFrameWidth / img.clientWidth;
+            const scaleY = state.gatesFrameHeight / img.clientHeight;
+
+            const frameX = Math.round(x * scaleX);
+            const frameY = Math.round(y * scaleY);
+
+            if (state.addGateTapCount === 0) {
+                // First tap = top of pole
+                state.addGatePending = { top: [frameX, frameY] };
+                state.addGateTapCount = 1;
+                gatesEl.addInstructions.childNodes[0].textContent = 'Now tap the ';
+                gatesEl.addInstructions.querySelector('strong').textContent = 'base';
+                gatesEl.addInstructions.querySelector('strong').nextSibling.textContent = ' of the same pole. ';
+            } else {
+                // Second tap = base of pole
+                const newId = state.gates.length > 0
+                    ? Math.max(...state.gates.map(g => g.id)) + 1
+                    : 1;
+                // Auto alternate color
+                const lastColor = state.gates.filter(g => !g.dismissed).slice(-1)[0]?.color;
+                const color = lastColor === 'red' ? 'blue' : 'red';
+
+                state.gates.push({
+                    id: newId,
+                    color: color,
+                    top: state.addGatePending.top,
+                    base: [frameX, frameY],
+                    bbox: [0, 0, 0, 0],
+                    confidence: 1.0,
+                    dismissed: false,
+                });
+
+                // Exit add mode
+                state.addGateMode = false;
+                state.addGateTapCount = 0;
+                state.addGatePending = null;
+                gatesEl.addInstructions.style.display = 'none';
+                gatesEl.addBtn.classList.remove('btn-primary');
+                gatesEl.addBtn.classList.add('btn-outline');
+
+                renderGatePins();
+                updateGatesCount();
+            }
+        }
+
+        function dismissGate(idx) {
+            if (idx >= 0 && idx < state.gates.length) {
+                state.gates[idx].dismissed = true;
+                renderGatePins();
+                updateGatesCount();
+            }
+        }
+
+        function updateGatesCount() {
+            const active = state.gates.filter(g => !g.dismissed);
+            gatesEl.gatesCount.textContent = `${active.length} gate${active.length !== 1 ? 's' : ''} (${state.gates.filter(g => g.dismissed).length} dismissed)`;
+            gatesEl.computeBtn.disabled = active.length < 4;
+            gatesEl.minWarning.style.display = active.length < 4 ? 'block' : 'none';
+        }
+
+        async function gatesCompute() {
+            const activeGates = state.gates.filter(g => !g.dismissed);
+            if (activeGates.length < 4) {
+                showStatus('Need at least 4 gates', 'error');
+                return;
+            }
+
+            gatesEl.computeBtn.disabled = true;
+            gatesEl.computeBtn.textContent = 'Computing...';
+
+            const cameraId = state.gatesSourceType === 'rtsp'
+                ? gatesEl.cameraSelect.value
+                : 'uploaded';
+
+            try {
+                const res = await fetch('/api/calibrate/compute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        frame_id: state.gatesFrameId,
+                        camera_id: cameraId,
+                        discipline: gatesEl.discipline.value,
+                        gates: activeGates,
+                    }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    return;
+                }
+
+                state.gatesCalibrationId = data.calibration_id;
+
+                // Show verification
+                gatesEl.verifyCard.style.display = 'block';
+                gatesEl.verifyImage.src = data.verification_frame_url + '?t=' + Date.now();
+                gatesEl.reprojError.textContent = data.reprojection_error.toFixed(1);
+                document.getElementById('gatesFocalLength').textContent =
+                    data.focal_length ? Math.round(data.focal_length) : '—';
+
+                // Quality indicator (thresholds adjusted for virtual-plane error
+                // which includes both base+top fits and is naturally higher)
+                const err = data.reprojection_error;
+                if (err < 15) {
+                    gatesEl.reprojQuality.textContent = '(excellent)';
+                    gatesEl.reprojQuality.style.color = 'var(--success)';
+                } else if (err < 40) {
+                    gatesEl.reprojQuality.textContent = '(good)';
+                    gatesEl.reprojQuality.style.color = 'var(--primary)';
+                } else {
+                    gatesEl.reprojQuality.textContent = '(poor — adjust gates)';
+                    gatesEl.reprojQuality.style.color = 'var(--danger)';
+                }
+
+                // Show per-gate errors so user knows which gates to adjust
+                const perGateEl = document.getElementById('gatesPerGateErrors');
+                if (perGateEl && data.per_gate_errors && data.per_gate_errors.length > 0) {
+                    const gateErrHtml = data.per_gate_errors.map(ge => {
+                        const color = ge.total_error < 10 ? 'var(--success)' :
+                                      ge.total_error < 30 ? 'var(--primary)' : 'var(--danger)';
+                        return `<span style="color:${color}; margin-right:8px;">Gate ${ge.gate_id}: ${ge.total_error}px</span>`;
+                    }).join('');
+                    perGateEl.innerHTML = gateErrHtml;
+                    perGateEl.style.display = 'block';
+                }
+
+                showStatus(`Calibration computed (error: ${data.reprojection_error.toFixed(1)}px)`, 'success');
+            } catch (e) {
+                showStatus('Error computing calibration: ' + e.message, 'error');
+            } finally {
+                gatesEl.computeBtn.disabled = false;
+                gatesEl.computeBtn.textContent = 'Compute Calibration';
+                updateGatesCount();
+            }
+        }
+
+        async function gatesAccept() {
+            if (!state.gatesCalibrationId) return;
+
+            gatesEl.acceptBtn.disabled = true;
+            gatesEl.acceptBtn.textContent = 'Saving...';
+
+            try {
+                const res = await fetch('/api/calibrate/accept', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        calibration_id: state.gatesCalibrationId,
+                    }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    return;
+                }
+
+                showStatus('Calibration saved!', 'success');
+                loadCalibrationStatus();
+            } catch (e) {
+                showStatus('Error saving calibration: ' + e.message, 'error');
+            } finally {
+                gatesEl.acceptBtn.disabled = false;
+                gatesEl.acceptBtn.textContent = 'Accept Calibration';
+            }
+        }
+
+        async function loadCalibrationStatus() {
+            try {
+                const res = await fetch('/api/calibrate/status');
+                const data = await res.json();
+                const cameras = data.cameras || {};
+                let html = '';
+                for (const [camId, info] of Object.entries(cameras)) {
+                    if (info.calibrated) {
+                        html += `<div style="margin-bottom: 6px;">
+                            <strong>${camId}</strong>: calibrated
+                            <span style="color: var(--success);">&#10003;</span>
+                            <br><small>Error: ${info.reprojection_error}px | ${info.discipline} | ${info.timestamp?.split('T')[0] || ''}</small>
+                        </div>`;
+                    } else {
+                        html += `<div style="margin-bottom: 6px;">
+                            <strong>${camId}</strong>: <span style="color: var(--text-muted);">not calibrated</span>
+                        </div>`;
+                    }
+                }
+                gatesEl.statusList.innerHTML = html || 'No cameras configured';
+            } catch (e) {
+                gatesEl.statusList.innerHTML = 'Error loading status';
+            }
+        }
+
+        function setupGatesEventListeners() {
+            // Source type toggle
+            gatesEl.sourceRtsp.addEventListener('click', () => gatesSwitchSource('rtsp'));
+            gatesEl.sourceVideo.addEventListener('click', () => gatesSwitchSource('video'));
+
+            // Video selection
+            gatesEl.videoDropdown.addEventListener('change', gatesLoadVideoInfo);
+            gatesEl.seekPosition.addEventListener('input', () => {
+                gatesEl.seekTime.textContent = formatTime(parseFloat(gatesEl.seekPosition.value) || 0);
+            });
+
+            // Upload
+            gatesEl.uploadVideo.addEventListener('click', () => gatesEl.videoUploadInput.click());
+            gatesEl.videoUploadInput.addEventListener('change', gatesUploadVideo);
+
+            // Grab frame
+            gatesEl.grabFrame.addEventListener('click', gatesGrabFrame);
+
+            // Advanced settings toggle
+            gatesEl.advancedToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                const visible = gatesEl.advancedSettings.style.display !== 'none';
+                gatesEl.advancedSettings.style.display = visible ? 'none' : 'block';
+                gatesEl.advancedArrow.innerHTML = visible ? '&#9654;' : '&#9660;';
+            });
+
+            // Advanced sliders
+            gatesEl.minHeight.addEventListener('input', () => { gatesEl.minHeightVal.textContent = gatesEl.minHeight.value; });
+            gatesEl.maxHeight.addEventListener('input', () => { gatesEl.maxHeightVal.textContent = gatesEl.maxHeight.value; });
+            gatesEl.satThresh.addEventListener('input', () => { gatesEl.satThreshVal.textContent = gatesEl.satThresh.value; });
+            gatesEl.valThresh.addEventListener('input', () => { gatesEl.valThreshVal.textContent = gatesEl.valThresh.value; });
+
+            // Detect
+            gatesEl.detectBtn.addEventListener('click', gatesDetect);
+
+            // Add gate
+            gatesEl.addBtn.addEventListener('click', () => {
+                state.addGateMode = !state.addGateMode;
+                state.addGateTapCount = 0;
+                state.addGatePending = null;
+                gatesEl.addInstructions.style.display = state.addGateMode ? 'block' : 'none';
+                if (state.addGateMode) {
+                    // Reset instruction text to original
+                    gatesEl.addInstructions.childNodes[0].textContent = 'Tap the ';
+                    gatesEl.addInstructions.querySelector('strong').textContent = 'top';
+                    gatesEl.addInstructions.querySelector('strong').nextSibling.textContent = ' of the gate pole, then tap the ';
+                    gatesEl.addBtn.classList.add('btn-primary');
+                    gatesEl.addBtn.classList.remove('btn-outline');
+                } else {
+                    gatesEl.addBtn.classList.remove('btn-primary');
+                    gatesEl.addBtn.classList.add('btn-outline');
+                }
+            });
+            gatesEl.cancelAdd.addEventListener('click', () => {
+                state.addGateMode = false;
+                state.addGateTapCount = 0;
+                state.addGatePending = null;
+                gatesEl.addInstructions.style.display = 'none';
+                gatesEl.addBtn.classList.remove('btn-primary');
+                gatesEl.addBtn.classList.add('btn-outline');
+            });
+
+            // Compute
+            gatesEl.computeBtn.addEventListener('click', gatesCompute);
+
+            // Verify
+            gatesEl.readjustBtn.addEventListener('click', () => {
+                gatesEl.verifyCard.style.display = 'none';
+            });
+            gatesEl.acceptBtn.addEventListener('click', gatesAccept);
+
+            // Pin drag
+            setupGatesPinDrag();
+
+            // Re-render pins on window resize
+            window.addEventListener('resize', () => {
+                if (state.mode === 'gates' && state.gates.length > 0) {
+                    renderGatePins();
+                }
+            });
+        }
+
         // Initialize on load
         init();
         setupStitchEventListeners();
+        setupGatesEventListeners();
     </script>
 </body>
 </html>

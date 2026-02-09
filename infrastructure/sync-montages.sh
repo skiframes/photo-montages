@@ -104,11 +104,17 @@ try:
         m = json.load(f)
     group = m.get('group', '')
     event_type = m.get('event_type', 'training')
+    discipline = m.get('discipline', 'freeski')
     event_date = m.get('event_date', '$EVENT_ID'.split('_')[0])
-    # Build readable name: 'U14 Training - 2026-02-07'
+    # Map discipline codes to display names
+    disc_names = {'sl_youth': 'SL', 'sl_adult': 'SL', 'gs_panel': 'GS', 'sg_panel': 'SG', 'freeski': 'Free Ski'}
+    disc_label = disc_names.get(discipline, discipline)
+    # Build readable name: 'U14 SL Training - 2026-02-07' or 'U14 Free Ski Training - 2026-02-07'
     parts = []
     if group:
         parts.append(group.upper())
+    if disc_label:
+        parts.append(disc_label)
     parts.append(event_type.title())
     parts.append(event_date)
     print(' - '.join(parts) if len(parts) > 1 else parts[0])
@@ -156,6 +162,16 @@ except:
     print('')
 " 2>/dev/null)
 
+DISCIPLINE=$(python3 -c "
+import json
+try:
+    with open('$MANIFEST_PATH') as f:
+        m = json.load(f)
+    print(m.get('discipline', 'freeski'))
+except:
+    print('freeski')
+" 2>/dev/null)
+
 # Update root index.json
 echo -e "${YELLOW}Updating root index.json...${NC}"
 
@@ -175,6 +191,7 @@ event_date = '$EVENT_DATE'
 event_type = '$EVENT_TYPE'
 montage_count = int('$MONTAGE_COUNT' or 0)
 group = '$GROUP'
+discipline = '$DISCIPLINE'
 
 # Convert old string format to object format if needed
 if index['events'] and isinstance(index['events'][0], str):
@@ -188,10 +205,11 @@ if existing:
     existing['event_name'] = event_name
     existing['event_date'] = event_date
     existing['event_type'] = event_type
+    existing['discipline'] = discipline
     existing['montage_count'] = montage_count
     if group:
         existing['categories'] = [group.upper()]
-    print(f"Updated {event_id} in index (montages: {montage_count})")
+    print(f"Updated {event_id} in index (montages: {montage_count}, discipline: {discipline})")
 else:
     # Add new event
     new_event = {
@@ -199,6 +217,7 @@ else:
         'event_name': event_name,
         'event_date': event_date,
         'event_type': event_type,
+        'discipline': discipline,
         'location': 'Ragged Mountain, NH',
         'montage_count': montage_count,
         'video_count': 0,
@@ -207,7 +226,7 @@ else:
     if group:
         new_event['categories'] = [group.upper()]
     index['events'].append(new_event)
-    print(f"Added {event_id} to index (montages: {montage_count})")
+    print(f"Added {event_id} to index (montages: {montage_count}, discipline: {discipline})")
 
 # Sort by date descending
 index['events'].sort(key=lambda x: x.get('event_date', ''), reverse=True)

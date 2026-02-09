@@ -16,8 +16,14 @@ from subprocess import Popen, PIPE
 from typing import Optional
 
 import cv2
+import numpy as np
 import re
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
+
+from calibration import (
+    detect_gates, compute_calibration, draw_verification_grid,
+    draw_gates_on_frame, GATE_SPECS,
+)
 
 try:
     import openpyxl
@@ -39,36 +45,48 @@ active_jobs = {}
 jobs_lock = threading.Lock()
 
 # Configuration
+# Use venv python if available (for J40 deployment where packages are in ~/venv/)
+_venv_python = Path.home() / 'venv' / 'bin' / 'python3'
+PYTHON = str(_venv_python) if _venv_python.exists() else 'python3'
+
 CONFIG_DIR = Path(__file__).parent / 'config' / 'zones'
 STITCH_CONFIG_DIR = Path(__file__).parent / 'config' / 'stitch'
 CALIBRATION_FRAMES_DIR = Path(tempfile.gettempdir()) / 'skiframes_calibration'
 VIDEO_DIR = Path(__file__).parent.parent  # Parent of edge/ for finding test videos
 LOGOS_DIR = Path(__file__).parent.parent / 'logos'  # Logo images for overlays
+CALIBRATION_CONFIG_DIR = Path(__file__).parent / 'config' / 'calibrations'
+UPLOAD_DIR = Path(tempfile.gettempdir()) / 'skiframes_uploads'
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 STITCH_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CALIBRATION_FRAMES_DIR.mkdir(parents=True, exist_ok=True)
+CALIBRATION_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Track pending gate calibrations (not yet saved to disk)
+pending_calibrations = {}
+pending_calibrations_lock = threading.Lock()
 
 # Camera definitions with time offset percentages for race timing
 # offset_pct: what percentage of run time has elapsed when skier enters this camera's view
 CAMERAS = {
     'R1': {
         'name': 'R1 - Start Gate',
-        'rtsp_url': os.environ.get('R1_RTSP_URL', 'rtsp://192.168.1.101/h264Preview_01_main'),
+        'rtsp_url': os.environ.get('R1_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.101/h264Preview_01_main'),
         'offset_pct': 0,  # 0% - covers start gate
     },
     'R2': {
         'name': 'R2 - Zoom Down',
-        'rtsp_url': os.environ.get('R2_RTSP_URL', 'rtsp://192.168.1.102/h264Preview_01_main'),
+        'rtsp_url': os.environ.get('R2_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.102/h264Preview_01_main'),
         'offset_pct': 10,  # 10% into the run
     },
     'Axis': {
         'name': 'Axis PTZ - Mid Course',
-        'rtsp_url': os.environ.get('AXIS_RTSP_URL', 'rtsp://192.168.1.100/axis-media/media.amp'),
+        'rtsp_url': os.environ.get('AXIS_RTSP_URL', 'rtsp://j40:j40@192.168.0.100/axis-media/media.amp'),
         'offset_pct': 20,  # 20% into the run
     },
     'R3': {
         'name': 'R3 - Finish',
-        'rtsp_url': os.environ.get('R3_RTSP_URL', 'rtsp://192.168.1.103/h264Preview_01_main'),
+        'rtsp_url': os.environ.get('R3_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.103/h264Preview_01_main'),
         'offset_pct': 50,  # 50% - covers last half of run
     },
 }
@@ -906,6 +924,7 @@ def save_config():
         'detection_threshold': data.get('detection_threshold', 25),
         'min_pixel_change_pct': data.get('min_pixel_change_pct', 5.0),
         'min_brightness': data.get('min_brightness', 100),  # Shadow filter: min brightness of motion pixels
+        'discipline': data.get('discipline', 'freeski'),  # freeski, sl_youth, sl_adult, gs_panel, sg_panel
         'montage_fps': data.get('montage_fps', 4),
         'start_offset_sec': data.get('start_offset_sec', 0),  # Fixed delay in seconds after trigger
         # Vola racer data for naming montages
@@ -1395,14 +1414,14 @@ def process_video():
     job_id = str(uuid.uuid4())[:8]
 
     # Run the runner.py script as a background process
-    runner_path = Path(__file__).parent / 'runner.py'
+    runner_path = Path(__file__).resolve().parent / 'runner.py'
 
     try:
         if use_config_videos:
             # Use --use-config-videos flag to process videos from config's vola_videos list
-            cmd = ['python3', '-u', str(runner_path), '--config', config_path, '--use-config-videos']
+            cmd = [PYTHON, '-u', str(runner_path), '--config', config_path, '--use-config-videos']
         else:
-            cmd = ['python3', '-u', str(runner_path), '--config', config_path, video_path]
+            cmd = [PYTHON, '-u', str(runner_path), '--config', config_path, video_path]
         print(f"[DEBUG] Running command: {' '.join(cmd)}")
 
         process = Popen(
@@ -1448,6 +1467,89 @@ def process_video():
                         print(f"[DEBUG] Job {job_id} finished with status: {active_jobs[job_id]['status']}")
             except Exception as e:
                 print(f"[DEBUG] Exception in collect_output: {e}")
+                with jobs_lock:
+                    if job_id in active_jobs:
+                        active_jobs[job_id]['status'] = 'failed'
+                        active_jobs[job_id]['error'] = str(e)
+
+        thread = threading.Thread(target=collect_output, daemon=True)
+        thread.start()
+
+        return jsonify({
+            'job_id': job_id,
+            'status': 'running',
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/process/rtsp', methods=['POST'])
+def process_rtsp():
+    """Start live RTSP monitoring - returns job_id for tracking."""
+    data = request.json
+    config_path = data.get('config_path')
+
+    if not config_path:
+        return jsonify({'error': 'Missing config_path'}), 400
+
+    if not Path(config_path).exists():
+        return jsonify({'error': f'Config not found: {config_path}'}), 404
+
+    # Generate job ID
+    job_id = str(uuid.uuid4())[:8]
+
+    # Run the runner.py script in RTSP mode as a background process
+    runner_path = Path(__file__).resolve().parent / 'runner.py'
+    output_dir = str(Path(__file__).resolve().parent.parent / 'output')
+
+    try:
+        cmd = [PYTHON, '-u', str(runner_path), 'rtsp',
+               '--config', config_path, '-o', output_dir]
+        print(f"[DEBUG] Running RTSP command: {' '.join(cmd)}")
+
+        process = Popen(
+            cmd,
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            bufsize=1  # Line buffered
+        )
+
+        with jobs_lock:
+            active_jobs[job_id] = {
+                'process': process,
+                'status': 'running',
+                'output': '',
+                'config_path': config_path,
+                'started_at': datetime.now().isoformat(),
+            }
+
+        # Start a thread to collect output
+        def collect_output():
+            try:
+                for line in process.stdout:
+                    print(f"[RTSP] {line.rstrip()}")
+                    with jobs_lock:
+                        if job_id in active_jobs:
+                            active_jobs[job_id]['output'] += line
+                process.wait()
+                # Collect any stderr
+                stderr_output = process.stderr.read() if process.stderr else ''
+                if stderr_output:
+                    print(f"[RTSP stderr] {stderr_output}")
+                with jobs_lock:
+                    if job_id in active_jobs:
+                        if process.returncode == 0:
+                            active_jobs[job_id]['status'] = 'completed'
+                        elif process.returncode == -signal.SIGTERM or process.returncode == -signal.SIGKILL:
+                            active_jobs[job_id]['status'] = 'stopped'
+                        else:
+                            active_jobs[job_id]['status'] = 'failed'
+                            active_jobs[job_id]['error'] = stderr_output or f'Exit code: {process.returncode}'
+                        print(f"[DEBUG] RTSP job {job_id} finished with status: {active_jobs[job_id]['status']}")
+            except Exception as e:
+                print(f"[DEBUG] Exception in RTSP collect_output: {e}")
                 with jobs_lock:
                     if job_id in active_jobs:
                         active_jobs[job_id]['status'] = 'failed'
@@ -2248,5 +2350,244 @@ def generate_server_command():
     })
 
 
+# ============================================
+# GATE CALIBRATION ENDPOINTS
+# ============================================
+
+@app.route('/api/calibrate/gate-specs')
+def get_gate_specs():
+    """Return available gate/discipline presets."""
+    return jsonify(GATE_SPECS)
+
+
+@app.route('/api/calibrate/detect', methods=['POST'])
+def detect_gates_endpoint():
+    """Run gate detection on an already-grabbed frame."""
+    data = request.json or {}
+    frame_id = data.get('frame_id')
+    discipline = data.get('discipline', 'sl_adult')
+    min_height = int(data.get('min_height', 30))
+    max_height = int(data.get('max_height', 800))
+    sat_thresh = int(data.get('sat_thresh', 120))
+    val_thresh = int(data.get('val_thresh', 80))
+
+    if not frame_id:
+        return jsonify({'error': 'frame_id is required'}), 400
+
+    frame_path = CALIBRATION_FRAMES_DIR / f'{frame_id}.jpg'
+    if not frame_path.exists():
+        return jsonify({'error': f'Frame {frame_id} not found'}), 404
+
+    frame = cv2.imread(str(frame_path))
+    if frame is None:
+        return jsonify({'error': 'Failed to read frame'}), 500
+
+    gates = detect_gates(frame, discipline=discipline, min_height=min_height,
+                         max_height=max_height, sat_thresh=sat_thresh,
+                         val_thresh=val_thresh)
+
+    # Save annotated frame
+    annotated = draw_gates_on_frame(frame, gates)
+    annotated_path = CALIBRATION_FRAMES_DIR / f'{frame_id}_gates.jpg'
+    cv2.imwrite(str(annotated_path), annotated, [cv2.IMWRITE_JPEG_QUALITY, 90])
+
+    return jsonify({
+        'success': True,
+        'gates': gates,
+        'gate_count': len(gates),
+        'discipline': discipline,
+        'annotated_frame_url': f'/api/calibrate/frame/{frame_id}/annotated',
+    })
+
+
+@app.route('/api/calibrate/frame/<frame_id>/annotated')
+def get_annotated_frame(frame_id):
+    """Serve annotated frame with detected gates drawn."""
+    # Sanitize frame_id
+    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '', frame_id)
+    path = CALIBRATION_FRAMES_DIR / f'{safe_id}_gates.jpg'
+    if not path.exists():
+        return jsonify({'error': 'Annotated frame not found'}), 404
+    return send_file(str(path), mimetype='image/jpeg')
+
+
+@app.route('/api/calibrate/compute', methods=['POST'])
+def compute_calibration_endpoint():
+    """Compute calibration from coach-adjusted gates."""
+    data = request.json or {}
+    frame_id = data.get('frame_id')
+    camera_id = data.get('camera_id')
+    discipline = data.get('discipline', 'sl_adult')
+    gates = data.get('gates', [])
+
+    if not frame_id:
+        return jsonify({'error': 'frame_id is required'}), 400
+    if not camera_id:
+        return jsonify({'error': 'camera_id is required'}), 400
+    if len(gates) < 4:
+        return jsonify({'error': f'Need at least 4 gates, got {len(gates)}'}), 400
+
+    frame_path = CALIBRATION_FRAMES_DIR / f'{frame_id}.jpg'
+    if not frame_path.exists():
+        return jsonify({'error': f'Frame {frame_id} not found'}), 404
+
+    frame = cv2.imread(str(frame_path))
+    if frame is None:
+        return jsonify({'error': 'Failed to read frame'}), 500
+
+    gate_spec = GATE_SPECS.get(discipline, GATE_SPECS['sl_adult'])
+
+    try:
+        calibration = compute_calibration(gates, gate_spec, frame.shape)
+    except Exception as e:
+        return jsonify({'error': f'Calibration failed: {str(e)}'}), 500
+
+    calibration['camera_id'] = camera_id
+    calibration['discipline'] = discipline
+    calibration['frame_id'] = frame_id
+
+    # Generate calibration ID
+    ts = datetime.now().strftime('%Y-%m-%d_%H%M')
+    cal_id = f'{camera_id}_{ts}'
+    calibration['calibration_id'] = cal_id
+
+    # Draw verification grid
+    try:
+        verify_frame = draw_verification_grid(frame, calibration)
+        verify_path = CALIBRATION_FRAMES_DIR / f'{frame_id}_verify.jpg'
+        cv2.imwrite(str(verify_path), verify_frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    except Exception as e:
+        return jsonify({'error': f'Verification grid failed: {str(e)}'}), 500
+
+    # Store pending calibration
+    with pending_calibrations_lock:
+        pending_calibrations[cal_id] = calibration
+
+    return jsonify({
+        'success': True,
+        'calibration_id': cal_id,
+        'reprojection_error': calibration['reprojection_error'],
+        'per_gate_errors': calibration.get('per_gate_errors', []),
+        'focal_length': calibration.get('focal_length'),
+        'verification_frame_url': f'/api/calibrate/frame/{frame_id}/verification',
+        'gate_count': len(gates),
+    })
+
+
+@app.route('/api/calibrate/frame/<frame_id>/verification')
+def get_verification_frame(frame_id):
+    """Serve verification grid frame."""
+    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '', frame_id)
+    path = CALIBRATION_FRAMES_DIR / f'{safe_id}_verify.jpg'
+    if not path.exists():
+        return jsonify({'error': 'Verification frame not found'}), 404
+    return send_file(str(path), mimetype='image/jpeg')
+
+
+@app.route('/api/calibrate/accept', methods=['POST'])
+def accept_calibration():
+    """Save a computed calibration to disk."""
+    data = request.json or {}
+    cal_id = data.get('calibration_id')
+
+    if not cal_id:
+        return jsonify({'error': 'calibration_id is required'}), 400
+
+    with pending_calibrations_lock:
+        calibration = pending_calibrations.pop(cal_id, None)
+
+    if calibration is None:
+        return jsonify({'error': f'No pending calibration {cal_id}'}), 404
+
+    # Save calibration JSON
+    config_path = CALIBRATION_CONFIG_DIR / f'{cal_id}.json'
+    with open(config_path, 'w') as f:
+        json.dump(calibration, f, indent=2)
+
+    # Copy reference frame
+    frame_id = calibration.get('frame_id', '')
+    src_frame = CALIBRATION_FRAMES_DIR / f'{frame_id}.jpg'
+    if src_frame.exists():
+        import shutil
+        dst_frame = CALIBRATION_CONFIG_DIR / f'{cal_id}_frame.jpg'
+        shutil.copy2(str(src_frame), str(dst_frame))
+
+    return jsonify({
+        'success': True,
+        'config_path': str(config_path),
+        'calibration_id': cal_id,
+    })
+
+
+@app.route('/api/calibrate/status')
+def calibration_status():
+    """Return current calibration status for all cameras."""
+    cameras = {}
+    for cam_id in CAMERAS:
+        # Find most recent calibration file for this camera
+        pattern = f'{cam_id}_*.json'
+        cal_files = sorted(CALIBRATION_CONFIG_DIR.glob(pattern), reverse=True)
+        if cal_files:
+            with open(cal_files[0]) as f:
+                cal = json.load(f)
+            cameras[cam_id] = {
+                'calibrated': True,
+                'calibration_id': cal.get('calibration_id', cal_files[0].stem),
+                'timestamp': cal.get('timestamp', ''),
+                'reprojection_error': cal.get('reprojection_error', None),
+                'discipline': cal.get('discipline', ''),
+            }
+        else:
+            cameras[cam_id] = {'calibrated': False}
+
+    return jsonify({'cameras': cameras})
+
+
+@app.route('/api/video/upload', methods=['POST'])
+def upload_video():
+    """Accept a video file upload for testing."""
+    if 'video' not in request.files:
+        return jsonify({'error': 'No video file in request'}), 400
+
+    video_file = request.files['video']
+    if not video_file.filename:
+        return jsonify({'error': 'Empty filename'}), 400
+
+    # Size check (500MB limit)
+    content_length = request.content_length
+    if content_length and content_length > 500 * 1024 * 1024:
+        return jsonify({'error': 'File too large (max 500MB)'}), 413
+
+    # Save with UUID prefix to avoid collisions
+    safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', video_file.filename)
+    dest_name = f'{uuid.uuid4().hex[:8]}_{safe_name}'
+    dest_path = UPLOAD_DIR / dest_name
+    video_file.save(str(dest_path))
+
+    # Get video metadata
+    cap = cv2.VideoCapture(str(dest_path))
+    info = {}
+    if cap.isOpened():
+        info['fps'] = cap.get(cv2.CAP_PROP_FPS)
+        info['frame_count'] = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        info['width'] = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        info['height'] = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if info['fps'] > 0:
+            info['duration'] = info['frame_count'] / info['fps']
+        else:
+            info['duration'] = 0
+        cap.release()
+
+    size_mb = dest_path.stat().st_size / (1024 * 1024)
+
+    return jsonify({
+        'success': True,
+        'video_path': str(dest_path),
+        'filename': video_file.filename,
+        'size_mb': round(size_mb, 1),
+        **info,
+    })
+
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=os.environ.get('FLASK_DEBUG', '0') == '1')
