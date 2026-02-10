@@ -1205,6 +1205,17 @@
             </div>
         </div>
 
+        <!-- Calibration Badge (shown after accepting gate calibration) -->
+        <div id="calibrationBadge" style="display: none; margin-bottom: 12px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; font-size: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="color: #166534; font-weight: 600;">&#10003; Calibration Active</span>
+                    <br><span id="calibrationBadgeInfo" style="font-size: 12px; color: #15803d;"></span>
+                </div>
+                <button class="btn btn-outline btn-sm" id="calibrationBadgeDismiss" style="font-size: 11px;">Dismiss</button>
+            </div>
+        </div>
+
         <!-- Status Messages -->
         <div id="status" class="status" style="display: none;"></div>
 
@@ -1513,6 +1524,10 @@
             addGateColor: null,   // 'red' or 'blue' — set when coach taps a color button
             gatesCalibrationId: null,
             gatesUploadedVideoPath: null,
+            // Calibration context (set after gates Accept, used by saveConfig)
+            activeCalibrationId: null,
+            activeCalibrationDiscipline: null,
+            activeCalibrationCameraId: null,
             // GPS state (Bad Elf GNSS)
             gpsEnabled: false,
             gpsCameraPosition: null,   // {lat, lon, alt, accuracy, timestamp}
@@ -1562,6 +1577,9 @@
             saveSection: document.getElementById('saveSection'),
             saveConfig: document.getElementById('saveConfig'),
             status: document.getElementById('status'),
+            calibrationBadge: document.getElementById('calibrationBadge'),
+            calibrationBadgeInfo: document.getElementById('calibrationBadgeInfo'),
+            calibrationBadgeDismiss: document.getElementById('calibrationBadgeDismiss'),
             activeSession: document.getElementById('activeSession'),
             activeSessionId: document.getElementById('activeSessionId'),
             activeSessionEnd: document.getElementById('activeSessionEnd'),
@@ -2013,6 +2031,9 @@
             // Stop session
             elements.stopSession.addEventListener('click', stopSession);
 
+            // Calibration badge dismiss
+            elements.calibrationBadgeDismiss.addEventListener('click', dismissCalibrationBadge);
+
             // Stop processing
             elements.stopProcessing.addEventListener('click', stopProcessing);
         }
@@ -2101,7 +2122,10 @@
             }
         }
 
+        let drawingHandlersAttached = false;
         function setupDrawingHandlers() {
+            if (drawingHandlersAttached) return;
+            drawingHandlersAttached = true;
             const container = elements.frameContainer;
 
             // Mouse events
@@ -2295,6 +2319,25 @@
             elements.saveConfig.textContent = buttonText;
         }
 
+        function showCalibrationBadge() {
+            if (!state.activeCalibrationId) return;
+            const disciplineNames = {
+                'sl_youth': 'Slalom Youth', 'sl_adult': 'Slalom',
+                'gs_panel': 'GS Panel', 'sg_panel': 'Super-G Panel'
+            };
+            const discName = disciplineNames[state.activeCalibrationDiscipline] || state.activeCalibrationDiscipline;
+            const camId = state.activeCalibrationCameraId || 'unknown';
+            elements.calibrationBadge.style.display = 'block';
+            elements.calibrationBadgeInfo.textContent = `${camId} | ${discName} | ${state.activeCalibrationId}`;
+        }
+
+        function dismissCalibrationBadge() {
+            state.activeCalibrationId = null;
+            state.activeCalibrationDiscipline = null;
+            state.activeCalibrationCameraId = null;
+            elements.calibrationBadge.style.display = 'none';
+        }
+
         async function saveConfig() {
             console.log('saveConfig called');
             console.log('state:', state);
@@ -2324,14 +2367,17 @@
                 }
                 console.log('cameraId:', cameraId);
 
-                // Determine discipline: gates mode uses the dropdown, freeski mode is 'freeski'
-                const discipline = state.montageSubMode === 'gates'
-                    ? document.getElementById('gatesDiscipline').value
-                    : 'freeski';
+                // Determine discipline: use calibration discipline if active, else freeski
+                const discipline = state.activeCalibrationId
+                    ? state.activeCalibrationDiscipline
+                    : (state.montageSubMode === 'gates'
+                        ? document.getElementById('gatesDiscipline').value
+                        : 'freeski');
 
                 const config = {
                     camera_id: cameraId,
                     calibration_frame_id: state.frameId,
+                    calibration_id: state.activeCalibrationId || null,
                     session_type: elements.sessionType.value,
                     group: elements.group.value,
                     discipline: discipline,
@@ -3883,8 +3929,55 @@
                     return;
                 }
 
-                showStatus('Calibration saved!', 'success');
                 loadCalibrationStatus();
+
+                // --- Transition to Free Skiing for trigger zones + session config ---
+
+                // Store calibration context
+                state.activeCalibrationId = state.gatesCalibrationId;
+                state.activeCalibrationDiscipline = gatesEl.discipline.value;
+                state.activeCalibrationCameraId = state.gatesSourceType === 'rtsp'
+                    ? gatesEl.cameraSelect.value : 'uploaded';
+
+                // Transfer frame from gates to free skiing state
+                state.frameId = state.gatesFrameId;
+                state.frameWidth = state.gatesFrameWidth;
+                state.frameHeight = state.gatesFrameHeight;
+
+                // Pre-select camera in free skiing mode
+                if (state.gatesSourceType === 'rtsp') {
+                    state.cameraId = state.activeCalibrationCameraId;
+                    elements.sourceType.value = 'rtsp';
+                    elements.camera.value = state.activeCalibrationCameraId;
+                    elements.cameraSelect.style.display = 'block';
+                    elements.videoSelect.style.display = 'none';
+                    elements.sessionEndTimeSection.style.display = 'block';
+                }
+
+                // Load frame into free skiing frame container
+                const frameUrl = `/api/frame/${state.frameId}?t=${Date.now()}`;
+                elements.frameContainer.innerHTML =
+                    `<img src="${frameUrl}" alt="Calibration frame" id="frameImage">`;
+
+                // Show trigger zone + session config cards
+                elements.frameCard.style.display = 'block';
+                elements.configCard.style.display = 'block';
+                elements.saveSection.style.display = 'block';
+
+                // Setup drawing handlers and reset zones
+                setupDrawingHandlers();
+                state.startZone = null;
+                state.endZone = null;
+                state.cropZone = null;
+                state.drawingMode = null;
+                setDefaultEndTime();
+                updateSaveButtonText();
+
+                // Show calibration badge and switch to free skiing
+                showCalibrationBadge();
+                switchSubMode('freeSki');
+
+                showStatus('Calibration saved! Now draw trigger zones and configure session.', 'success');
             } catch (e) {
                 showStatus('Error saving calibration: ' + e.message, 'error');
             } finally {

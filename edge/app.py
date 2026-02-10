@@ -934,6 +934,7 @@ def save_config():
         'vola_camera': data.get('vola_camera', ''),
         'vola_view': data.get('vola_view', '1'),  # View number 1-5 for filename
         'race_date': data.get('race_date', now.strftime('%Y-%m-%d')),
+        'calibration_id': data.get('calibration_id'),  # Links to gate calibration if present
     }
 
     # Save config
