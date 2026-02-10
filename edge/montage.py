@@ -132,68 +132,29 @@ def select_frames_by_fps(frames: List[np.ndarray], source_fps: float,
 
 def create_composite_imagemagick(frames: List[np.ndarray], temp_dir: str = None) -> np.ndarray:
     """
-    Create composite from frames using ImageMagick's Min evaluation.
+    Create composite from frames using pixel-wise Min evaluation.
 
-    This is the method from the original run-detection repo that produces
-    the best quality stop-motion composites.
+    Takes the minimum (darkest) pixel value across all frames,
+    producing the classic stop-motion overlay effect. Uses NumPy
+    for speed and reliability (no ImageMagick memory limits).
 
     Args:
         frames: List of frames (numpy arrays)
-        temp_dir: Optional temp directory for frame files
+        temp_dir: Optional temp directory (unused, kept for API compat)
 
     Returns:
         Composite image as numpy array
     """
-    import tempfile
-    import shutil
-    import subprocess
-
     if not frames:
         raise ValueError("No frames provided")
 
-    # Create temp directory for frames
-    frames_dir = temp_dir or tempfile.mkdtemp(prefix="montage_frames_")
+    # NumPy min across all frames — same result as ImageMagick
+    # evaluate-sequence Min, but faster and no memory limits
+    composite = frames[0].copy()
+    for frame in frames[1:]:
+        np.minimum(composite, frame, out=composite)
 
-    try:
-        # Save frames as PNG files
-        frame_paths = []
-        for i, frame in enumerate(frames):
-            frame_path = os.path.join(frames_dir, f"frame_{i:04d}.png")
-            cv2.imwrite(frame_path, frame)
-            frame_paths.append(frame_path)
-
-        # Output path for composite
-        output_path = os.path.join(frames_dir, "composite.png")
-
-        # Use ImageMagick's evaluate-sequence Min
-        # This takes the minimum (darkest) pixel value across all frames
-        # producing the classic stop-motion effect
-        # ImageMagick 7 uses 'magick', ImageMagick 6 uses 'convert'
-        magick_cmd = "magick" if shutil.which("magick") else "convert"
-        cmd = [
-            magick_cmd,
-            *frame_paths,
-            "-evaluate-sequence", "Min",
-            output_path
-        ]
-
-        result = subprocess.run(cmd, capture_output=True)
-
-        if result.returncode != 0:
-            error_msg = result.stderr.decode() if result.stderr else "Unknown error"
-            raise RuntimeError(f"ImageMagick failed: {error_msg}")
-
-        # Read the composite back as numpy array
-        composite = cv2.imread(output_path)
-        if composite is None:
-            raise RuntimeError("Failed to read composite image")
-
-        return composite
-
-    finally:
-        # Clean up temp directory
-        if temp_dir is None:
-            shutil.rmtree(frames_dir, ignore_errors=True)
+    return composite
 
 
 def resize_for_thumbnail(image: np.ndarray, max_width: int = 800) -> np.ndarray:

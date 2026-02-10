@@ -460,9 +460,15 @@ class SkiFramesRunner:
         """Monitor RTSP stream."""
         url = rtsp_url or self.config.camera_url
         print(f"\nMonitoring RTSP stream: {url}")
+        # Probe stream FPS before starting detection so _on_run_complete
+        # uses the correct source_fps for frame sampling
+        import cv2
+        probe = cv2.VideoCapture(url)
+        if probe.isOpened():
+            self.source_fps = probe.get(cv2.CAP_PROP_FPS) or 30.0
+            probe.release()
+            print(f"  Source FPS: {self.source_fps}")
         self.engine.run_on_rtsp(url)
-        # Use actual stream FPS for accurate montage frame sampling
-        self.source_fps = self.engine.stream_fps
         self._print_summary()
 
     def _print_summary(self):
