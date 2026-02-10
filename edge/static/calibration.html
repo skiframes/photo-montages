@@ -1130,13 +1130,14 @@
                         <div id="gatesCount" style="font-size: 14px; color: var(--text-muted);">
                             0 gates detected
                         </div>
-                        <div>
-                            <button class="btn btn-outline btn-sm" id="gatesAddBtn">+ Add Gate</button>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn btn-outline btn-sm" id="gatesAddBlueBtn" style="color: #2563eb; border-color: #2563eb;">+ Blue Gate</button>
+                            <button class="btn btn-outline btn-sm" id="gatesAddRedBtn" style="color: #dc2626; border-color: #dc2626;">+ Red Gate</button>
                         </div>
                     </div>
 
-                    <div id="gatesAddInstructions" style="display: none; margin-top: 8px; padding: 8px; background: #f0f9ff; border-radius: 6px; font-size: 13px; color: var(--primary);">
-                        Tap the <strong>top</strong> of the gate pole, then tap the <strong>base</strong>.
+                    <div id="gatesAddInstructions" style="display: none; margin-top: 8px; padding: 8px; background: #f0f9ff; border-radius: 6px; font-size: 13px;">
+                        <span id="gatesAddInstructionText">Tap the <strong>top</strong> of the gate pole, then tap the <strong>base</strong>.</span>
                         <button class="btn btn-outline btn-sm" id="gatesCancelAdd" style="margin-left: 8px; font-size: 11px;">Cancel</button>
                     </div>
 
@@ -1509,6 +1510,7 @@
             addGateMode: false,
             addGateTapCount: 0,  // 0=waiting for top, 1=waiting for base
             addGatePending: null,  // {top: [x,y]} while waiting for base tap
+            addGateColor: null,   // 'red' or 'blue' — set when coach taps a color button
             gatesCalibrationId: null,
             gatesUploadedVideoPath: null,
             // GPS state (Bad Elf GNSS)
@@ -3241,7 +3243,8 @@
             frameContainer: document.getElementById('gatesFrameContainer'),
             frameImage: document.getElementById('gatesFrameImage'),
             gatesCount: document.getElementById('gatesCount'),
-            addBtn: document.getElementById('gatesAddBtn'),
+            addBlueBtn: document.getElementById('gatesAddBlueBtn'),
+            addRedBtn: document.getElementById('gatesAddRedBtn'),
             addInstructions: document.getElementById('gatesAddInstructions'),
             cancelAdd: document.getElementById('gatesCancelAdd'),
             minWarning: document.getElementById('gatesMinWarning'),
@@ -3664,14 +3667,18 @@
                 // First tap = top of pole
                 state.addGatePending = { top: [frameX, frameY] };
                 state.addGateTapCount = -1;  // Locked briefly to prevent double-tap
-                gatesEl.addInstructions.childNodes[0].textContent = 'Now tap the ';
-                gatesEl.addInstructions.querySelector('strong').textContent = 'base';
-                gatesEl.addInstructions.querySelector('strong').nextSibling.textContent = ' of the same pole. ';
-                // Show a marker where top was tapped
+                // Update instruction text with color
+                const colorName = state.addGateColor.charAt(0).toUpperCase() + state.addGateColor.slice(1);
+                const colorHex = state.addGateColor === 'red' ? '#dc2626' : '#2563eb';
+                document.getElementById('gatesAddInstructionText').innerHTML =
+                    `Now tap the <strong>base</strong> of the <strong style="color:${colorHex}">${colorName}</strong> gate pole.`;
+                // Show a marker where top was tapped (color-matched)
+                const markerColor = state.addGateColor === 'red' ? '#dc2626' : '#2563eb';
+                const markerBg = state.addGateColor === 'red' ? 'rgba(220,38,38,0.4)' : 'rgba(37,99,235,0.4)';
                 const topMarker = document.createElement('div');
                 topMarker.id = 'addGateTopMarker';
                 topMarker.style.cssText = `position:absolute; left:${x}px; top:${y}px; width:20px; height:20px;
-                    border-radius:50%; border:3px solid #22c55e; background:rgba(34,197,94,0.4);
+                    border-radius:50%; border:3px solid ${markerColor}; background:${markerBg};
                     transform:translate(-50%,-50%); pointer-events:none; z-index:15;`;
                 container.appendChild(topMarker);
                 // Unlock after 400ms so finger can be lifted
@@ -3681,9 +3688,7 @@
                 const newId = state.gates.length > 0
                     ? Math.max(...state.gates.map(g => g.id)) + 1
                     : 1;
-                // Auto alternate color
-                const lastColor = state.gates.filter(g => !g.dismissed).slice(-1)[0]?.color;
-                const color = lastColor === 'red' ? 'blue' : 'red';
+                const color = state.addGateColor;
 
                 state.gates.push({
                     id: newId,
@@ -3700,16 +3705,62 @@
                 if (marker) marker.remove();
 
                 // Exit add mode
-                state.addGateMode = false;
-                state.addGateTapCount = 0;
-                state.addGatePending = null;
-                gatesEl.addInstructions.style.display = 'none';
-                gatesEl.addBtn.classList.remove('btn-primary');
-                gatesEl.addBtn.classList.add('btn-outline');
+                exitAddGateMode();
 
                 renderGatePins();
                 updateGatesCount();
             }
+        }
+
+        function enterAddGateMode(color) {
+            // If already in add mode for same color, toggle off
+            if (state.addGateMode && state.addGateColor === color) {
+                exitAddGateMode();
+                return;
+            }
+            state.addGateMode = true;
+            state.addGateColor = color;
+            state.addGateTapCount = 0;
+            state.addGatePending = null;
+            // Remove any stale top marker
+            const marker = document.getElementById('addGateTopMarker');
+            if (marker) marker.remove();
+
+            // Show instructions with color-specific text
+            const colorName = color.charAt(0).toUpperCase() + color.slice(1);
+            const colorHex = color === 'red' ? '#dc2626' : '#2563eb';
+            gatesEl.addInstructions.style.display = 'block';
+            gatesEl.addInstructions.style.color = colorHex;
+            document.getElementById('gatesAddInstructionText').innerHTML =
+                `Tap the <strong>top</strong> of the <strong style="color:${colorHex}">${colorName}</strong> gate pole, then tap the <strong>base</strong>.`;
+
+            // Highlight active button, reset the other
+            const activeBtn = color === 'blue' ? gatesEl.addBlueBtn : gatesEl.addRedBtn;
+            const otherBtn = color === 'blue' ? gatesEl.addRedBtn : gatesEl.addBlueBtn;
+            const otherHex = color === 'blue' ? '#dc2626' : '#2563eb';
+            activeBtn.style.background = colorHex;
+            activeBtn.style.color = 'white';
+            activeBtn.style.borderColor = colorHex;
+            otherBtn.style.background = '';
+            otherBtn.style.color = otherHex;
+            otherBtn.style.borderColor = otherHex;
+        }
+
+        function exitAddGateMode() {
+            state.addGateMode = false;
+            state.addGateColor = null;
+            state.addGateTapCount = 0;
+            state.addGatePending = null;
+            gatesEl.addInstructions.style.display = 'none';
+            // Reset both buttons to outline with their color
+            gatesEl.addBlueBtn.style.background = '';
+            gatesEl.addBlueBtn.style.color = '#2563eb';
+            gatesEl.addBlueBtn.style.borderColor = '#2563eb';
+            gatesEl.addRedBtn.style.background = '';
+            gatesEl.addRedBtn.style.color = '#dc2626';
+            gatesEl.addRedBtn.style.borderColor = '#dc2626';
+            const marker = document.getElementById('addGateTopMarker');
+            if (marker) marker.remove();
         }
 
         function dismissGate(idx) {
@@ -4205,34 +4256,10 @@
             // Detect
             gatesEl.detectBtn.addEventListener('click', gatesDetect);
 
-            // Add gate
-            gatesEl.addBtn.addEventListener('click', () => {
-                state.addGateMode = !state.addGateMode;
-                state.addGateTapCount = 0;
-                state.addGatePending = null;
-                gatesEl.addInstructions.style.display = state.addGateMode ? 'block' : 'none';
-                if (state.addGateMode) {
-                    // Reset instruction text to original
-                    gatesEl.addInstructions.childNodes[0].textContent = 'Tap the ';
-                    gatesEl.addInstructions.querySelector('strong').textContent = 'top';
-                    gatesEl.addInstructions.querySelector('strong').nextSibling.textContent = ' of the gate pole, then tap the ';
-                    gatesEl.addBtn.classList.add('btn-primary');
-                    gatesEl.addBtn.classList.remove('btn-outline');
-                } else {
-                    gatesEl.addBtn.classList.remove('btn-primary');
-                    gatesEl.addBtn.classList.add('btn-outline');
-                }
-            });
-            gatesEl.cancelAdd.addEventListener('click', () => {
-                state.addGateMode = false;
-                state.addGateTapCount = 0;
-                state.addGatePending = null;
-                gatesEl.addInstructions.style.display = 'none';
-                gatesEl.addBtn.classList.remove('btn-primary');
-                gatesEl.addBtn.classList.add('btn-outline');
-                const marker = document.getElementById('addGateTopMarker');
-                if (marker) marker.remove();
-            });
+            // Add gate (blue or red)
+            gatesEl.addBlueBtn.addEventListener('click', () => enterAddGateMode('blue'));
+            gatesEl.addRedBtn.addEventListener('click', () => enterAddGateMode('red'));
+            gatesEl.cancelAdd.addEventListener('click', () => exitAddGateMode());
 
             // Compute
             gatesEl.computeBtn.addEventListener('click', gatesCompute);
