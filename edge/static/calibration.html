@@ -2018,12 +2018,12 @@
         }
 
         async function stopSession() {
-            if (!confirm('Are you sure you want to stop the current session?')) {
-                return;
-            }
-
             try {
                 const sessionId = elements.activeSessionId.textContent;
+                if (!sessionId) {
+                    showStatus('No active session to stop', 'error');
+                    return;
+                }
                 const res = await fetch(`/api/config/stop/${sessionId}`, { method: 'POST' });
                 const data = await res.json();
 

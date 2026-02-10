@@ -1,6 +1,7 @@
 import SwiftUI
 import WebKit
 import Combine
+import UIKit
 
 // MARK: - Geolocation Mock JavaScript
 
@@ -192,6 +193,7 @@ struct GeolocationWebView: UIViewRepresentable {
         }
         #endif
 
+        webView.uiDelegate = context.coordinator
         context.coordinator.webView = webView
 
         // Load the calibration UI
@@ -208,7 +210,7 @@ struct GeolocationWebView: UIViewRepresentable {
 
     // MARK: - Coordinator
 
-    class Coordinator: NSObject {
+    class Coordinator: NSObject, WKUIDelegate {
         weak var webView: WKWebView?
         private var cancellable: AnyCancellable?
 
@@ -223,6 +225,45 @@ struct GeolocationWebView: UIViewRepresentable {
                     self?.pushGPSData(data)
                 }
         }
+
+        // MARK: - WKUIDelegate (JS alert/confirm/prompt)
+
+        func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                      initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler() })
+            topViewController()?.present(alert, animated: true)
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                      initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(false) })
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler(true) })
+            topViewController()?.present(alert, animated: true)
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
+                      defaultText: String?, initiatedByFrame frame: WKFrameInfo,
+                      completionHandler: @escaping (String?) -> Void) {
+            let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
+            alert.addTextField { $0.text = defaultText }
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(nil) })
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+                completionHandler(alert.textFields?.first?.text)
+            })
+            topViewController()?.present(alert, animated: true)
+        }
+
+        private func topViewController() -> UIViewController? {
+            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let root = scene.windows.first?.rootViewController else { return nil }
+            var vc = root
+            while let presented = vc.presentedViewController { vc = presented }
+            return vc
+        }
+
+        // MARK: - GPS Data Push
 
         func pushGPSData(_ data: GnssData) {
             let js = """
