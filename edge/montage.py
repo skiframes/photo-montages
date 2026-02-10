@@ -168,8 +168,10 @@ def create_composite_imagemagick(frames: List[np.ndarray], temp_dir: str = None)
         # Use ImageMagick's evaluate-sequence Min
         # This takes the minimum (darkest) pixel value across all frames
         # producing the classic stop-motion effect
+        # ImageMagick 7 uses 'magick', ImageMagick 6 uses 'convert'
+        magick_cmd = "magick" if shutil.which("magick") else "convert"
         cmd = [
-            "magick",
+            magick_cmd,
             *frame_paths,
             "-evaluate-sequence", "Min",
             output_path
@@ -213,7 +215,18 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
 
     Title format: Western Division Ranking | SL | U14 | Run 1 | 2026-02-01 | 2.0s | 4fps (+2frames)
     """
-    from zoneinfo import ZoneInfo
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from datetime import timezone, timedelta
+        # Python 3.8 fallback: define US/Eastern as UTC-5 (no DST handling)
+        class ZoneInfo:
+            def __init__(self, name):
+                self.name = name
+                # Simple EST offset (UTC-5)
+                self._offset = timezone(timedelta(hours=-5))
+            def __repr__(self):
+                return f"ZoneInfo('{self.name}')"
 
     img = image.copy()
     h, w = img.shape[:2]
@@ -226,12 +239,11 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
     # Convert timestamp to Boston time (US/Eastern)
     boston_tz = ZoneInfo("America/New_York")
     if timestamp.tzinfo is None:
-        # Assume UTC if no timezone, convert to Boston
-        from datetime import timezone
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
-    boston_time = timestamp.astimezone(boston_tz)
-    # Date only (no time)
-    date_str = boston_time.strftime("%Y-%m-%d")
+        # Assume local time already (from RTSP/detection), just use date as-is
+        date_str = timestamp.strftime("%Y-%m-%d")
+    else:
+        boston_time = timestamp.astimezone(boston_tz)
+        date_str = boston_time.strftime("%Y-%m-%d")
 
     # Build title from race_info if provided
     # Format: "Western Division Ranking | SL | U14 | Run 1 | 2026-02-01"
