@@ -3590,10 +3590,15 @@
             }
 
             function onStart(e) {
+                // Prevent mouse events that follow touch events (mobile fires both)
+                if (e.type === 'mousedown' && e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+                if (e.type === 'mousedown' && state._lastTouchTime && Date.now() - state._lastTouchTime < 500) return;
+                if (e.type === 'touchstart') state._lastTouchTime = Date.now();
+
                 const pin = e.target.closest('.gate-pin');
                 if (!pin) {
                     // Check if we're in add gate mode
-                    if (state.addGateMode) {
+                    if (state.addGateMode && state.addGateTapCount >= 0) {
                         handleAddGateTap(e);
                     }
                     return;
