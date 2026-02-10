@@ -193,6 +193,7 @@ class DetectionEngine:
         # Stats
         self.frames_processed = 0
         self.runs_detected = 0
+        self.stream_fps = 30.0  # Updated when connected to RTSP/video
 
     def _get_racer_run_duration(self, timestamp: datetime) -> Optional[float]:
         """
@@ -474,6 +475,7 @@ class DetectionEngine:
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
+        self.stream_fps = fps
         print(f"  Connected: {width}x{height} @ {fps:.1f}fps")
         print(f"  Session ends: {self.config.session_end_time.strftime('%H:%M:%S')}")
 
@@ -503,10 +505,14 @@ class DetectionEngine:
 
                 frame_num += 1
 
-                if frame_num % check_interval != 0:
-                    continue
-
-                self.process_frame(frame, frame_num, now)
+                # When a run is active, capture every frame for sharp montages.
+                # When idle, only check every Nth frame for detection efficiency.
+                if self.current_run is not None:
+                    # Active run: capture frame and check for completion
+                    self.process_frame(frame, frame_num, now)
+                elif frame_num % check_interval == 0:
+                    # Idle: check for new run trigger at ~10fps
+                    self.process_frame(frame, frame_num, now)
 
         except KeyboardInterrupt:
             print("\n  Interrupted by user")

@@ -461,6 +461,8 @@ class SkiFramesRunner:
         url = rtsp_url or self.config.camera_url
         print(f"\nMonitoring RTSP stream: {url}")
         self.engine.run_on_rtsp(url)
+        # Use actual stream FPS for accurate montage frame sampling
+        self.source_fps = self.engine.stream_fps
         self._print_summary()
 
     def _print_summary(self):
