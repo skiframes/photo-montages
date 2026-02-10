@@ -478,19 +478,19 @@
         /* Gate calibration pins */
         .gate-pin {
             position: absolute;
-            width: 18px;
-            height: 18px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
-            border: 2px solid white;
+            border: 3px solid white;
             transform: translate(-50%, -50%);
             cursor: grab;
             z-index: 10;
             touch-action: none;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.5);
         }
         .gate-pin:active, .gate-pin.dragging {
             cursor: grabbing;
-            box-shadow: 0 0 8px rgba(255,255,255,0.8);
+            box-shadow: 0 0 10px rgba(255,255,255,0.9);
             transform: translate(-50%, -50%) scale(1.3);
         }
         .gate-pin.red { background: rgba(220, 38, 38, 0.85); }
@@ -518,13 +518,13 @@
 
         .gate-dismiss {
             position: absolute;
-            width: 18px;
-            height: 18px;
+            width: 26px;
+            height: 26px;
             border-radius: 50%;
             background: rgba(220, 38, 38, 0.9);
             color: white;
-            font-size: 12px;
-            line-height: 18px;
+            font-size: 16px;
+            line-height: 26px;
             text-align: center;
             cursor: pointer;
             z-index: 12;
@@ -3658,11 +3658,20 @@
             if (state.addGateTapCount === 0) {
                 // First tap = top of pole
                 state.addGatePending = { top: [frameX, frameY] };
-                state.addGateTapCount = 1;
+                state.addGateTapCount = -1;  // Locked briefly to prevent double-tap
                 gatesEl.addInstructions.childNodes[0].textContent = 'Now tap the ';
                 gatesEl.addInstructions.querySelector('strong').textContent = 'base';
                 gatesEl.addInstructions.querySelector('strong').nextSibling.textContent = ' of the same pole. ';
-            } else {
+                // Show a marker where top was tapped
+                const topMarker = document.createElement('div');
+                topMarker.id = 'addGateTopMarker';
+                topMarker.style.cssText = `position:absolute; left:${x}px; top:${y}px; width:20px; height:20px;
+                    border-radius:50%; border:3px solid #22c55e; background:rgba(34,197,94,0.4);
+                    transform:translate(-50%,-50%); pointer-events:none; z-index:15;`;
+                container.appendChild(topMarker);
+                // Unlock after 400ms so finger can be lifted
+                setTimeout(() => { state.addGateTapCount = 1; }, 400);
+            } else if (state.addGateTapCount === 1) {
                 // Second tap = base of pole
                 const newId = state.gates.length > 0
                     ? Math.max(...state.gates.map(g => g.id)) + 1
@@ -3680,6 +3689,10 @@
                     confidence: 1.0,
                     dismissed: false,
                 });
+
+                // Remove top marker
+                const marker = document.getElementById('addGateTopMarker');
+                if (marker) marker.remove();
 
                 // Exit add mode
                 state.addGateMode = false;
@@ -4212,6 +4225,8 @@
                 gatesEl.addInstructions.style.display = 'none';
                 gatesEl.addBtn.classList.remove('btn-primary');
                 gatesEl.addBtn.classList.add('btn-outline');
+                const marker = document.getElementById('addGateTopMarker');
+                if (marker) marker.remove();
             });
 
             // Compute
