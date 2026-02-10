@@ -83,10 +83,14 @@ class DetectionConfig:
             data = json.load(f)
 
         # Parse session end time, handling various formats
+        # Convert to naive local time so it can be compared with datetime.now()
         end_time_str = data['session_end_time']
         if end_time_str.endswith('Z'):
             end_time_str = end_time_str[:-1] + '+00:00'
         session_end = datetime.fromisoformat(end_time_str)
+        # If timezone-aware, convert to local time then strip tzinfo
+        if session_end.tzinfo is not None:
+            session_end = session_end.astimezone().replace(tzinfo=None)
 
         # Parse end_zone - may be None if using duration mode
         end_zone = None
