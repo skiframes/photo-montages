@@ -337,6 +337,113 @@
             background: var(--bg);
         }
 
+        .fps-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .fps-btn {
+            padding: 8px 2px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        .fps-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .fps-btn:hover:not(.active) {
+            background: var(--bg);
+        }
+
+        /* Montage Gallery */
+        .montage-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .montage-thumb {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .montage-thumb:hover {
+            transform: scale(1.02);
+        }
+
+        .montage-thumb img {
+            width: 100%;
+            display: block;
+        }
+
+        .montage-thumb .montage-fps-tag {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+
+        .montage-thumb .montage-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            font-size: 10px;
+            padding: 3px 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Montage fullscreen overlay */
+        .montage-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .montage-overlay.visible {
+            display: flex;
+        }
+
+        .montage-overlay img {
+            max-width: 95vw;
+            max-height: 95vh;
+            object-fit: contain;
+        }
+
         /* Slider */
         input[type="range"] {
             -webkit-appearance: none;
@@ -435,15 +542,14 @@
 
         /* Pinch zoom support */
         .frame-wrapper {
-            overflow: auto;
-            -webkit-overflow-scrolling: touch;
+            overflow: hidden;
             max-height: 60vh;
+            touch-action: none;
         }
 
         .frame-inner {
             position: relative;
             transform-origin: 0 0;
-            transition: transform 0.1s ease-out;
         }
 
         /* Zoom controls */
@@ -698,9 +804,38 @@
                 <button class="btn btn-primary mode-btn" id="modeCalibration">
                     Photo Montage
                 </button>
+                <button class="btn btn-outline mode-btn" id="modeGallery">
+                    Gallery
+                </button>
                 <button class="btn btn-outline mode-btn" id="modeStitch">
                     Video Stitch
                 </button>
+            </div>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- GALLERY MODE UI                            -->
+        <!-- ============================================ -->
+        <div id="galleryMode" style="display: none;">
+            <div class="card">
+                <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    Recent Montages
+                    <span id="galleryMontageCount" style="font-size: 12px; color: var(--text-muted); font-weight: normal;"></span>
+                </div>
+
+                <!-- FPS Filter -->
+                <div id="galleryFpsFilter" style="margin-bottom: 12px;">
+                    <label style="font-size: 13px; margin-bottom: 6px; display: block;">Filter by FPS</label>
+                    <div class="fps-grid" id="galleryFpsButtons">
+                        <button type="button" class="fps-btn active" data-fps="all">All</button>
+                    </div>
+                </div>
+
+                <div id="galleryGrid" class="montage-grid">
+                    <div style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px;">
+                        Loading montages...
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1196,13 +1331,10 @@
             <div id="freeSkiMode" style="display: none;">
             <!-- Active Session Warning -->
             <div id="activeSession" class="active-session" style="display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <strong>Active Session:</strong> <span id="activeSessionId"></span>
                     <br><small>Ends: <span id="activeSessionEnd"></span></small>
                 </div>
-                <button class="btn btn-danger btn-sm" id="stopSession">Stop Session</button>
-            </div>
         </div>
 
         <!-- Calibration Badge (shown after accepting gate calibration) -->
@@ -1357,9 +1489,28 @@
                     <span id="durationSetting" style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">run capture length</span>
                 </div>
                 <div style="margin-top: 10px;">
-                    <label for="montageFps" style="font-size: 13px;">Montage FPS</label>
-                    <input type="number" id="montageFps" min="1" max="15" step="1" value="4" style="width: 80px;">
-                    <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">frames per second</span>
+                    <label style="font-size: 13px;">Montage FPS <span style="font-weight: normal; color: var(--text-muted);">(select multiple)</span></label>
+                    <div class="fps-grid" id="fpsGrid">
+                        <button type="button" class="fps-btn" data-fps="1.0">1.0</button>
+                        <button type="button" class="fps-btn" data-fps="1.5">1.5</button>
+                        <button type="button" class="fps-btn" data-fps="2.0">2.0</button>
+                        <button type="button" class="fps-btn" data-fps="2.5">2.5</button>
+                        <button type="button" class="fps-btn" data-fps="3.0">3.0</button>
+                        <button type="button" class="fps-btn" data-fps="3.5">3.5</button>
+                        <button type="button" class="fps-btn active" data-fps="4.0">4.0</button>
+                        <button type="button" class="fps-btn" data-fps="4.5">4.5</button>
+                        <button type="button" class="fps-btn" data-fps="5.0">5.0</button>
+                        <button type="button" class="fps-btn" data-fps="5.5">5.5</button>
+                        <button type="button" class="fps-btn" data-fps="6.0">6.0</button>
+                        <button type="button" class="fps-btn" data-fps="6.5">6.5</button>
+                        <button type="button" class="fps-btn" data-fps="7.0">7.0</button>
+                        <button type="button" class="fps-btn" data-fps="7.5">7.5</button>
+                        <button type="button" class="fps-btn" data-fps="8.0">8.0</button>
+                        <button type="button" class="fps-btn" data-fps="8.5">8.5</button>
+                        <button type="button" class="fps-btn" data-fps="9.0">9.0</button>
+                        <button type="button" class="fps-btn" data-fps="9.5">9.5</button>
+                        <button type="button" class="fps-btn" data-fps="10.0">10.0</button>
+                    </div>
                 </div>
                 <div style="margin-top: 10px;">
                     <label for="startDelay" style="font-size: 13px;">Start Offset (sec)</label>
@@ -1375,8 +1526,10 @@
 
             <label for="sessionType">Session Type</label>
             <select id="sessionType">
-                <option value="training">Training</option>
+                <option value="test" selected>TEST</option>
                 <option value="race">Race</option>
+                <option value="gate_training">Gate Training</option>
+                <option value="free_skiing">Free Skiing</option>
             </select>
 
             <label for="group">Group</label>
@@ -1386,6 +1539,7 @@
                 <option value="U14">U14</option>
                 <option value="Scored">Scored</option>
                 <option value="Masters">Masters</option>
+                <option value="Free Ski">Free Ski</option>
             </select>
 
             <div id="sessionEndTimeSection">
@@ -1429,7 +1583,7 @@
 
         <!-- Processing Status -->
         <div id="processingStatus" class="card" style="display: none;">
-            <div class="card-title">Processing Video</div>
+            <div class="card-title">Processing</div>
             <div id="processingInfo" style="margin-bottom: 12px;">
                 <div style="color: var(--text-muted); font-size: 14px;">
                     Status: <span id="processingStatusText">Starting...</span>
@@ -1438,12 +1592,21 @@
                     Runs detected: <span id="processingRuns">0</span>
                 </div>
             </div>
-            <button id="stopProcessing" class="btn btn-danger">
-                Stop Processing
+        </div>
+
+        <!-- Stop Session (bottom of page) -->
+        <div id="stopSessionSection" style="display: none; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
+            <button id="stopSession" class="btn btn-danger" style="width: 100%; padding: 14px; font-size: 16px;">
+                Stop Session
             </button>
         </div>
         </div><!-- end freeSkiMode -->
         </div><!-- end montageMode -->
+    </div>
+
+    <!-- Montage Fullscreen Overlay -->
+    <div class="montage-overlay" id="montageOverlay">
+        <img id="montageOverlayImg" src="">
     </div>
 
     <!-- Drawing Indicator -->
@@ -1484,11 +1647,16 @@
             isDrawing: false,
             drawStart: { x: 0, y: 0 },
             zoom: 1,
+            panX: 0,
+            panY: 0,
+            isPanning: false,
+            panStart: { x: 0, y: 0 },
+            panStartOffset: { x: 0, y: 0 },
             cameraId: null,
             cameraOffsetPct: 0,  // Camera time offset percentage
             endMode: 'duration',  // 'zone' or 'duration'
             runDurationSeconds: 2.0,
-            montageFps: 4,
+            montageFpsList: [4.0],
             startOffsetSec: 0,  // Fixed delay in seconds after trigger
             currentJobId: null,  // Track current processing job
             statusPollInterval: null,  // Interval for polling job status
@@ -1584,6 +1752,7 @@
             activeSessionId: document.getElementById('activeSessionId'),
             activeSessionEnd: document.getElementById('activeSessionEnd'),
             stopSession: document.getElementById('stopSession'),
+            stopSessionSection: document.getElementById('stopSessionSection'),
             sessionEndTimeSection: document.getElementById('sessionEndTimeSection'),
             zoomIn: document.getElementById('zoomIn'),
             zoomOut: document.getElementById('zoomOut'),
@@ -1596,7 +1765,6 @@
             processingStatus: document.getElementById('processingStatus'),
             processingStatusText: document.getElementById('processingStatusText'),
             processingRuns: document.getElementById('processingRuns'),
-            stopProcessing: document.getElementById('stopProcessing'),
             // Vola elements
             volaSelect: document.getElementById('volaSelect'),
             volaFile: document.getElementById('volaFile'),
@@ -1618,8 +1786,10 @@
             volaTimeRange: document.getElementById('volaTimeRange'),
             // Mode selection
             modeCalibration: document.getElementById('modeCalibration'),
+            modeGallery: document.getElementById('modeGallery'),
             modeStitch: document.getElementById('modeStitch'),
             montageMode: document.getElementById('montageMode'),
+            galleryMode: document.getElementById('galleryMode'),
             stitchMode: document.getElementById('stitchMode'),
             // Sub-mode elements (inside Photo Montage)
             subModeGates: document.getElementById('subModeGates'),
@@ -1757,12 +1927,12 @@
 
                 // Populate main camera dropdown
                 elements.camera.innerHTML = cameras.map(c =>
-                    `<option value="${c.id}" data-offset="${c.offset_pct}">${c.name} (${c.offset_pct}% offset)</option>`
+                    `<option value="${c.id}" data-offset="${c.offset_pct}">${c.name}</option>`
                 ).join('');
 
                 // Populate Vola camera dropdown
                 elements.volaCamera.innerHTML = cameras.map(c =>
-                    `<option value="${c.id}" data-offset="${c.offset_pct}">${c.name} (${c.offset_pct}% offset)</option>`
+                    `<option value="${c.id}" data-offset="${c.offset_pct}">${c.name}</option>`
                 ).join('');
 
                 if (cameras.length > 0) {
@@ -1900,6 +2070,7 @@
                 const data = await res.json();
                 if (data.active) {
                     elements.activeSession.style.display = 'block';
+                    elements.stopSessionSection.style.display = 'block';
                     elements.activeSessionId.textContent = data.config.session_id;
                     elements.activeSessionEnd.textContent = new Date(data.config.session_end_time).toLocaleTimeString();
                 } else {
@@ -1996,8 +2167,17 @@
             elements.runDuration.addEventListener('change', () => {
                 state.runDurationSeconds = parseFloat(elements.runDuration.value) || 2.0;
             });
-            elements.montageFps.addEventListener('change', () => {
-                state.montageFps = parseInt(elements.montageFps.value) || 4;
+            document.querySelectorAll('.fps-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    btn.classList.toggle('active');
+                    // Collect all active FPS values
+                    const selected = [];
+                    document.querySelectorAll('.fps-btn.active').forEach(b => {
+                        selected.push(parseFloat(b.dataset.fps));
+                    });
+                    selected.sort((a, b) => a - b);
+                    state.montageFpsList = selected.length > 0 ? selected : [4.0];
+                });
             });
             elements.startDelay.addEventListener('change', () => {
                 state.startOffsetSec = parseFloat(elements.startDelay.value) || 0;
@@ -2009,15 +2189,24 @@
                 elements.advancedArrow.textContent = elements.advancedSettings.classList.contains('visible') ? '▼' : '▶';
             });
 
-            // Sliders
+            // Sliders — update display + send live updates if session active
+            let liveUpdateTimer = null;
+            function debouncedLiveUpdate() {
+                if (liveUpdateTimer) clearTimeout(liveUpdateTimer);
+                liveUpdateTimer = setTimeout(sendLiveSettingsUpdate, 300);
+            }
+
             elements.threshold.addEventListener('input', () => {
                 elements.thresholdValue.textContent = elements.threshold.value;
+                debouncedLiveUpdate();
             });
             elements.minPixels.addEventListener('input', () => {
                 elements.minPixelsValue.textContent = elements.minPixels.value;
+                debouncedLiveUpdate();
             });
             elements.minBrightness.addEventListener('input', () => {
                 elements.minBrightnessValue.textContent = elements.minBrightness.value;
+                debouncedLiveUpdate();
             });
 
             // Zoom controls
@@ -2028,35 +2217,81 @@
             // Save config
             elements.saveConfig.addEventListener('click', saveConfig);
 
-            // Stop session
+            // Stop session (unified — stops config + kills process)
             elements.stopSession.addEventListener('click', stopSession);
 
             // Calibration badge dismiss
             elements.calibrationBadgeDismiss.addEventListener('click', dismissCalibrationBadge);
+        }
 
-            // Stop processing
-            elements.stopProcessing.addEventListener('click', stopProcessing);
+        async function sendLiveSettingsUpdate() {
+            const sessionId = elements.activeSessionId.textContent;
+            if (!sessionId) return; // No active session, nothing to update
+
+            const payload = {
+                detection_threshold: parseInt(elements.threshold.value),
+                min_pixel_change_pct: parseFloat(elements.minPixels.value),
+                min_brightness: parseInt(elements.minBrightness.value),
+            };
+
+            try {
+                const res = await fetch(`/api/config/update_live/${sessionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    showStatus(`Live update failed: ${data.error}`, 'error');
+                    return;
+                }
+
+                if (data.changed && data.changed.length > 0) {
+                    // Brief green flash feedback — don't use showStatus to avoid hiding important messages
+                    const flashEl = document.createElement('div');
+                    flashEl.textContent = '✓ Settings applied';
+                    flashEl.style.cssText = 'position:fixed;top:10px;right:10px;background:#28a745;color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;z-index:9999;opacity:1;transition:opacity 0.5s';
+                    document.body.appendChild(flashEl);
+                    setTimeout(() => { flashEl.style.opacity = '0'; }, 1200);
+                    setTimeout(() => { flashEl.remove(); }, 1800);
+                }
+            } catch (err) {
+                console.error('Live settings update failed:', err);
+            }
         }
 
         async function stopSession() {
+            const sessionId = elements.activeSessionId.textContent;
+            if (!sessionId) {
+                showStatus('No active session to stop', 'error');
+                return;
+            }
+
+            elements.stopSession.innerHTML = '<span class="spinner"></span>Stopping...';
+            elements.stopSession.disabled = true;
+
             try {
-                const sessionId = elements.activeSessionId.textContent;
-                if (!sessionId) {
-                    showStatus('No active session to stop', 'error');
-                    return;
-                }
+                // Single call — backend stops config AND kills process
                 const res = await fetch(`/api/config/stop/${sessionId}`, { method: 'POST' });
                 const data = await res.json();
 
                 if (data.error) {
                     showStatus(data.error, 'error');
+                    elements.stopSession.innerHTML = 'Stop Session';
+                    elements.stopSession.disabled = false;
                     return;
                 }
 
                 showStatus('Session stopped', 'success');
                 elements.activeSession.style.display = 'none';
+                elements.stopSessionSection.style.display = 'none';
+                elements.processingStatus.style.display = 'none';
+                state.currentJobId = null;
             } catch (e) {
                 showStatus('Failed to stop session: ' + e.message, 'error');
+                elements.stopSession.innerHTML = 'Stop Session';
+                elements.stopSession.disabled = false;
             }
         }
 
@@ -2188,7 +2423,7 @@
                 clientY = e.clientY;
             }
 
-            // Account for zoom and scroll
+            // Account for zoom and pan
             const displayWidth = img.clientWidth;
             const displayHeight = img.clientHeight;
 
@@ -2199,7 +2434,19 @@
         }
 
         function onDrawStart(e) {
-            if (!state.drawingMode) return;
+            // If not in drawing mode and zoomed in, start panning
+            if (!state.drawingMode) {
+                if (state.zoom > 1) {
+                    e.preventDefault();
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    state.isPanning = true;
+                    state.panStart = { x: clientX, y: clientY };
+                    state.panStartOffset = { x: state.panX, y: state.panY };
+                    elements.frameContainer.style.cursor = 'grabbing';
+                }
+                return;
+            }
             e.preventDefault();
 
             const coords = getEventCoords(e);
@@ -2210,6 +2457,19 @@
         }
 
         function onDrawMove(e) {
+            // Handle panning
+            if (state.isPanning) {
+                e.preventDefault();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                const dx = clientX - state.panStart.x;
+                const dy = clientY - state.panStart.y;
+                state.panX = state.panStartOffset.x + dx;
+                state.panY = state.panStartOffset.y + dy;
+                applyTransform();
+                return;
+            }
+
             if (!state.isDrawing || !state.drawingMode) return;
             e.preventDefault();
 
@@ -2235,6 +2495,11 @@
         }
 
         function onDrawEnd(e) {
+            if (state.isPanning) {
+                state.isPanning = false;
+                elements.frameContainer.style.cursor = '';
+                return;
+            }
             if (!state.isDrawing) return;
 
             state.isDrawing = false;
@@ -2264,8 +2529,10 @@
 
             const displayWidth = img.clientWidth;
             const displayHeight = img.clientHeight;
-            const scaleX = displayWidth / state.frameWidth * state.zoom;
-            const scaleY = displayHeight / state.frameHeight * state.zoom;
+            // Zone overlays are inside frameContainer which is inside the scaled frameInner,
+            // so use unscaled ratios — the CSS transform handles the zoom visually
+            const scaleX = displayWidth / state.frameWidth;
+            const scaleY = displayHeight / state.frameHeight;
 
             if (state.startZone) {
                 const overlay = createZoneOverlay(state.startZone, 'start', 'START', scaleX, scaleY);
@@ -2299,11 +2566,42 @@
             return overlay;
         }
 
+        function applyTransform() {
+            elements.frameInner.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+        }
+
         function setZoom(newZoom) {
+            const oldZoom = state.zoom;
             state.zoom = Math.max(0.5, Math.min(4, newZoom));
-            elements.frameInner.style.transform = `scale(${state.zoom})`;
+            // Reset pan when zooming back to 1x
+            if (state.zoom <= 1) {
+                state.panX = 0;
+                state.panY = 0;
+            } else {
+                // Clamp pan so image doesn't go off-screen
+                clampPan();
+            }
+            applyTransform();
             elements.zoomReset.textContent = `${state.zoom.toFixed(1)}x`;
             renderZones();
+        }
+
+        function clampPan() {
+            const wrapper = elements.frameWrapper;
+            if (!wrapper) return;
+            const wrapperW = wrapper.clientWidth;
+            const wrapperH = wrapper.clientHeight;
+            const img = document.getElementById('frameImage');
+            if (!img) return;
+            const scaledW = img.clientWidth * state.zoom;
+            const scaledH = img.clientHeight * state.zoom;
+            // Allow panning so content stays partially visible
+            const maxPanX = 0;
+            const minPanX = Math.min(0, wrapperW - scaledW);
+            const maxPanY = 0;
+            const minPanY = Math.min(0, wrapperH - scaledH);
+            state.panX = Math.max(minPanX, Math.min(maxPanX, state.panX));
+            state.panY = Math.max(minPanY, Math.min(maxPanY, state.panY));
         }
 
         function checkReadyToSave() {
@@ -2394,7 +2692,7 @@
                     // Duration mode settings
                     run_duration_seconds: state.endMode === 'duration' ? state.runDurationSeconds : null,
                     // Montage settings
-                    montage_fps: state.montageFps,
+                    montage_fps_list: state.montageFpsList,
                 };
 
                 // For video files, include the video path and Vola racer data for processing
@@ -2465,6 +2763,7 @@
                         // Start polling for status
                         state.currentJobId = processData.job_id;
                         elements.processingStatus.style.display = 'block';
+                        elements.stopSessionSection.style.display = 'block';
                         elements.processingStatusText.textContent = 'Processing...';
                         elements.processingRuns.textContent = '0';
                         startStatusPolling();
@@ -2488,6 +2787,7 @@
                     } else {
                         state.currentJobId = processData.job_id;
                         elements.processingStatus.style.display = 'block';
+                        elements.stopSessionSection.style.display = 'block';
                         elements.processingStatusText.textContent = 'Monitoring RTSP stream...';
                         elements.processingRuns.textContent = '0';
                         startStatusPolling();
@@ -2508,11 +2808,11 @@
         }
 
         function resetProcessingUI() {
-            // Hide processing status card and reset button state
+            // Hide processing status card and stop button
             elements.processingStatus.style.display = 'none';
-            elements.stopProcessing.innerHTML = 'Stop Processing';
-            elements.stopProcessing.disabled = false;
-            elements.stopProcessing.style.background = '';  // Reset to default (var(--danger))
+            elements.stopSessionSection.style.display = 'none';
+            elements.stopSession.innerHTML = 'Stop Session';
+            elements.stopSession.disabled = false;
         }
 
         function startStatusPolling() {
@@ -2537,7 +2837,10 @@
                         return;
                     }
 
-                    elements.processingRuns.textContent = data.runs_detected || 0;
+                    const newRuns = data.runs_detected || 0;
+                    elements.processingRuns.textContent = newRuns;
+                    // Refresh gallery when new runs detected
+                    if (newRuns > 0 && state.mode === 'gallery') { loadGalleryMontages(); }
 
                     if (data.status === 'completed') {
                         clearInterval(state.statusPollInterval);
@@ -2566,35 +2869,109 @@
             }, 2000);
         }
 
-        async function stopProcessing() {
-            if (!state.currentJobId) {
-                showStatus('No active processing job', 'error');
+        // ============================
+        // Montage Gallery (Gallery Tab)
+        // ============================
+        let galleryPollingInterval = null;
+        let galleryMontages = [];  // All montages from API
+        let galleryFpsFilter = 'all';  // Current FPS filter
+
+        async function loadGalleryMontages() {
+            try {
+                const res = await fetch('/api/montages/latest');
+                const data = await res.json();
+                galleryMontages = data.montages || [];
+                updateGalleryFpsButtons();
+                renderGallery();
+            } catch (e) {
+                console.error('Failed to load gallery montages:', e);
+            }
+        }
+
+        function updateGalleryFpsButtons() {
+            const container = document.getElementById('galleryFpsButtons');
+            if (!container) return;
+
+            // Collect unique FPS values
+            const fpsValues = new Set();
+            galleryMontages.forEach(m => {
+                if (m.fps !== null && m.fps !== undefined) fpsValues.add(m.fps);
+            });
+
+            const sorted = [...fpsValues].sort((a, b) => a - b);
+
+            // Build buttons: All + each FPS value
+            let html = `<button type="button" class="fps-btn ${galleryFpsFilter === 'all' ? 'active' : ''}" data-fps="all">All</button>`;
+            sorted.forEach(fps => {
+                const label = fps % 1 === 0 ? fps.toFixed(0) : fps.toFixed(1);
+                const active = galleryFpsFilter === String(fps) ? 'active' : '';
+                html += `<button type="button" class="fps-btn ${active}" data-fps="${fps}">${label}</button>`;
+            });
+            container.innerHTML = html;
+
+            // Click handlers
+            container.querySelectorAll('.fps-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    galleryFpsFilter = btn.dataset.fps;
+                    container.querySelectorAll('.fps-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    renderGallery();
+                });
+            });
+        }
+
+        function renderGallery() {
+            const grid = document.getElementById('galleryGrid');
+            const countEl = document.getElementById('galleryMontageCount');
+            if (!grid) return;
+
+            // Filter by FPS
+            let filtered = galleryMontages;
+            if (galleryFpsFilter !== 'all') {
+                const targetFps = parseFloat(galleryFpsFilter);
+                filtered = galleryMontages.filter(m => m.fps === targetFps);
+            }
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px;">No montages found</div>';
+                if (countEl) countEl.textContent = '';
                 return;
             }
 
-            elements.stopProcessing.innerHTML = '<span class="spinner"></span>Stopping...';
-            elements.stopProcessing.disabled = true;
+            if (countEl) countEl.textContent = `${filtered.length} of ${galleryMontages.length} images`;
 
-            try {
-                const res = await fetch(`/api/process/stop/${state.currentJobId}`, { method: 'POST' });
-                const data = await res.json();
+            grid.innerHTML = filtered.map(m => {
+                const label = m.filename.replace('.jpg', '').replace(/_/g, ' ');
+                const fpsTag = m.fps !== null ? `<span class="montage-fps-tag">${m.fps % 1 === 0 ? m.fps.toFixed(0) : m.fps.toFixed(1)} fps</span>` : '';
+                return `<div class="montage-thumb" onclick="showMontageFullscreen('/api/montages/image/${m.path}')">
+                    <img src="/api/montages/image/${m.path}" loading="lazy">
+                    ${fpsTag}
+                    <div class="montage-label">${label}</div>
+                </div>`;
+            }).join('');
+        }
 
-                if (data.error) {
-                    showStatus(`Failed to stop: ${data.error}`, 'error');
-                    elements.stopProcessing.innerHTML = 'Stop Processing';
-                    elements.stopProcessing.disabled = false;
-                } else {
-                    // Update UI immediately to show stopped state
-                    elements.processingStatusText.textContent = 'Stopped';
-                    elements.stopProcessing.innerHTML = 'Stopped';
-                    elements.stopProcessing.style.background = 'var(--text-muted)';
-                    showStatus('Processing stopped', 'success');
-                    // Poll will handle final cleanup, but give immediate feedback
-                }
-            } catch (e) {
-                showStatus('Failed to stop processing: ' + e.message, 'error');
-                elements.stopProcessing.innerHTML = 'Stop Processing';
-                elements.stopProcessing.disabled = false;
+        function showMontageFullscreen(src) {
+            const overlay = document.getElementById('montageOverlay');
+            const img = document.getElementById('montageOverlayImg');
+            img.src = src;
+            overlay.classList.add('visible');
+        }
+
+        // Close fullscreen on click
+        document.getElementById('montageOverlay').addEventListener('click', () => {
+            document.getElementById('montageOverlay').classList.remove('visible');
+        });
+
+        function startGalleryPolling() {
+            if (galleryPollingInterval) return;
+            galleryPollingInterval = setInterval(loadGalleryMontages, 5000);
+        }
+
+        function stopGalleryPolling() {
+            if (galleryPollingInterval) {
+                clearInterval(galleryPollingInterval);
+                galleryPollingInterval = null;
             }
         }
 
@@ -2615,9 +2992,10 @@
             state.mode = mode;
             // Hide all mode divs
             elements.montageMode.style.display = 'none';
+            elements.galleryMode.style.display = 'none';
             elements.stitchMode.style.display = 'none';
             // Reset all mode buttons
-            [elements.modeCalibration, elements.modeStitch].forEach(btn => {
+            [elements.modeCalibration, elements.modeGallery, elements.modeStitch].forEach(btn => {
                 btn.classList.remove('btn-primary');
                 btn.classList.add('btn-outline');
             });
@@ -2628,6 +3006,13 @@
                 elements.modeCalibration.classList.remove('btn-outline');
                 // Initialize the active sub-mode
                 switchSubMode(state.montageSubMode || 'gates');
+            } else if (mode === 'gallery') {
+                elements.galleryMode.style.display = 'block';
+                elements.modeGallery.classList.add('btn-primary');
+                elements.modeGallery.classList.remove('btn-outline');
+                // Load gallery
+                loadGalleryMontages();
+                startGalleryPolling();
             } else if (mode === 'stitch') {
                 elements.stitchMode.style.display = 'block';
                 elements.modeStitch.classList.add('btn-primary');
@@ -3166,6 +3551,7 @@
 
         function setupStitchEventListeners() {
             elements.modeCalibration.addEventListener('click', () => switchMode('montage'));
+            elements.modeGallery.addEventListener('click', () => switchMode('gallery'));
             elements.modeStitch.addEventListener('click', () => switchMode('stitch'));
             elements.subModeGates.addEventListener('click', () => switchSubMode('gates'));
             elements.subModeFreeSki.addEventListener('click', () => switchSubMode('freeski'));

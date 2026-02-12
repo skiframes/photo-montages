@@ -70,23 +70,23 @@ pending_calibrations_lock = threading.Lock()
 # offset_pct: what percentage of run time has elapsed when skier enters this camera's view
 CAMERAS = {
     'R1': {
-        'name': 'R1 - Start Gate',
+        'name': 'R1',
         'rtsp_url': os.environ.get('R1_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.101/h264Preview_01_main'),
         'offset_pct': 0,  # 0% - covers start gate
     },
     'R2': {
-        'name': 'R2 - Zoom Down',
+        'name': 'R2',
         'rtsp_url': os.environ.get('R2_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.102/h264Preview_01_main'),
         'offset_pct': 10,  # 10% into the run
     },
     'Axis': {
-        'name': 'Axis PTZ - Mid Course',
+        'name': 'Axis',
         'rtsp_url': os.environ.get('AXIS_RTSP_URL', 'rtsp://j40:j40@192.168.0.100/axis-media/media.amp'),
         'offset_pct': 20,  # 20% into the run
     },
     'R3': {
-        'name': 'R3 - Finish',
-        'rtsp_url': os.environ.get('R3_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.103/h264Preview_01_main'),
+        'name': 'R3',
+        'rtsp_url': os.environ.get('R3_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.103/h265Preview_01_main'),
         'offset_pct': 50,  # 50% - covers last half of run
     },
 }
@@ -99,8 +99,8 @@ DATA_BASE_DIR = Path(os.environ.get('SKIFRAMES_DATA_DIR', '/Volumes/OWC_48/data'
 VOLA_DIR = DATA_BASE_DIR / 'vola'
 
 # Session types and groups
-SESSION_TYPES = ['training', 'race']
-GROUPS = ['U10', 'U12', 'U14', 'Scored', 'Masters']
+SESSION_TYPES = ['test', 'race', 'gate_training', 'free_skiing']
+GROUPS = ['U10', 'U12', 'U14', 'Scored', 'Masters', 'Free Ski']
 
 
 @app.route('/')
@@ -925,7 +925,7 @@ def save_config():
         'min_pixel_change_pct': data.get('min_pixel_change_pct', 5.0),
         'min_brightness': data.get('min_brightness', 100),  # Shadow filter: min brightness of motion pixels
         'discipline': data.get('discipline', 'freeski'),  # freeski, sl_youth, sl_adult, gs_panel, sg_panel
-        'montage_fps': data.get('montage_fps', 4),
+        'montage_fps_list': data.get('montage_fps_list', [4.0]),
         'start_offset_sec': data.get('start_offset_sec', 0),  # Fixed delay in seconds after trigger
         # Vola racer data for naming montages
         'vola_racers': data.get('vola_racers', []),
@@ -992,7 +992,7 @@ def get_config(session_id):
 
 @app.route('/api/config/stop/<session_id>', methods=['POST'])
 def stop_session(session_id):
-    """Stop a session by setting its end time to now."""
+    """Stop a session: set end time to now AND kill any running detection process."""
     config_path = CONFIG_DIR / f'{session_id}.json'
     if not config_path.exists():
         return jsonify({'error': 'Config not found'}), 404
@@ -1006,7 +1006,68 @@ def stop_session(session_id):
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
 
-    return jsonify({'success': True, 'session_id': session_id})
+    # Also kill any running process for this session
+    process_killed = False
+    with jobs_lock:
+        for job_id, job in active_jobs.items():
+            if job.get('config_path', '').endswith(f'{session_id}.json') and job['status'] == 'running':
+                process = job['process']
+                try:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=3)
+                    except:
+                        process.kill()
+                    job['status'] = 'stopped'
+                    process_killed = True
+                    print(f"[STOP] Killed process for session {session_id} (job {job_id})")
+                except Exception as e:
+                    print(f"[STOP] Failed to kill process for {session_id}: {e}")
+                break
+
+    return jsonify({'success': True, 'session_id': session_id, 'process_killed': process_killed})
+
+
+@app.route('/api/config/update_live/<session_id>', methods=['POST'])
+def update_live_settings(session_id):
+    """
+    Update detection settings on a running session.
+    The detection engine hot-reloads from the config file every ~2 seconds,
+    so changes take effect within a few seconds without restarting.
+    """
+    config_path = CONFIG_DIR / f'{session_id}.json'
+    if not config_path.exists():
+        return jsonify({'error': 'Config not found'}), 404
+
+    data = request.get_json()
+
+    with open(config_path) as f:
+        config = json.load(f)
+
+    # Only allow updating tunable parameters (not zones or session structure)
+    updatable = ['detection_threshold', 'min_pixel_change_pct', 'min_brightness',
+                 'start_offset_sec', 'session_end_time']
+    changed = []
+    for key in updatable:
+        if key in data:
+            old_val = config.get(key)
+            config[key] = data[key]
+            if old_val != data[key]:
+                changed.append(f"{key}: {old_val} -> {data[key]}")
+
+    if changed:
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        print(f"[LIVE] Updated settings for {session_id}: {', '.join(changed)}")
+
+    return jsonify({
+        'success': True,
+        'session_id': session_id,
+        'changed': changed,
+        'detection_threshold': config.get('detection_threshold'),
+        'min_pixel_change_pct': config.get('min_pixel_change_pct'),
+        'min_brightness': config.get('min_brightness'),
+    })
 
 
 @app.route('/api/videos')
@@ -1594,15 +1655,31 @@ def process_status(job_id):
             if 'Output directory:' in line:
                 output_dir = line.split(':', 1)[1].strip()
 
+        # Health check: verify subprocess is actually alive if status says 'running'
+        actual_status = job['status']
+        if actual_status == 'running' and 'process' in job:
+            poll = job['process'].poll()
+            if poll is not None:
+                # Process has exited but status wasn't updated
+                if poll == 0:
+                    actual_status = 'completed'
+                elif poll == -15 or poll == -9:  # SIGTERM or SIGKILL
+                    actual_status = 'stopped'
+                else:
+                    actual_status = 'failed'
+                    job['error'] = f'Process exited with code {poll}'
+                job['status'] = actual_status
+                print(f"[HEALTH] Job {job_id} process died (exit={poll}), status corrected to '{actual_status}'")
+
         response = {
             'job_id': job_id,
-            'status': job['status'],
+            'status': actual_status,
             'runs_detected': runs_detected,
             'output_dir': output_dir,
             'output': output,
             'error': job.get('error', ''),
         }
-        print(f"[DEBUG] Status for {job_id}: status={job['status']}, runs={runs_detected}")
+        print(f"[DEBUG] Status for {job_id}: status={actual_status}, runs={runs_detected}")
         return jsonify(response)
 
 
@@ -1637,6 +1714,72 @@ def stop_process(job_id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# MONTAGE GALLERY ENDPOINTS
+# =============================================================================
+
+@app.route('/api/montages/latest')
+def montages_latest():
+    """List recent full-res montage images across all sessions, newest first."""
+    output_dir = Path(__file__).resolve().parent.parent / 'output'
+    if not output_dir.exists():
+        return jsonify({'montages': []})
+
+    montages = []
+    # Walk all session directories looking for fullres images
+    for session_dir in output_dir.iterdir():
+        if not session_dir.is_dir():
+            continue
+        session_id = session_dir.name
+        # Find all fullres jpg files recursively
+        for fullres_file in session_dir.rglob('fullres/*.jpg'):
+            # Skip thumbnails
+            if '_thumb' in fullres_file.name:
+                continue
+            stat = fullres_file.stat()
+            # Build relative path from output dir for serving
+            rel_path = fullres_file.relative_to(output_dir)
+            # Extract FPS from filename (e.g., "run_001_093523_4.0fps.jpg" -> 4.0)
+            import re as _re
+            fps_match = _re.search(r'_(\d+\.?\d*)fps', fullres_file.name)
+            fps_val = float(fps_match.group(1)) if fps_match else None
+
+            montages.append({
+                'filename': fullres_file.name,
+                'path': str(rel_path),
+                'session_id': session_id,
+                'size_kb': int(stat.st_size / 1024),
+                'modified': stat.st_mtime,
+                'fps': fps_val,
+            })
+
+    # Sort by modification time, newest first
+    montages.sort(key=lambda m: m['modified'], reverse=True)
+
+    # Limit to most recent 50
+    montages = montages[:50]
+
+    return jsonify({'montages': montages})
+
+
+@app.route('/api/montages/image/<path:image_path>')
+def montages_image(image_path):
+    """Serve a montage image from the output directory."""
+    output_dir = Path(__file__).resolve().parent.parent / 'output'
+    full_path = output_dir / image_path
+
+    # Security: ensure path doesn't escape output directory
+    try:
+        full_path.resolve().relative_to(output_dir.resolve())
+    except ValueError:
+        return jsonify({'error': 'Invalid path'}), 403
+
+    if not full_path.exists():
+        return jsonify({'error': 'Image not found'}), 404
+
+    return send_file(str(full_path), mimetype='image/jpeg')
 
 
 # =============================================================================

@@ -66,8 +66,21 @@ class SkiFramesRunner:
         with open(config_path) as f:
             self.raw_config = json.load(f)
 
-        # Use montage_fps from config if not overridden, default to DEFAULT_FPS
-        self.montage_fps = montage_fps or self.raw_config.get('montage_fps') or DEFAULT_FPS
+        # Use montage_fps_list from config if not overridden, default to [DEFAULT_FPS]
+        if montage_fps:
+            self.montage_fps_list = [montage_fps]
+        else:
+            fps_list = self.raw_config.get('montage_fps_list')
+            if fps_list and isinstance(fps_list, list):
+                # Filter out None values (null in JSON)
+                self.montage_fps_list = [float(f) for f in fps_list if f is not None]
+                if not self.montage_fps_list:
+                    self.montage_fps_list = [float(DEFAULT_FPS)]
+            else:
+                # Backward compatibility: single montage_fps value
+                single = self.raw_config.get('montage_fps', DEFAULT_FPS)
+                self.montage_fps_list = [float(single)]
+        self.montage_fps = self.montage_fps_list[0]  # Keep for backward compat
 
         # Create output directories
         os.makedirs(self.session_dir, exist_ok=True)
@@ -100,7 +113,7 @@ class SkiFramesRunner:
         print(f"SkiFrames Runner initialized")
         print(f"  Session: {self.config.session_id}")
         print(f"  Output: {self.session_dir}")
-        print(f"  Montage FPS: {self.montage_fps}")
+        print(f"  Montage FPS list: {self.montage_fps_list}")
         if self.vola_racers:
             print(f"  Vola racers loaded: {len(self.vola_racers)} ({self.vola_race})")
             # Show timing coverage summary
@@ -348,30 +361,48 @@ class SkiFramesRunner:
             if age_group:
                 race_title = f"Western Division {age_group} Ranking - SL"
 
-        result = generate_montage(
-            frames=run.frames,
-            run_number=run.run_number,
-            timestamp=run.start_time,
-            output_dir=self.session_dir,
-            session_id=self.config.session_id,
-            start_zone=self.raw_config.get('start_zone'),
-            end_zone=self.raw_config.get('end_zone'),
-            crop_zone=self.raw_config.get('crop_zone'),
-            source_fps=self.source_fps,
-            montage_fps=self.montage_fps,
-            custom_filename=custom_filename,  # Pass custom filename from Vola data (Name_bib)
-            run_view_folder=output_folder,  # Pass folder path (Team/Run1_View1)
-            run_duration_sec=run_duration,  # Pass duration for overlay display
-            race_title=race_title,  # Pass race title for overlay (fallback)
-            race_info=self.race_info,  # Pass race info for overlay (preferred)
-        )
+        # Generate montages at each selected FPS value, merge into single run entry
+        merged_results = {}
+        for fps_val in self.montage_fps_list:
+            # Append FPS to filename to distinguish variants
+            fps_suffix = f"_{fps_val:.1f}fps"
+            fps_filename = f"{custom_filename}{fps_suffix}" if custom_filename else None
 
-        if result:
-            # Add racer info to result for manifest
+            result = generate_montage(
+                frames=run.frames,
+                run_number=run.run_number,
+                timestamp=run.start_time,
+                output_dir=self.session_dir,
+                session_id=self.config.session_id,
+                start_zone=self.raw_config.get('start_zone'),
+                end_zone=self.raw_config.get('end_zone'),
+                crop_zone=self.raw_config.get('crop_zone'),
+                source_fps=self.source_fps,
+                montage_fps=fps_val,
+                custom_filename=fps_filename,  # Pass custom filename with FPS suffix
+                run_view_folder=output_folder,  # Pass folder path (Team/Run1_View1)
+                run_duration_sec=run_duration,  # Pass duration for overlay display
+                race_title=race_title,  # Pass race title for overlay (fallback)
+                race_info=self.race_info,  # Pass race info for overlay (preferred)
+            )
+
+            if result:
+                # Use FPS value as variant key (e.g., "4.0fps")
+                fps_key = f"{fps_val:.1f}fps"
+                for variant_key, montage_result in result.results.items():
+                    merged_results[fps_key] = montage_result
+
+        if merged_results:
+            merged_pair = MontageResultPair(
+                run_number=run.run_number,
+                timestamp=run.start_time,
+                results=merged_results,
+            )
             if racer:
-                result.racer_bib = racer.get('bib')
-            self.montage_pairs.append(result)
-            self._update_manifest()
+                merged_pair.racer_bib = racer.get('bib')
+            self.montage_pairs.append(merged_pair)
+
+        self._update_manifest()
 
     def _update_manifest(self):
         """Update the session manifest file."""
@@ -405,6 +436,7 @@ class SkiFramesRunner:
             "group": self.raw_config.get('group', ''),
             "event_date": self.race_date,
             "generated_at": datetime.now().isoformat(),
+            "montage_fps_list": self.montage_fps_list,
             "runs": runs,
         }
 
@@ -554,7 +586,7 @@ class SkiFramesRunner:
                 for pair in self.montage_pairs
                 for m in pair.results.values()
             )
-            print(f"\n  Montages generated: {len(self.montage_pairs) * 2} (base + 2later pairs)")
+            print(f"\n  Montages generated: {len(self.montage_pairs)}")
             print(f"  Total thumbnail size: {total_thumb / 1024:.0f} KB")
             print(f"  Total full-res size: {total_full / 1024 / 1024:.1f} MB")
             print(f"\n  Output directory: {self.session_dir}")

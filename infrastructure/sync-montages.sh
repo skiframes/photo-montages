@@ -112,7 +112,7 @@ try:
     # Build readable name: 'U14 SL Training - 2026-02-07' or 'U14 Free Ski Training - 2026-02-07'
     parts = []
     if group:
-        parts.append(group.upper())
+        parts.append(group)
     if disc_label:
         parts.append(disc_label)
     parts.append(event_type.title())
@@ -208,7 +208,7 @@ if existing:
     existing['discipline'] = discipline
     existing['montage_count'] = montage_count
     if group:
-        existing['categories'] = [group.upper()]
+        existing['categories'] = [group]
     print(f"Updated {event_id} in index (montages: {montage_count}, discipline: {discipline})")
 else:
     # Add new event
@@ -224,7 +224,7 @@ else:
         'teams': []
     }
     if group:
-        new_event['categories'] = [group.upper()]
+        new_event['categories'] = [group]
     index['events'].append(new_event)
     print(f"Added {event_id} to index (montages: {montage_count}, discipline: {discipline})")
 
@@ -245,9 +245,11 @@ aws s3 cp "$INDEX_PATH" "s3://$BUCKET_NAME/index.json" \
 # Invalidate CloudFront cache for this event and index
 if [ -n "$MEDIA_DISTRIBUTION_ID" ]; then
     echo -e "${YELLOW}Invalidating CloudFront cache...${NC}"
+    # URL-encode spaces in event ID for CloudFront paths
+    EVENT_ID_ENCODED=$(echo "$EVENT_ID" | sed 's/ /%20/g')
     aws cloudfront create-invalidation \
         --distribution-id "$MEDIA_DISTRIBUTION_ID" \
-        --paths "/index.json" "/events/$EVENT_ID/*" \
+        --paths "/index.json" "/events/${EVENT_ID_ENCODED}/*" \
         --region "$REGION" \
         --output text > /dev/null 2>&1 || echo -e "${RED}CloudFront invalidation failed (non-fatal)${NC}"
 fi

@@ -77,6 +77,11 @@ class DetectionConfig:
     # to capture after they've moved away to a better framing distance
     start_offset_sec: float = 0.0
 
+    # Path to config file for hot-reloading
+    config_path: Optional[str] = None
+    _last_reload_check: float = 0.0
+    _last_config_mtime: float = 0.0
+
     @classmethod
     def from_json(cls, path: str) -> 'DetectionConfig':
         with open(path) as f:
@@ -102,7 +107,7 @@ class DetectionConfig:
         if run_duration is None and end_zone is None:
             run_duration = 2.0  # Default to 2 seconds if no end zone
 
-        return cls(
+        config = cls(
             session_id=data['session_id'],
             camera_url=data.get('camera_url', ''),
             start_zone=Zone.from_dict(data['start_zone']),
@@ -116,6 +121,71 @@ class DetectionConfig:
             min_brightness=data.get('min_brightness', 100),
             start_offset_sec=data.get('start_offset_sec', 0.0),
         )
+        config.config_path = path
+        try:
+            config._last_config_mtime = os.path.getmtime(path)
+        except OSError:
+            pass
+        return config
+
+    def check_for_updates(self):
+        """
+        Hot-reload detection settings from the config file if it has been modified.
+        Called periodically from the detection loop. Only reloads the tunable
+        parameters (threshold, min_pixel_change, min_brightness, session_end_time),
+        not zones or session structure.
+        """
+        if not self.config_path:
+            return
+
+        now = time.time()
+        # Only check file every 2 seconds to avoid disk thrashing
+        if now - self._last_reload_check < 2.0:
+            return
+        self._last_reload_check = now
+
+        try:
+            mtime = os.path.getmtime(self.config_path)
+        except OSError:
+            return
+
+        if mtime <= self._last_config_mtime:
+            return  # File hasn't changed
+
+        self._last_config_mtime = mtime
+
+        try:
+            with open(self.config_path) as f:
+                data = json.load(f)
+
+            old_threshold = self.detection_threshold
+            old_pct = self.min_pixel_change_pct
+            old_brightness = self.min_brightness
+
+            self.detection_threshold = data.get('detection_threshold', self.detection_threshold)
+            self.min_pixel_change_pct = data.get('min_pixel_change_pct', self.min_pixel_change_pct)
+            self.min_brightness = data.get('min_brightness', self.min_brightness)
+            self.start_offset_sec = data.get('start_offset_sec', self.start_offset_sec)
+
+            # Reload session_end_time (allows extending session live)
+            end_time_str = data.get('session_end_time', '')
+            if end_time_str:
+                if end_time_str.endswith('Z'):
+                    end_time_str = end_time_str[:-1] + '+00:00'
+                new_end = datetime.fromisoformat(end_time_str)
+                if new_end.tzinfo is not None:
+                    new_end = new_end.astimezone().replace(tzinfo=None)
+                self.session_end_time = new_end
+
+            changed = (old_threshold != self.detection_threshold or
+                       old_pct != self.min_pixel_change_pct or
+                       old_brightness != self.min_brightness)
+            if changed:
+                print(f"  [LIVE] Settings updated: threshold={self.detection_threshold}, "
+                      f"min_pct={self.min_pixel_change_pct}%, brightness={self.min_brightness}")
+
+        except Exception as e:
+            print(f"  [LIVE] Failed to reload config: {e}")
 
 
 @dataclass
@@ -465,7 +535,12 @@ class DetectionEngine:
         url = rtsp_url or self.config.camera_url
         print(f"\nConnecting to: {url}")
 
-        cap = cv2.VideoCapture(url)
+        # Use ffmpeg backend with Reolink timestamp fixes:
+        # - genpts: fix non-monotonic timestamps from Reolink cameras
+        # - rtsp_transport tcp: reliable transport (no UDP packet loss)
+        import os
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|fflags;+genpts"
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
         if not cap.isOpened():
             print(f"  ERROR: Cannot connect to stream")
             return
@@ -489,6 +564,9 @@ class DetectionEngine:
 
         try:
             while self.running:
+                # Hot-reload settings if config file changed
+                self.config.check_for_updates()
+
                 # Check session end time
                 now = datetime.now()
                 if now >= self.config.session_end_time:
@@ -500,7 +578,7 @@ class DetectionEngine:
                     print("  WARNING: Frame read failed, reconnecting...")
                     time.sleep(1)
                     cap.release()
-                    cap = cv2.VideoCapture(url)
+                    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
                     continue
 
                 frame_num += 1
