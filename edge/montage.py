@@ -331,6 +331,7 @@ class MontageResultPair:
     run_number: int
     timestamp: datetime
     results: Dict[str, MontageResult]  # 'A' and 'B' keys
+    elapsed_time: Optional[float] = None  # Seconds from start to end trigger zone
 
 
 def generate_montage(frames: List[np.ndarray],

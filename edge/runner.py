@@ -393,10 +393,14 @@ class SkiFramesRunner:
                     merged_results[fps_key] = montage_result
 
         if merged_results:
+            # Compute elapsed time (seconds) between start and end trigger zones
+            elapsed_time = round(run.duration, 2) if run.end_time else None
+
             merged_pair = MontageResultPair(
                 run_number=run.run_number,
                 timestamp=run.start_time,
                 results=merged_results,
+                elapsed_time=elapsed_time,
             )
             if racer:
                 merged_pair.racer_bib = racer.get('bib')
@@ -411,6 +415,7 @@ class SkiFramesRunner:
             run_entry = {
                 "run_number": pair.run_number,
                 "timestamp": pair.timestamp.isoformat(),
+                "elapsed_time": pair.elapsed_time,
                 "variants": {}
             }
             for variant, m in pair.results.items():
