@@ -3,23 +3,41 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
+		076392FEBF390880374A54F7 /* GateMappingTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3BD153359D2B69A6BF2D3C /* GateMappingTab.swift */; };
 		3EBC5DE0C9A7747D808E6A4F /* BadElfReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF89403462A80D07864D1B95 /* BadElfReceiver.swift */; };
+		4D333E773C912EC09FCEF90E /* GateEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F769FB51D5514ECAE54134B /* GateEditSheet.swift */; };
 		5AF1F246949D699B06B3AA56 /* GeolocationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71A44B8B1D22A5FB4B32806C /* GeolocationBridge.swift */; };
+		743C46A2A3CFABE8E7D8ADF5 /* CourseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D23230160B819953ECCE74 /* CourseStore.swift */; };
+		777100EFFC7D5C77CBF6C161 /* CourseListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C70F134680942C64CC3285 /* CourseListView.swift */; };
 		83532D88FB6B3B5F5C514BA6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F95905085B4686D2992F383A /* Assets.xcassets */; };
 		8B6B51B93D205BE28A94B06E /* NmeaParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DDA328B4A1E4D7CD7BAD7E9 /* NmeaParser.swift */; };
+		97333D38DCA186C37F7EC86E /* CourseMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D1C4FF6021BF74D0F1618D /* CourseMapView.swift */; };
+		9A526F419E8157252D9321CB /* CourseDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD3AF229FF8C18A9D0C2F48E /* CourseDetailView.swift */; };
+		D1DACE72AD0718EC838402B6 /* NewCourseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA77F53D7B760656A5B6BE90 /* NewCourseSheet.swift */; };
+		DB4545BA7599E8241AC56AF6 /* CourseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D36FF1C8B4CC5CBEF5B601C6 /* CourseConfig.swift */; };
 		F58FA215AE7ADDDF8641E707 /* SkiframesGPSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28C26F419B2F9AF077E52F90 /* SkiframesGPSApp.swift */; };
+		F78B74C9AC5B7AF6FE169D6E /* KMLCourseParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31BCCF6A3863B5C97FBC684C /* KMLCourseParser.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		1C3BD153359D2B69A6BF2D3C /* GateMappingTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GateMappingTab.swift; sourceTree = "<group>"; };
 		28C26F419B2F9AF077E52F90 /* SkiframesGPSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkiframesGPSApp.swift; sourceTree = "<group>"; };
 		2DDA328B4A1E4D7CD7BAD7E9 /* NmeaParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NmeaParser.swift; sourceTree = "<group>"; };
+		2F769FB51D5514ECAE54134B /* GateEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GateEditSheet.swift; sourceTree = "<group>"; };
+		31BCCF6A3863B5C97FBC684C /* KMLCourseParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KMLCourseParser.swift; sourceTree = "<group>"; };
+		49D23230160B819953ECCE74 /* CourseStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseStore.swift; sourceTree = "<group>"; };
 		71A44B8B1D22A5FB4B32806C /* GeolocationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeolocationBridge.swift; sourceTree = "<group>"; };
-		926DA74CECE30C490987C996 /* SkiframesGPS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SkiframesGPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		926DA74CECE30C490987C996 /* SkiframesGPS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SkiframesGPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1C70F134680942C64CC3285 /* CourseListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseListView.swift; sourceTree = "<group>"; };
+		B6D1C4FF6021BF74D0F1618D /* CourseMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseMapView.swift; sourceTree = "<group>"; };
+		BD3AF229FF8C18A9D0C2F48E /* CourseDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseDetailView.swift; sourceTree = "<group>"; };
+		D36FF1C8B4CC5CBEF5B601C6 /* CourseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseConfig.swift; sourceTree = "<group>"; };
 		E6106C72B10D8D102021BC34 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EA77F53D7B760656A5B6BE90 /* NewCourseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewCourseSheet.swift; sourceTree = "<group>"; };
 		EF89403462A80D07864D1B95 /* BadElfReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadElfReceiver.swift; sourceTree = "<group>"; };
 		F95905085B4686D2992F383A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -34,6 +52,7 @@
 				E6106C72B10D8D102021BC34 /* Info.plist */,
 				2DDA328B4A1E4D7CD7BAD7E9 /* NmeaParser.swift */,
 				28C26F419B2F9AF077E52F90 /* SkiframesGPSApp.swift */,
+				DD58340A97548306E4D6FB3D /* GateMapping */,
 			);
 			path = SkiframesGPS;
 			sourceTree = "<group>";
@@ -44,6 +63,22 @@
 				926DA74CECE30C490987C996 /* SkiframesGPS.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		DD58340A97548306E4D6FB3D /* GateMapping */ = {
+			isa = PBXGroup;
+			children = (
+				D36FF1C8B4CC5CBEF5B601C6 /* CourseConfig.swift */,
+				BD3AF229FF8C18A9D0C2F48E /* CourseDetailView.swift */,
+				B1C70F134680942C64CC3285 /* CourseListView.swift */,
+				B6D1C4FF6021BF74D0F1618D /* CourseMapView.swift */,
+				49D23230160B819953ECCE74 /* CourseStore.swift */,
+				2F769FB51D5514ECAE54134B /* GateEditSheet.swift */,
+				1C3BD153359D2B69A6BF2D3C /* GateMappingTab.swift */,
+				31BCCF6A3863B5C97FBC684C /* KMLCourseParser.swift */,
+				EA77F53D7B760656A5B6BE90 /* NewCourseSheet.swift */,
+			);
+			path = GateMapping;
 			sourceTree = "<group>";
 		};
 		F955B2F92664FAF1A1049FC3 = {
@@ -83,6 +118,11 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					0C803EF69F1A244263BD1A69 = {
+						DevelopmentTeam = "";
+					};
+				};
 			};
 			buildConfigurationList = 785F29DA6A71D8D3953A0B1C /* Build configuration list for PBXProject "SkiframesGPS" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -94,6 +134,7 @@
 			);
 			mainGroup = F955B2F92664FAF1A1049FC3;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -119,7 +160,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				3EBC5DE0C9A7747D808E6A4F /* BadElfReceiver.swift in Sources */,
+				DB4545BA7599E8241AC56AF6 /* CourseConfig.swift in Sources */,
+				9A526F419E8157252D9321CB /* CourseDetailView.swift in Sources */,
+				777100EFFC7D5C77CBF6C161 /* CourseListView.swift in Sources */,
+				97333D38DCA186C37F7EC86E /* CourseMapView.swift in Sources */,
+				743C46A2A3CFABE8E7D8ADF5 /* CourseStore.swift in Sources */,
+				4D333E773C912EC09FCEF90E /* GateEditSheet.swift in Sources */,
+				076392FEBF390880374A54F7 /* GateMappingTab.swift in Sources */,
 				5AF1F246949D699B06B3AA56 /* GeolocationBridge.swift in Sources */,
+				F78B74C9AC5B7AF6FE169D6E /* KMLCourseParser.swift in Sources */,
+				D1DACE72AD0718EC838402B6 /* NewCourseSheet.swift in Sources */,
 				8B6B51B93D205BE28A94B06E /* NmeaParser.swift in Sources */,
 				F58FA215AE7ADDDF8641E707 /* SkiframesGPSApp.swift in Sources */,
 			);
@@ -133,7 +183,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 752LZ299XX;
+				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SkiframesGPS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -270,7 +320,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 752LZ299XX;
+				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SkiframesGPS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

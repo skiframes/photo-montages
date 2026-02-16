@@ -14,6 +14,8 @@ targets:
     platform: iOS
     sources:
       - SkiframesGPS
+    scheme:
+      gatherCoverageData: false
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.skiframes.gps
       INFOPLIST_FILE: SkiframesGPS/Info.plist

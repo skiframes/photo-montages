@@ -1120,6 +1120,9 @@ def list_videos():
 # External recordings drive path (uses DATA_BASE_DIR from environment)
 RECORDINGS_DIR = DATA_BASE_DIR / 'recordings'
 
+# J40 SD card data directory (flat structure: R1/R1_YYYYMMDD_HHMMSS.mp4)
+J40_SD_DATA_DIR = Path(os.environ.get('J40_SD_DATA_DIR', '/Users/paul2/j40/data/sd_data'))
+
 
 def parse_reolink_video_times(filename: str) -> tuple:
     """
@@ -1147,6 +1150,27 @@ def parse_reolink_video_times(filename: str) -> tuple:
     return None, None, None
 
 
+def parse_j40_video_times(filename: str) -> tuple:
+    """
+    Parse start time from J40 SD card video filename.
+    Format: R1_YYYYMMDD_HHMMSS.mp4 (each file is ~5 minutes / 300 seconds)
+
+    Returns (date_str, start_time_sec, end_time_sec) or (None, None, None) if parse fails.
+    """
+    match = re.match(r'(?:R[123]|Axis)_(\d{8})_(\d{6})\.mp4$', filename)
+    if match:
+        date_str = match.group(1)  # YYYYMMDD
+        start_str = match.group(2)  # HHMMSS
+
+        start_sec = int(start_str[0:2]) * 3600 + int(start_str[2:4]) * 60 + int(start_str[4:6])
+        end_sec = start_sec + 300  # Each file is ~5 minutes
+
+        formatted_date = f"{date_str[0:4]}-{date_str[4:6]}-{date_str[6:8]}"
+        return formatted_date, start_sec, end_sec
+
+    return None, None, None
+
+
 @app.route('/api/recordings/dates')
 def list_recording_dates():
     """List available recording dates across all cameras."""
@@ -1162,6 +1186,16 @@ def list_recording_dates():
             for date_folder in mp4_path.iterdir():
                 if date_folder.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}', date_folder.name):
                     dates.add(date_folder.name)
+
+    # Also check J40 SD card data (flat structure: R1/R1_YYYYMMDD_HHMMSS.mp4)
+    if J40_SD_DATA_DIR.exists():
+        for camera_folder in ['R1', 'R2', 'R3', 'Axis']:
+            cam_path = J40_SD_DATA_DIR / camera_folder
+            if cam_path.exists():
+                for video_file in cam_path.glob('*.mp4'):
+                    parsed_date, _, _ = parse_j40_video_times(video_file.name)
+                    if parsed_date:
+                        dates.add(parsed_date)
 
     return jsonify({'dates': sorted(dates, reverse=True)})
 
@@ -1189,10 +1223,7 @@ def list_recording_videos():
     if not date:
         return jsonify({'error': 'date is required'}), 400
 
-    if not RECORDINGS_DIR.exists():
-        return jsonify({'error': 'Recordings drive not mounted', 'videos': []})
-
-    # Map camera_id to folder name
+    # Map camera_id to folder name for Reolink recordings
     camera_folders = {
         'R1': 'sd_R1',
         'R2': 'sd_R2',
@@ -1204,38 +1235,57 @@ def list_recording_videos():
     if not folder_name:
         return jsonify({'error': f'Unknown camera_id: {camera_id}'}), 400
 
-    # Build path to videos
-    videos_path = RECORDINGS_DIR / folder_name / 'sdcard' / 'Mp4Record' / date
+    videos = []
 
-    if not videos_path.exists():
+    # Source 1: Reolink recordings drive (sd_R1/sdcard/Mp4Record/<date>/)
+    videos_path = RECORDINGS_DIR / folder_name / 'sdcard' / 'Mp4Record' / date
+    if videos_path.exists():
+        for video_file in sorted(videos_path.glob('*.mp4')):
+            parsed_date, start_sec, end_sec = parse_reolink_video_times(video_file.name)
+            if start_sec is None:
+                continue
+            if filter_start is not None and filter_end is not None:
+                if end_sec < filter_start or start_sec > filter_end:
+                    continue
+            start_time_str = f"{start_sec // 3600:02d}:{(start_sec % 3600) // 60:02d}:{start_sec % 60:02d}"
+            end_time_str = f"{end_sec // 3600:02d}:{(end_sec % 3600) // 60:02d}:{end_sec % 60:02d}"
+            videos.append({
+                'name': video_file.name,
+                'path': str(video_file),
+                'start_time_sec': start_sec,
+                'end_time_sec': end_sec,
+                'start_time_str': start_time_str,
+                'end_time_str': end_time_str,
+                'duration_sec': end_sec - start_sec,
+            })
+
+    # Source 2: J40 SD card data (R1/R1_YYYYMMDD_HHMMSS.mp4)
+    j40_cam_path = J40_SD_DATA_DIR / camera_id
+    if j40_cam_path.exists():
+        for video_file in sorted(j40_cam_path.glob('*.mp4')):
+            parsed_date, start_sec, end_sec = parse_j40_video_times(video_file.name)
+            if start_sec is None or parsed_date != date:
+                continue
+            if filter_start is not None and filter_end is not None:
+                if end_sec < filter_start or start_sec > filter_end:
+                    continue
+            start_time_str = f"{start_sec // 3600:02d}:{(start_sec % 3600) // 60:02d}:{start_sec % 60:02d}"
+            end_time_str = f"{end_sec // 3600:02d}:{(end_sec % 3600) // 60:02d}:{end_sec % 60:02d}"
+            videos.append({
+                'name': video_file.name,
+                'path': str(video_file),
+                'start_time_sec': start_sec,
+                'end_time_sec': end_sec,
+                'start_time_str': start_time_str,
+                'end_time_str': end_time_str,
+                'duration_sec': end_sec - start_sec,
+            })
+
+    if not videos:
         return jsonify({'error': f'No recordings found for {camera_id} on {date}', 'videos': []})
 
-    videos = []
-    for video_file in sorted(videos_path.glob('*.mp4')):
-        parsed_date, start_sec, end_sec = parse_reolink_video_times(video_file.name)
-
-        if start_sec is None:
-            continue  # Skip files that don't match expected format
-
-        # Filter by time range if specified
-        if filter_start is not None and filter_end is not None:
-            # Check if video overlaps with the filter range
-            if end_sec < filter_start or start_sec > filter_end:
-                continue  # Video doesn't overlap with filter range
-
-        # Format times for display
-        start_time_str = f"{start_sec // 3600:02d}:{(start_sec % 3600) // 60:02d}:{start_sec % 60:02d}"
-        end_time_str = f"{end_sec // 3600:02d}:{(end_sec % 3600) // 60:02d}:{end_sec % 60:02d}"
-
-        videos.append({
-            'name': video_file.name,
-            'path': str(video_file),
-            'start_time_sec': start_sec,
-            'end_time_sec': end_sec,
-            'start_time_str': start_time_str,
-            'end_time_str': end_time_str,
-            'duration_sec': end_sec - start_sec,
-        })
+    # Sort all videos by start time
+    videos.sort(key=lambda v: v['start_time_sec'])
 
     return jsonify({
         'camera_id': camera_id,

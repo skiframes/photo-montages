@@ -15,6 +15,28 @@ struct ContentView: View {
     @ObservedObject var receiver: BadElfReceiver
 
     var body: some View {
+        TabView {
+            // Tab 1: Existing calibration UI (unchanged behavior)
+            CalibrationTab(receiver: receiver)
+                .tabItem {
+                    Label("Calibration", systemImage: "camera.viewfinder")
+                }
+
+            // Tab 2: GPS gate mapping
+            GateMappingTab(receiver: receiver)
+                .tabItem {
+                    Label("Gates Map", systemImage: "mappin.and.ellipse")
+                }
+        }
+    }
+}
+
+// MARK: - Calibration Tab (existing behavior, extracted)
+
+struct CalibrationTab: View {
+    @ObservedObject var receiver: BadElfReceiver
+
+    var body: some View {
         VStack(spacing: 0) {
             // Status bar showing Bad Elf connection and accuracy
             StatusBar(receiver: receiver)
