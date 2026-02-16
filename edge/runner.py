@@ -368,6 +368,9 @@ class SkiFramesRunner:
             fps_suffix = f"_{fps_val:.1f}fps"
             fps_filename = f"{custom_filename}{fps_suffix}" if custom_filename else None
 
+            # Compute elapsed time for overlay
+            elapsed_time = round(run.duration, 2) if run.end_time else None
+
             result = generate_montage(
                 frames=run.frames,
                 run_number=run.run_number,
@@ -384,6 +387,7 @@ class SkiFramesRunner:
                 run_duration_sec=run_duration,  # Pass duration for overlay display
                 race_title=race_title,  # Pass race title for overlay (fallback)
                 race_info=self.race_info,  # Pass race info for overlay (preferred)
+                elapsed_time=elapsed_time,  # Pass elapsed time for overlay
             )
 
             if result:
@@ -393,10 +397,14 @@ class SkiFramesRunner:
                     merged_results[fps_key] = montage_result
 
         if merged_results:
+            # Compute elapsed time (seconds) between start and end trigger zones
+            elapsed_time = round(run.duration, 2) if run.end_time else None
+
             merged_pair = MontageResultPair(
                 run_number=run.run_number,
                 timestamp=run.start_time,
                 results=merged_results,
+                elapsed_time=elapsed_time,
             )
             if racer:
                 merged_pair.racer_bib = racer.get('bib')
@@ -411,6 +419,7 @@ class SkiFramesRunner:
             run_entry = {
                 "run_number": pair.run_number,
                 "timestamp": pair.timestamp.isoformat(),
+                "elapsed_time": pair.elapsed_time,
                 "variants": {}
             }
             for variant, m in pair.results.items():

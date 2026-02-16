@@ -173,9 +173,11 @@ def resize_for_thumbnail(image: np.ndarray, max_width: int = 800) -> np.ndarray:
 
 def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str = "",
                 duration_sec: Optional[float] = None, race_title: str = "",
-                race_info: Optional[Dict] = None, source_fps: float = 30.0) -> np.ndarray:
+                race_info: Optional[Dict] = None, source_fps: float = 30.0,
+                elapsed_time: Optional[float] = None) -> np.ndarray:
     """Add overlay with race info and capture details.
 
+    Top-left: Elapsed time (e.g. "4.23s") if available
     Bottom-right: "Captured at 30 fps. X.X frames printed per second"
     Bottom-left: Logos (RMST, Ragged, Skiframes)
     """
@@ -265,6 +267,26 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
     # Add logos at bottom-left
     img = add_logos(img)
 
+    # Add elapsed time overlay at top-left
+    if elapsed_time is not None:
+        time_text = f"{elapsed_time:.2f}s"
+        time_font_scale = max(0.8, w / 1000)
+        time_thickness = max(2, int(w / 500))
+        time_padding = int(12 * time_font_scale)
+        (tw, th), _ = cv2.getTextSize(time_text, font, time_font_scale, time_thickness)
+
+        # Semi-transparent background
+        time_overlay = img.copy()
+        cv2.rectangle(time_overlay,
+                      (0, 0),
+                      (tw + time_padding * 2, th + time_padding * 2),
+                      (255, 255, 255), -1)
+        cv2.addWeighted(time_overlay, 0.7, img, 0.3, 0, img)
+
+        # Draw time text
+        cv2.putText(img, time_text, (time_padding, th + time_padding),
+                    font, time_font_scale, (50, 50, 50), time_thickness)
+
     return img
 
 
@@ -331,6 +353,7 @@ class MontageResultPair:
     run_number: int
     timestamp: datetime
     results: Dict[str, MontageResult]  # 'A' and 'B' keys
+    elapsed_time: Optional[float] = None  # Seconds from start to end trigger zone
 
 
 def generate_montage(frames: List[np.ndarray],
@@ -352,7 +375,8 @@ def generate_montage(frames: List[np.ndarray],
                      run_view_folder: Optional[str] = None,
                      run_duration_sec: Optional[float] = None,
                      race_title: str = "",
-                     race_info: Optional[Dict] = None) -> Optional[MontageResultPair]:
+                     race_info: Optional[Dict] = None,
+                     elapsed_time: Optional[float] = None) -> Optional[MontageResultPair]:
     """
     Generate A and B montage pairs from run frames.
 
@@ -434,7 +458,7 @@ def generate_montage(frames: List[np.ndarray],
 
         # Add branding overlay with variant label and race title/info
         if add_branding:
-            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title, race_info, source_fps=source_fps)
+            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title, race_info, source_fps=source_fps, elapsed_time=elapsed_time)
 
         # Output paths - use file_suffix for naming, include FPS in filename
         fps_tag = f"_{montage_fps:.1f}fps"
