@@ -443,6 +443,8 @@ class SkiFramesRunner:
             "event_type": self.raw_config.get('session_type', 'training'),
             "discipline": self.raw_config.get('discipline', 'freeski'),
             "group": self.raw_config.get('group', ''),
+            "camera_id": self.raw_config.get('camera_id', ''),
+            "device_id": self.raw_config.get('device_id', ''),
             "event_date": self.race_date,
             "generated_at": datetime.now().isoformat(),
             "montage_fps_list": self.montage_fps_list,

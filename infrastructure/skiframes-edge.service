@@ -1,0 +1,17 @@
+[Unit]
+Description=SkiFrames Edge Calibration & Detection
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=paul
+WorkingDirectory=/home/paul/skiframes/photo-montages/edge
+ExecStart=/home/paul/venv/bin/python3 -u app.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=SKIFRAMES_DEVICE_ID=j40
+
+[Install]
+WantedBy=multi-user.target

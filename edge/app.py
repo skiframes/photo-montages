@@ -8,6 +8,7 @@ import os
 import json
 import uuid
 import signal
+import socket
 import tempfile
 import threading
 from datetime import datetime, timedelta
@@ -94,6 +95,12 @@ CAMERAS = {
 # Data directory - configurable via environment variable
 # Mac: /Volumes/OWC_48/data, Server: /home/pa91/data
 DATA_BASE_DIR = Path(os.environ.get('SKIFRAMES_DATA_DIR', '/Volumes/OWC_48/data'))
+
+# Device identity - used in session IDs and for coach page coordination
+DEVICE_ID = os.environ.get('SKIFRAMES_DEVICE_ID', socket.gethostname().split('.')[0].lower())
+
+# Admin API URL for device heartbeat
+ADMIN_API_URL = os.environ.get('SKIFRAMES_ADMIN_API', 'https://skiframes-admin-api.avillach.workers.dev')
 
 # Vola Excel file location
 VOLA_DIR = DATA_BASE_DIR / 'vola'
@@ -897,9 +904,10 @@ def save_config():
     if not data.get('end_zone') and not data.get('run_duration_seconds'):
         return jsonify({'error': 'Either end_zone or run_duration_seconds is required'}), 400
 
-    # Generate session ID
+    # Generate session ID: date_time_group_type_camera_device
     now = datetime.now()
-    session_id = f"{now.strftime('%Y-%m-%d_%H%M')}_{data['group'].lower()}_{data['session_type']}"
+    camera_id = data['camera_id']
+    session_id = f"{now.strftime('%Y-%m-%d_%H%M')}_{data['group'].lower()}_{data['session_type']}_{camera_id}_{DEVICE_ID}"
 
     # Default session end time: 90 minutes from now
     session_end = data.get('session_end_time')
@@ -908,6 +916,7 @@ def save_config():
 
     config = {
         'session_id': session_id,
+        'device_id': DEVICE_ID,
         'session_type': data['session_type'],
         'group': data['group'],
         'camera_id': data['camera_id'],
@@ -2791,6 +2800,71 @@ def upload_video():
         'size_mb': round(size_mb, 1),
         **info,
     })
+
+
+# =============================================================================
+# DEVICE INFO & HEARTBEAT
+# =============================================================================
+
+@app.route('/api/device/info')
+def device_info():
+    """Return device identity and status for coach page discovery."""
+    active_sessions = []
+    with jobs_lock:
+        for job_id, job in active_jobs.items():
+            if job.get('status') == 'running':
+                active_sessions.append({
+                    'job_id': job_id,
+                    'config_path': os.path.basename(job.get('config_path', '')),
+                    'started_at': job.get('started_at', ''),
+                })
+
+    return jsonify({
+        'device_id': DEVICE_ID,
+        'cameras': [{'id': cid, 'name': cam.get('name', cid)}
+                     for cid, cam in CAMERAS.items()],
+        'active_sessions': active_sessions,
+        'hostname': socket.gethostname(),
+        'port': 5000,
+        'timestamp': datetime.now().isoformat(),
+    })
+
+
+def _device_heartbeat_loop():
+    """Background thread: send periodic heartbeats to the admin API."""
+    import time
+    try:
+        import requests as http_req
+    except ImportError:
+        print(f"[HEARTBEAT] requests not installed, heartbeat disabled")
+        return
+
+    while True:
+        try:
+            active = []
+            with jobs_lock:
+                for job_id, job in active_jobs.items():
+                    if job.get('status') == 'running':
+                        active.append({
+                            'job_id': job_id,
+                            'config_path': os.path.basename(job.get('config_path', '')),
+                        })
+            payload = {
+                'device_id': DEVICE_ID,
+                'cameras': list(CAMERAS.keys()),
+                'active_sessions': active,
+                'hostname': socket.gethostname(),
+                'timestamp': datetime.now().isoformat(),
+            }
+            http_req.post(f'{ADMIN_API_URL}/device/heartbeat', json=payload, timeout=5)
+        except Exception as e:
+            pass  # Silent fail — heartbeat is best-effort
+        time.sleep(30)
+
+
+# Start heartbeat thread
+_heartbeat_thread = threading.Thread(target=_device_heartbeat_loop, daemon=True)
+_heartbeat_thread.start()
 
 
 if __name__ == '__main__':

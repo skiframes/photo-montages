@@ -106,16 +106,26 @@ try:
     event_type = m.get('event_type', 'training')
     discipline = m.get('discipline', 'freeski')
     event_date = m.get('event_date', '$EVENT_ID'.split('_')[0])
+    camera_id = m.get('camera_id', '')
+    device_id = m.get('device_id', '')
     # Map discipline codes to display names
     disc_names = {'sl_youth': 'SL', 'sl_adult': 'SL', 'gs_panel': 'GS', 'sg_panel': 'SG', 'freeski': 'Free Ski'}
     disc_label = disc_names.get(discipline, discipline)
-    # Build readable name: 'U14 SL Training - 2026-02-07' or 'U14 Free Ski Training - 2026-02-07'
+    # Build readable name: 'U14 SL Training - R1 @ J40 - 2026-02-07'
     parts = []
     if group:
         parts.append(group)
     if disc_label:
         parts.append(disc_label)
     parts.append(event_type.title())
+    # Add camera/device label if present
+    if camera_id or device_id:
+        cam_dev = []
+        if camera_id:
+            cam_dev.append(camera_id.upper())
+        if device_id:
+            cam_dev.append(device_id.upper())
+        parts.append(' @ '.join(cam_dev))
     parts.append(event_date)
     print(' - '.join(parts) if len(parts) > 1 else parts[0])
 except:
