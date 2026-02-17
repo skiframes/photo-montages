@@ -2845,9 +2845,15 @@ def _device_heartbeat_loop():
             with jobs_lock:
                 for job_id, job in active_jobs.items():
                     if job.get('status') == 'running':
+                        # Get session_id from runner config if available
+                        sid = ''
+                        cfg_path = job.get('config_path', '')
+                        if cfg_path:
+                            sid = os.path.basename(cfg_path).replace('.json', '')
                         active.append({
                             'job_id': job_id,
-                            'config_path': os.path.basename(job.get('config_path', '')),
+                            'session_id': sid,
+                            'started_at': job.get('started_at', ''),
                         })
             payload = {
                 'device_id': DEVICE_ID,
