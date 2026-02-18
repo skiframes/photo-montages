@@ -987,6 +987,54 @@ def get_active_config():
     return jsonify({'active': True, 'config': config})
 
 
+@app.route('/api/config/all_active')
+def get_all_active_configs():
+    """Get ALL sessions that are still active (end_time in future) or have running processes."""
+    configs = sorted(CONFIG_DIR.glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True)
+    now = datetime.now()
+    sessions = []
+
+    # Collect sessions with running jobs (even if config says expired)
+    running_session_ids = set()
+    with jobs_lock:
+        for job_id, job in active_jobs.items():
+            if job['status'] == 'running':
+                # Extract session_id from config_path
+                cp = job.get('config_path', '')
+                if cp:
+                    sid = Path(cp).stem
+                    running_session_ids.add(sid)
+
+    for config_path in configs:
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+
+            session_id = config_path.stem
+            is_running = session_id in running_session_ids
+
+            # Check if session end_time is in the future
+            is_active = False
+            try:
+                end_time = parse_iso_datetime(config['session_end_time'])
+                if end_time.replace(tzinfo=None) > now:
+                    is_active = True
+            except (ValueError, KeyError):
+                pass
+
+            if is_active or is_running:
+                sessions.append({
+                    'session_id': session_id,
+                    'config': config,
+                    'is_running': is_running,
+                    'is_active': is_active,
+                })
+        except Exception:
+            continue
+
+    return jsonify({'sessions': sessions})
+
+
 @app.route('/api/config/<session_id>')
 def get_config(session_id):
     """Get a specific session config."""

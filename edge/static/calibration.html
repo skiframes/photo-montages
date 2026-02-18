@@ -1328,13 +1328,22 @@
 
             <!-- ======= SESSION SETUP SUB-MODE ======= -->
             <div id="freeSkiMode">
-            <!-- Active Session Warning -->
+            <!-- Active Session Warning (single, legacy) -->
             <div id="activeSession" class="active-session" style="display: none;">
                 <div>
                     <strong>Active Session:</strong> <span id="activeSessionId"></span>
                     <br><small>Ends: <span id="activeSessionEnd"></span></small>
                 </div>
         </div>
+
+            <!-- Session Manager: all active/running sessions -->
+            <div id="sessionManager" style="display: none; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <strong style="font-size: 14px;">Active Sessions</strong>
+                    <button class="btn btn-outline btn-sm" onclick="refreshSessionManager()" style="font-size: 11px; padding: 3px 8px;">Refresh</button>
+                </div>
+                <div id="sessionManagerList"></div>
+            </div>
 
         <!-- Calibration Badge (shown after accepting gate calibration) -->
         <div id="calibrationBadge" style="display: none; margin-bottom: 12px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; font-size: 14px;">
@@ -1872,6 +1881,9 @@
             // Only check active session for RTSP mode (check after setup so UI is correct)
             if (elements.sourceType.value === 'rtsp') {
                 await checkActiveSession();
+            } else {
+                // Always show session manager even in non-RTSP mode
+                refreshSessionManager();
             }
             // Default to Gates sub-mode within Photo Montage
             switchSubMode('gates');
@@ -2077,6 +2089,97 @@
                 }
             } catch (e) {
                 console.error('Failed to check active session:', e);
+            }
+
+            // Also refresh the session manager
+            refreshSessionManager();
+        }
+
+        async function refreshSessionManager() {
+            const mgr = document.getElementById('sessionManager');
+            const list = document.getElementById('sessionManagerList');
+            if (!mgr || !list) return;
+
+            try {
+                const res = await fetch('/api/config/all_active');
+                const data = await res.json();
+                const sessions = data.sessions || [];
+
+                if (sessions.length === 0) {
+                    mgr.style.display = 'none';
+                    return;
+                }
+
+                mgr.style.display = 'block';
+                list.innerHTML = sessions.map(s => {
+                    const c = s.config;
+                    const endStr = c.session_end_time
+                        ? new Date(c.session_end_time).toLocaleTimeString()
+                        : 'Unknown';
+                    const startStr = c.session_start_time
+                        ? new Date(c.session_start_time).toLocaleTimeString()
+                        : '';
+                    const statusBadge = s.is_running
+                        ? '<span style="color: #16a34a; font-weight: 600;">&#9679; Running</span>'
+                        : '<span style="color: #d97706; font-weight: 600;">&#9679; Scheduled</span>';
+                    const camera = c.camera_id || '';
+                    const group = c.group || '';
+                    const type = c.session_type || '';
+                    const label = [group, type, camera].filter(Boolean).join(' \u2022 ');
+
+                    return `
+                        <div style="display: flex; justify-content: space-between; align-items: center;
+                                    padding: 10px 12px; margin-bottom: 6px;
+                                    background: ${s.is_running ? '#fefce8' : '#f8fafc'};
+                                    border: 1px solid ${s.is_running ? '#fde68a' : '#e2e8f0'};
+                                    border-radius: 8px; font-size: 13px;">
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    ${statusBadge} &nbsp;${label}
+                                </div>
+                                <div style="color: #64748b; font-size: 12px; margin-top: 2px;">
+                                    ${startStr ? startStr + ' \u2013 ' : ''}${endStr}
+                                </div>
+                                <div style="color: #94a3b8; font-size: 11px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    ${c.session_id}
+                                </div>
+                            </div>
+                            <button class="btn btn-danger btn-sm"
+                                    onclick="stopSessionById('${c.session_id}', this)"
+                                    style="margin-left: 10px; padding: 5px 12px; font-size: 12px; white-space: nowrap;">
+                                Stop
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error('Failed to load sessions:', e);
+            }
+        }
+
+        async function stopSessionById(sessionId, btn) {
+            if (!confirm('Stop session ' + sessionId + '?')) return;
+            const origText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner"></span>';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/config/stop/' + sessionId, { method: 'POST' });
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    btn.innerHTML = origText;
+                    btn.disabled = false;
+                    return;
+                }
+                showStatus('Session stopped: ' + sessionId, 'success');
+                // Refresh both views
+                refreshSessionManager();
+                checkActiveSession();
+            } catch (e) {
+                showStatus('Failed to stop: ' + e.message, 'error');
+                btn.innerHTML = origText;
+                btn.disabled = false;
             }
         }
 

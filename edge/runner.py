@@ -400,18 +400,32 @@ class SkiFramesRunner:
             # Compute elapsed time (seconds) between start and end trigger zones
             elapsed_time = round(run.duration, 2) if run.end_time else None
 
-            # Compute CLIP embedding from first variant's full-res image
+            # Compute CLIP embedding from a single frame of the run
             # for athlete re-identification (clothing/appearance matching)
+            # Only for training sessions — races already have named athletes
+            # Uses raw frame (not composite) for better athlete distinction
             embedding = None
-            first_result = next(iter(merged_results.values()))
-            try:
-                import embedder
-                if embedder.is_available():
-                    embedding = embedder.embed_image(first_result.fullres_path)
-                    if embedding:
-                        print(f"  Embedding computed ({len(embedding)} dims)")
-            except Exception as e:
-                print(f"  Embedding skipped: {e}")
+            session_type = self.raw_config.get('session_type', 'training')
+            if session_type != 'race':
+                try:
+                    import embedder
+                    if embedder.is_available():
+                        # Build crop region from config (same as montage uses)
+                        crop_region = self.raw_config.get('crop_zone')
+                        if not crop_region and self.raw_config.get('start_zone') and self.raw_config.get('end_zone'):
+                            from montage import CropRegion
+                            frame_h, frame_w = run.frames[0].shape[:2]
+                            cr = CropRegion.from_zones(
+                                self.raw_config['start_zone'],
+                                self.raw_config['end_zone'],
+                                frame_w, frame_h
+                            )
+                            crop_region = {'x': cr.x, 'y': cr.y, 'w': cr.w, 'h': cr.h}
+                        embedding = embedder.embed_frames(run.frames, crop_region)
+                        if embedding:
+                            print(f"  Embedding computed ({len(embedding)} dims)")
+                except Exception as e:
+                    print(f"  Embedding skipped: {e}")
 
             merged_pair = MontageResultPair(
                 run_number=run.run_number,
