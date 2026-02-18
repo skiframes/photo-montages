@@ -400,11 +400,25 @@ class SkiFramesRunner:
             # Compute elapsed time (seconds) between start and end trigger zones
             elapsed_time = round(run.duration, 2) if run.end_time else None
 
+            # Compute CLIP embedding from first variant's full-res image
+            # for athlete re-identification (clothing/appearance matching)
+            embedding = None
+            first_result = next(iter(merged_results.values()))
+            try:
+                import embedder
+                if embedder.is_available():
+                    embedding = embedder.embed_image(first_result.fullres_path)
+                    if embedding:
+                        print(f"  Embedding computed ({len(embedding)} dims)")
+            except Exception as e:
+                print(f"  Embedding skipped: {e}")
+
             merged_pair = MontageResultPair(
                 run_number=run.run_number,
                 timestamp=run.start_time,
                 results=merged_results,
                 elapsed_time=elapsed_time,
+                embedding=embedding,
             )
             if racer:
                 merged_pair.racer_bib = racer.get('bib')
@@ -420,6 +434,7 @@ class SkiFramesRunner:
                 "run_number": pair.run_number,
                 "timestamp": pair.timestamp.isoformat(),
                 "elapsed_time": pair.elapsed_time,
+                "embedding": pair.embedding,
                 "variants": {}
             }
             for variant, m in pair.results.items():
