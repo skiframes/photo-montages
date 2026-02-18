@@ -1865,8 +1865,8 @@ def montages_latest():
     # Sort by modification time, newest first
     montages.sort(key=lambda m: m['modified'], reverse=True)
 
-    # Limit to most recent 50
-    montages = montages[:50]
+    # Limit to most recent 10
+    montages = montages[:10]
 
     return jsonify({'montages': montages})
 
