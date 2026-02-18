@@ -1132,17 +1132,17 @@
         <!-- ============================================ -->
         <div id="montageMode">
 
-            <!-- Sub-mode toggle: Gates / Race (default) vs Free Skiing -->
+            <!-- Sub-mode toggle: Calibration (optional) vs Session Setup -->
             <div class="card">
                 <div class="card-title">Photo Montage Mode</div>
                 <div class="btn-group">
-                    <button class="btn btn-primary mode-btn" id="subModeGates">Gates / Race</button>
-                    <button class="btn btn-outline mode-btn" id="subModeFreeSki">Free Skiing</button>
+                    <button class="btn btn-outline mode-btn" id="subModeGates">Calibrate (Optional)</button>
+                    <button class="btn btn-primary mode-btn" id="subModeFreeSki">Session Setup</button>
                 </div>
             </div>
 
-            <!-- ======= GATES / RACE SUB-MODE ======= -->
-            <div id="gatesMode">
+            <!-- ======= CALIBRATION SUB-MODE (Optional) ======= -->
+            <div id="gatesMode" style="display: none;">
                 <!-- Card 1: Frame Source -->
                 <div class="card">
                     <div class="card-title">1. Frame Source</div>
@@ -1326,8 +1326,8 @@
                 </div>
             </div><!-- end gatesMode -->
 
-            <!-- ======= FREE SKIING SUB-MODE ======= -->
-            <div id="freeSkiMode" style="display: none;">
+            <!-- ======= SESSION SETUP SUB-MODE ======= -->
+            <div id="freeSkiMode">
             <!-- Active Session Warning -->
             <div id="activeSession" class="active-session" style="display: none;">
                 <div>
@@ -1635,7 +1635,7 @@
         // State
         let state = {
             mode: 'montage',  // 'montage' or 'stitch'
-            montageSubMode: 'gates',  // 'gates' or 'freeski'
+            montageSubMode: 'freeski',  // 'gates' or 'freeski'
             frameId: null,
             frameWidth: 0,
             frameHeight: 0,
@@ -3009,7 +3009,7 @@
                 elements.modeCalibration.classList.add('btn-primary');
                 elements.modeCalibration.classList.remove('btn-outline');
                 // Initialize the active sub-mode
-                switchSubMode(state.montageSubMode || 'gates');
+                switchSubMode(state.montageSubMode || 'freeski');
             } else if (mode === 'gallery') {
                 elements.galleryMode.style.display = 'block';
                 elements.modeGallery.classList.add('btn-primary');
