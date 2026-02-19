@@ -1071,27 +1071,38 @@ def get_all_active_configs():
 @app.route('/api/detection/metrics/<job_id>')
 def get_detection_metrics(job_id):
     """Get live detection metrics for a running job (for calibration chart)."""
-    with jobs_lock:
-        job = active_jobs.get(job_id)
-        if not job:
-            return jsonify({'error': 'Job not found'}), 404
+    metrics_path = None
 
-        config_path = job.get('config_path', '')
+    # Check in-process RTSP sessions first
+    with rtsp_sessions_lock:
+        rtsp_session = rtsp_sessions.get(job_id)
+    if rtsp_session:
+        runner = rtsp_session.get('runner')
+        if runner and hasattr(runner, 'engine') and runner.engine.metrics_path:
+            metrics_path = runner.engine.metrics_path
 
-    if not config_path:
-        return jsonify({'error': 'No config path for job'}), 404
+    # Fall back to subprocess jobs
+    if not metrics_path:
+        with jobs_lock:
+            job = active_jobs.get(job_id)
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
 
-    # Derive session output dir from config
-    try:
-        with open(config_path) as f:
-            config = json.load(f)
-        session_id = config.get('session_id', Path(config_path).stem)
-    except Exception:
-        session_id = Path(config_path).stem
+            config_path = job.get('config_path', '')
 
-    # Look for metrics file in output directory
-    output_dir = str(Path(__file__).resolve().parent.parent / 'output')
-    metrics_path = os.path.join(output_dir, session_id, 'detection_metrics.json')
+        if not config_path:
+            return jsonify({'error': 'No config path for job'}), 404
+
+        # Derive session output dir from config
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+            session_id = config.get('session_id', Path(config_path).stem)
+        except Exception:
+            session_id = Path(config_path).stem
+
+        output_dir = str(Path(__file__).resolve().parent.parent / 'output')
+        metrics_path = os.path.join(output_dir, session_id, 'detection_metrics.json')
 
     if not os.path.exists(metrics_path):
         return jsonify({'entries': [], 'message': 'No metrics yet'})

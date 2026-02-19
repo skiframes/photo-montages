@@ -490,7 +490,17 @@ class DetectionEngine:
                 print(f"  [RUN {self.current_run.run_number}] Timeout - abandoned")
                 self.current_run = None
 
-        self.prev_frame = frame.copy()
+        # Only update prev_frame at the detection sampling rate (~10fps), not every
+        # frame. During active runs, process_frame is called on every frame (60fps)
+        # for montage capture, but comparing consecutive 60fps frames yields ~6x less
+        # motion than the ~100ms gaps used during idle detection. Using the same
+        # threshold with 6x less motion signal makes END zone detection unreliable.
+        # By updating prev_frame only every Nth frame, motion sensitivity stays
+        # consistent whether idle or tracking a run.
+        detection_fps = self.frame_buffer.fps if self.frame_buffer else 30
+        detection_interval = max(1, int(detection_fps / 10))
+        if frame_num % detection_interval == 0:
+            self.prev_frame = frame.copy()
         self.frames_processed += 1
 
         return completed_run
