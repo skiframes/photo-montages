@@ -63,18 +63,35 @@ fi
 
 DIR_NAME=$(basename "$SESSION_DIR")
 
-# Derive event_id from session directory name
-# Format: 2026-02-07_0921_u10_training → event_id: 2026-02-07_u10_training (drop HHMM)
+# Derive event_id from manifest fields (more reliable than parsing directory name)
+# Groups multiple sessions (different times/cameras) into one event by date+group+type
+# e.g., "2026-02-19_free ski_test" groups all "free ski test" sessions on that date
 EVENT_ID=$(python3 -c "
-import re
-d = '$DIR_NAME'
-# Match: YYYY-MM-DD_HHMM_group_type
-m = re.match(r'^(\d{4}-\d{2}-\d{2})_\d{4}_(.+)$', d)
-if m:
-    print(f'{m.group(1)}_{m.group(2)}')
-else:
-    # Fallback: use as-is
-    print(d)
+import json, re, sys
+try:
+    with open('$MANIFEST_PATH') as f:
+        m = json.load(f)
+    date = m.get('event_date', '')
+    group = m.get('group', '')
+    event_type = m.get('event_type', 'training')
+    if date and group:
+        print(f'{date}_{group}_{event_type}')
+    else:
+        raise ValueError('missing date or group in manifest')
+except Exception:
+    # Fallback: parse directory name (handles both HHMM and HHMMSS formats)
+    d = '$DIR_NAME'
+    mat = re.match(r'^(\d{4}-\d{2}-\d{2})_\d{4,6}_(.+?)_([^_]+)_([^_]+)$', d)
+    if mat:
+        # Strip camera_id and device_id from end: date_group_type
+        print(f'{mat.group(1)}_{mat.group(2)}')
+    else:
+        # Try old 4-digit format without camera/device
+        mat2 = re.match(r'^(\d{4}-\d{2}-\d{2})_\d{4}_(.+)$', d)
+        if mat2:
+            print(f'{mat2.group(1)}_{mat2.group(2)}')
+        else:
+            print(d)
 " 2>/dev/null)
 
 echo -e "${YELLOW}Syncing montage session to S3...${NC}"
