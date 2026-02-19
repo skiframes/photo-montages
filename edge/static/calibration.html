@@ -2117,6 +2117,16 @@
                 const data = await res.json();
                 const sessions = data.sessions || [];
 
+                // Restore currentJobId from running session if not already set
+                if (!state.currentJobId) {
+                    const running = sessions.find(s => s.is_running && s.job_id);
+                    if (running) {
+                        state.currentJobId = running.job_id;
+                        startMetricsPolling();
+                        startStatusPolling();
+                    }
+                }
+
                 if (sessions.length === 0) {
                     mgr.style.display = 'none';
                     return;

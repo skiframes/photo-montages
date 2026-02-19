@@ -995,7 +995,7 @@ def get_all_active_configs():
     sessions = []
 
     # Collect sessions with running jobs (even if config says expired)
-    running_session_ids = set()
+    running_session_ids = {}  # session_id -> job_id mapping
     with jobs_lock:
         for job_id, job in active_jobs.items():
             if job['status'] == 'running':
@@ -1003,7 +1003,7 @@ def get_all_active_configs():
                 cp = job.get('config_path', '')
                 if cp:
                     sid = Path(cp).stem
-                    running_session_ids.add(sid)
+                    running_session_ids[sid] = job_id
 
     for config_path in configs:
         try:
@@ -1023,12 +1023,16 @@ def get_all_active_configs():
                 pass
 
             if is_active or is_running:
-                sessions.append({
+                session_info = {
                     'session_id': session_id,
                     'config': config,
                     'is_running': is_running,
                     'is_active': is_active,
-                })
+                }
+                # Include job_id so frontend can poll metrics/status
+                if session_id in running_session_ids:
+                    session_info['job_id'] = running_session_ids[session_id]
+                sessions.append(session_info)
         except Exception:
             continue
 

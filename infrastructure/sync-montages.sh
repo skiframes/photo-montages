@@ -88,13 +88,80 @@ aws s3 sync "$SESSION_DIR" "s3://$BUCKET_NAME/events/$EVENT_ID/" \
     --exclude "*.log" \
     --exclude "*.txt" \
     --exclude ".synced" \
+    --exclude "manifest.json" \
     --region "$REGION"
 
-# Upload manifest with proper content type and short cache
-aws s3 cp "$MANIFEST_PATH" "s3://$BUCKET_NAME/events/$EVENT_ID/manifest.json" \
+# Merge manifest with any existing manifest on S3
+# (handles multiple sessions mapping to the same event, e.g. different trigger zones)
+MERGED_MANIFEST="/tmp/skiframes_merged_manifest_$$.json"
+python3 << MERGE_EOF
+import json, subprocess, sys, os
+
+local_path = '$MANIFEST_PATH'
+bucket = '$BUCKET_NAME'
+event_id = '$EVENT_ID'
+s3_key = f'events/{event_id}/manifest.json'
+merged_path = '$MERGED_MANIFEST'
+
+# Load local manifest
+with open(local_path) as f:
+    local = json.load(f)
+
+local_runs = local.get('runs', [])
+
+# Try to download existing S3 manifest
+s3_manifest_path = '/tmp/skiframes_s3_manifest_$$.json'
+try:
+    result = subprocess.run(
+        ['aws', 's3', 'cp', f's3://{bucket}/{s3_key}', s3_manifest_path, '--region', 'us-east-1'],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        with open(s3_manifest_path) as f:
+            remote = json.load(f)
+        remote_runs = remote.get('runs', [])
+
+        # Build set of run identifiers from local manifest (run_number + timestamp)
+        local_keys = set()
+        for r in local_runs:
+            local_keys.add((r.get('run_number'), r.get('timestamp')))
+
+        # Add remote runs that are NOT in the local manifest (from other sessions)
+        merged_count = 0
+        for r in remote_runs:
+            key = (r.get('run_number'), r.get('timestamp'))
+            if key not in local_keys:
+                local_runs.append(r)
+                merged_count += 1
+
+        if merged_count > 0:
+            print(f'Merged {merged_count} runs from existing S3 manifest')
+            # Sort by timestamp
+            local_runs.sort(key=lambda r: r.get('timestamp', ''))
+    else:
+        print('No existing manifest on S3, uploading new one')
+except Exception as e:
+    print(f'Warning: could not merge with S3 manifest: {e}')
+
+# Clean up temp file
+if os.path.exists(s3_manifest_path):
+    os.remove(s3_manifest_path)
+
+local['runs'] = local_runs
+with open(merged_path, 'w') as f:
+    json.dump(local, f, indent=2)
+
+print(f'Manifest has {len(local_runs)} total runs')
+MERGE_EOF
+
+# Upload merged manifest with proper content type and short cache
+aws s3 cp "$MERGED_MANIFEST" "s3://$BUCKET_NAME/events/$EVENT_ID/manifest.json" \
     --content-type "application/json" \
     --cache-control "max-age=60" \
     --region "$REGION"
+
+# Clean up temp file
+rm -f "$MERGED_MANIFEST"
 
 # Extract event info from manifest for index update
 EVENT_NAME=$(python3 -c "
@@ -152,15 +219,23 @@ except:
     print('training')
 " 2>/dev/null)
 
+# Count from S3 manifest (which has merged runs from all sessions)
+S3_MANIFEST_FOR_COUNT="/tmp/skiframes_s3_count_$$.json"
+aws s3 cp "s3://$BUCKET_NAME/events/$EVENT_ID/manifest.json" "$S3_MANIFEST_FOR_COUNT" --region "$REGION" 2>/dev/null
+
 MONTAGE_COUNT=$(python3 -c "
 import json
 try:
-    with open('$MANIFEST_PATH') as f:
+    with open('$S3_MANIFEST_FOR_COUNT') as f:
         m = json.load(f)
-    print(len(m.get('runs', [])))
+    # Count only valid runs (elapsed_time >= 1s or no elapsed_time)
+    runs = m.get('runs', [])
+    valid = [r for r in runs if r.get('elapsed_time') is None or r.get('elapsed_time', 0) >= 1.0]
+    print(len(valid))
 except:
     print(0)
 " 2>/dev/null)
+rm -f "$S3_MANIFEST_FOR_COUNT"
 
 GROUP=$(python3 -c "
 import json
