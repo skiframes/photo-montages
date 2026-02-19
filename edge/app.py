@@ -25,6 +25,8 @@ from calibration import (
     detect_gates, compute_calibration, draw_verification_grid,
     draw_gates_on_frame, GATE_SPECS,
 )
+from stream_manager import StreamManager
+from runner import SkiFramesRunner
 
 try:
     import openpyxl
@@ -40,10 +42,18 @@ except ImportError:
 
 app = Flask(__name__, static_folder='static', template_folder='static')
 
-# Track active processing jobs
+# Track active processing jobs (subprocess-based: video files)
 # Key: job_id, Value: dict with 'process', 'status', 'output', 'config_path', 'video_path'
 active_jobs = {}
 jobs_lock = threading.Lock()
+
+# Shared RTSP stream manager: one connection per camera, multiple sessions
+stream_manager = StreamManager()
+
+# Track in-process RTSP sessions managed by stream_manager
+# Key: job_id, Value: dict with 'runner', 'session_id', 'camera_id', 'status', etc.
+rtsp_sessions = {}
+rtsp_sessions_lock = threading.Lock()
 
 # Configuration
 # Use venv python if available (for J40 deployment where packages are in ~/venv/)
@@ -915,9 +925,10 @@ def save_config():
         return jsonify({'error': 'Either end_zone or run_duration_seconds is required'}), 400
 
     # Generate session ID: date_time_group_type_camera_device
+    # Uses seconds precision to allow multiple simultaneous sessions
     now = datetime.now()
     camera_id = data['camera_id']
-    session_id = f"{now.strftime('%Y-%m-%d_%H%M')}_{data['group'].lower()}_{data['session_type']}_{camera_id}_{DEVICE_ID}"
+    session_id = f"{now.strftime('%Y-%m-%d_%H%M%S')}_{data['group'].lower()}_{data['session_type']}_{camera_id}_{DEVICE_ID}"
 
     # Default session end time: 90 minutes from now
     session_end = data.get('session_end_time')
@@ -1006,6 +1017,8 @@ def get_all_active_configs():
 
     # Collect sessions with running jobs (even if config says expired)
     running_session_ids = {}  # session_id -> job_id mapping
+
+    # Check subprocess jobs
     with jobs_lock:
         for job_id, job in active_jobs.items():
             if job['status'] == 'running':
@@ -1014,6 +1027,12 @@ def get_all_active_configs():
                 if cp:
                     sid = Path(cp).stem
                     running_session_ids[sid] = job_id
+
+    # Check in-process RTSP sessions (stream manager)
+    with rtsp_sessions_lock:
+        for job_id, session in rtsp_sessions.items():
+            if session['status'] == 'running':
+                running_session_ids[session['session_id']] = job_id
 
     for config_path in configs:
         try:
@@ -1113,24 +1132,37 @@ def stop_session(session_id):
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
 
-    # Also kill any running process for this session
+    # Also kill any running process/session for this session
     process_killed = False
-    with jobs_lock:
-        for job_id, job in active_jobs.items():
-            if job.get('config_path', '').endswith(f'{session_id}.json') and job['status'] == 'running':
-                process = job['process']
-                try:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=3)
-                    except:
-                        process.kill()
-                    job['status'] = 'stopped'
-                    process_killed = True
-                    print(f"[STOP] Killed process for session {session_id} (job {job_id})")
-                except Exception as e:
-                    print(f"[STOP] Failed to kill process for {session_id}: {e}")
+
+    # Check in-process RTSP sessions first
+    with rtsp_sessions_lock:
+        for job_id, session in rtsp_sessions.items():
+            if session['session_id'] == session_id and session['status'] == 'running':
+                stream_manager.stop_session(session_id)
+                session['status'] = 'stopped'
+                process_killed = True
+                print(f"[STOP] Stopped in-process RTSP session {session_id} (job {job_id})")
                 break
+
+    # Check subprocess jobs
+    if not process_killed:
+        with jobs_lock:
+            for job_id, job in active_jobs.items():
+                if job.get('config_path', '').endswith(f'{session_id}.json') and job['status'] == 'running':
+                    process = job['process']
+                    try:
+                        process.terminate()
+                        try:
+                            process.wait(timeout=3)
+                        except:
+                            process.kill()
+                        job['status'] = 'stopped'
+                        process_killed = True
+                        print(f"[STOP] Killed process for session {session_id} (job {job_id})")
+                    except Exception as e:
+                        print(f"[STOP] Failed to kill process for {session_id}: {e}")
+                    break
 
     return jsonify({'success': True, 'session_id': session_id, 'process_killed': process_killed})
 
@@ -1705,7 +1737,11 @@ def process_video():
 
 @app.route('/api/process/rtsp', methods=['POST'])
 def process_rtsp():
-    """Start live RTSP monitoring - returns job_id for tracking."""
+    """Start live RTSP monitoring using shared stream manager.
+
+    Multiple sessions on the same camera share a single RTSP connection.
+    Frames are decoded once and distributed to all detection engines.
+    """
     data = request.json
     config_path = data.get('config_path')
 
@@ -1715,67 +1751,48 @@ def process_rtsp():
     if not Path(config_path).exists():
         return jsonify({'error': f'Config not found: {config_path}'}), 404
 
+    # Load config to get camera_id and session_id
+    try:
+        with open(config_path) as f:
+            config = json.load(f)
+    except Exception as e:
+        return jsonify({'error': f'Failed to read config: {e}'}), 500
+
+    camera_id = config.get('camera_id', '')
+    session_id = config.get('session_id', Path(config_path).stem)
+    rtsp_url = config.get('camera_url', '')
+
+    if not rtsp_url:
+        # Fall back to CAMERAS dict
+        rtsp_url = CAMERAS.get(camera_id, {}).get('rtsp_url', '')
+    if not rtsp_url:
+        return jsonify({'error': f'No RTSP URL for camera {camera_id}'}), 400
+
     # Generate job ID
     job_id = str(uuid.uuid4())[:8]
 
-    # Run the runner.py script in RTSP mode as a background process
-    runner_path = Path(__file__).resolve().parent / 'runner.py'
     output_dir = str(Path(__file__).resolve().parent.parent / 'output')
 
     try:
-        cmd = [PYTHON, '-u', str(runner_path), 'rtsp',
-               '--config', config_path, '-o', output_dir]
-        print(f"[DEBUG] Running RTSP command: {' '.join(cmd)}")
+        # Create runner in-process (no subprocess needed)
+        runner = SkiFramesRunner(config_path, output_dir)
 
-        process = Popen(
-            cmd,
-            stdout=PIPE,
-            stderr=PIPE,
-            text=True,
-            bufsize=1  # Line buffered
-        )
+        # Register with stream manager (shares RTSP connection per camera)
+        stream_manager.start_session(camera_id, rtsp_url, session_id, runner)
 
-        with jobs_lock:
-            active_jobs[job_id] = {
-                'process': process,
-                'status': 'running',
-                'output': '',
+        # Track session
+        with rtsp_sessions_lock:
+            rtsp_sessions[job_id] = {
+                'runner': runner,
+                'session_id': session_id,
+                'camera_id': camera_id,
                 'config_path': config_path,
+                'status': 'running',
                 'started_at': datetime.now().isoformat(),
             }
 
-        # Start a thread to collect output
-        def collect_output():
-            try:
-                for line in process.stdout:
-                    print(f"[RTSP] {line.rstrip()}")
-                    with jobs_lock:
-                        if job_id in active_jobs:
-                            active_jobs[job_id]['output'] += line
-                process.wait()
-                # Collect any stderr
-                stderr_output = process.stderr.read() if process.stderr else ''
-                if stderr_output:
-                    print(f"[RTSP stderr] {stderr_output}")
-                with jobs_lock:
-                    if job_id in active_jobs:
-                        if process.returncode == 0:
-                            active_jobs[job_id]['status'] = 'completed'
-                        elif process.returncode == -signal.SIGTERM or process.returncode == -signal.SIGKILL:
-                            active_jobs[job_id]['status'] = 'stopped'
-                        else:
-                            active_jobs[job_id]['status'] = 'failed'
-                            active_jobs[job_id]['error'] = stderr_output or f'Exit code: {process.returncode}'
-                        print(f"[DEBUG] RTSP job {job_id} finished with status: {active_jobs[job_id]['status']}")
-            except Exception as e:
-                print(f"[DEBUG] Exception in RTSP collect_output: {e}")
-                with jobs_lock:
-                    if job_id in active_jobs:
-                        active_jobs[job_id]['status'] = 'failed'
-                        active_jobs[job_id]['error'] = str(e)
-
-        thread = threading.Thread(target=collect_output, daemon=True)
-        thread.start()
+        print(f"[RTSP] Session {session_id} started on camera {camera_id} "
+              f"(job {job_id})")
 
         return jsonify({
             'job_id': job_id,
@@ -1783,12 +1800,46 @@ def process_rtsp():
         })
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/process/status/<job_id>')
 def process_status(job_id):
-    """Get the status of a processing job."""
+    """Get the status of a processing job (subprocess or in-process RTSP)."""
+    # Check in-process RTSP sessions first
+    with rtsp_sessions_lock:
+        rtsp_session = rtsp_sessions.get(job_id)
+
+    if rtsp_session:
+        runner = rtsp_session['runner']
+        session_id = rtsp_session['session_id']
+        camera_id = rtsp_session['camera_id']
+
+        # Check if session is still active in stream manager
+        runs_detected = runner.engine.run_count if hasattr(runner.engine, 'run_count') else 0
+        actual_status = rtsp_session['status']
+
+        # Check if stream is still running for this session
+        if actual_status == 'running':
+            sm_camera = stream_manager.get_session_camera(session_id)
+            if sm_camera is None:
+                # Session was removed (expired or stopped)
+                actual_status = 'completed'
+                rtsp_session['status'] = actual_status
+
+        response = {
+            'job_id': job_id,
+            'status': actual_status,
+            'runs_detected': runs_detected,
+            'output_dir': runner.session_dir if hasattr(runner, 'session_dir') else '',
+            'output': f'[In-process RTSP session on {camera_id}]\nRuns detected: {runs_detected}',
+            'error': rtsp_session.get('error', ''),
+        }
+        return jsonify(response)
+
+    # Fall back to subprocess jobs
     with jobs_lock:
         if job_id not in active_jobs:
             return jsonify({'error': 'Job not found'}), 404
@@ -1842,7 +1893,20 @@ def process_status(job_id):
 
 @app.route('/api/process/stop/<job_id>', methods=['POST'])
 def stop_process(job_id):
-    """Stop a running processing job."""
+    """Stop a running processing job (subprocess or in-process RTSP)."""
+    # Check in-process RTSP sessions first
+    with rtsp_sessions_lock:
+        rtsp_session = rtsp_sessions.get(job_id)
+
+    if rtsp_session:
+        session_id = rtsp_session['session_id']
+        stream_manager.stop_session(session_id)
+        with rtsp_sessions_lock:
+            rtsp_sessions[job_id]['status'] = 'stopped'
+        print(f"[STOP] In-process RTSP session {session_id} stopped (job {job_id})")
+        return jsonify({'success': True, 'status': 'stopped'})
+
+    # Fall back to subprocess jobs
     with jobs_lock:
         if job_id not in active_jobs:
             return jsonify({'error': 'Job not found'}), 404
@@ -1871,6 +1935,12 @@ def stop_process(job_id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/streams/status')
+def streams_status():
+    """Get status of shared RTSP streams and their sessions."""
+    return jsonify(stream_manager.get_status())
 
 
 # =============================================================================
