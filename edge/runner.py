@@ -15,6 +15,7 @@ from typing import Optional, List, Dict
 
 from detection import DetectionEngine, DetectionConfig, Run
 from montage import generate_montage, MontageResult, MontageResultPair, DEFAULT_FPS
+from video_clip import generate_video_clip
 
 
 def parse_reolink_video_start_time(video_path: str, race_date: str) -> Optional[datetime]:
@@ -109,6 +110,8 @@ class SkiFramesRunner:
         # Create detection engine with callback and vola_racers for offset calculation
         self.engine = DetectionEngine(self.config, on_run_complete=self._on_run_complete,
                                        vola_racers=self.vola_racers)
+        # Set metrics path for live detection chart
+        self.engine.metrics_path = os.path.join(self.session_dir, 'detection_metrics.json')
 
         print(f"SkiFrames Runner initialized")
         print(f"  Session: {self.config.session_id}")
@@ -427,12 +430,47 @@ class SkiFramesRunner:
                 except Exception as e:
                     print(f"  Embedding skipped: {e}")
 
+            # Generate video clip from raw frames
+            video_clip_path = None
+            try:
+                video_dir = os.path.join(self.session_dir, 'videos')
+                video_filename = f"run_{run.run_number:03d}_{run.start_time.strftime('%H%M%S')}.mp4"
+                video_out_path = os.path.join(video_dir, video_filename)
+
+                # Build crop region (reuse same logic as embedding/montage)
+                vid_crop_region = self.raw_config.get('crop_zone')
+                if not vid_crop_region and self.raw_config.get('start_zone') and self.raw_config.get('end_zone'):
+                    try:
+                        from montage import CropRegion
+                        frame_h, frame_w = run.frames[0].shape[:2]
+                        cr = CropRegion.from_zones(
+                            self.raw_config['start_zone'],
+                            self.raw_config['end_zone'],
+                            frame_w, frame_h
+                        )
+                        vid_crop_region = {'x': cr.x, 'y': cr.y, 'w': cr.w, 'h': cr.h}
+                    except Exception:
+                        pass
+
+                video_clip_path = generate_video_clip(
+                    frames=run.frames,
+                    output_path=video_out_path,
+                    source_fps=self.source_fps,
+                    crop_region=vid_crop_region,
+                )
+                if video_clip_path:
+                    size_kb = os.path.getsize(video_clip_path) / 1024
+                    print(f"  Video clip: {video_filename} ({size_kb:.0f} KB)")
+            except Exception as e:
+                print(f"  Video clip skipped: {e}")
+
             merged_pair = MontageResultPair(
                 run_number=run.run_number,
                 timestamp=run.start_time,
                 results=merged_results,
                 elapsed_time=elapsed_time,
                 embedding=embedding,
+                video_clip_path=video_clip_path,
             )
             if racer:
                 merged_pair.racer_bib = racer.get('bib')
@@ -451,6 +489,12 @@ class SkiFramesRunner:
                 "embedding": pair.embedding,
                 "variants": {}
             }
+            # Add video clip URL if available
+            if pair.video_clip_path:
+                try:
+                    run_entry["video_url"] = os.path.relpath(pair.video_clip_path, self.session_dir)
+                except ValueError:
+                    run_entry["video_url"] = os.path.basename(pair.video_clip_path)
             for variant, m in pair.results.items():
                 # Use relative paths from session dir (e.g., "thumbnails/run_001_thumb.jpg")
                 # to preserve subdirectory structure for S3 upload

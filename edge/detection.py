@@ -265,6 +265,13 @@ class DetectionEngine:
         self.runs_detected = 0
         self.stream_fps = 30.0  # Updated when connected to RTSP/video
 
+        # Live metrics for calibration chart
+        self.metrics_path: Optional[str] = None  # Set by runner.py
+        self._last_start_pct = 0.0
+        self._last_end_pct = 0.0
+        self._metrics_buffer: deque = deque(maxlen=120)  # Last 60s at 0.5s intervals
+        self._last_metrics_write = 0.0  # time.time() of last write
+
     def _get_racer_run_duration(self, timestamp: datetime) -> Optional[float]:
         """
         Find racer by timestamp and return their run duration.
@@ -294,12 +301,15 @@ class DetectionEngine:
 
         return None
 
-    def detect_motion_in_zone(self, prev_frame: np.ndarray, curr_frame: np.ndarray, zone: Zone) -> bool:
+    def detect_motion_in_zone(self, prev_frame: np.ndarray, curr_frame: np.ndarray, zone: Zone) -> tuple:
         """
         Detect motion in a trigger zone using frame differencing.
 
         Filters out shadows by requiring changed pixels to be bright enough
         (shadows are dark, skiers in colorful suits are brighter).
+
+        Returns:
+            Tuple of (triggered: bool, pct_changed: float)
         """
         # Extract zone regions
         prev_zone = prev_frame[zone.y1:zone.y2, zone.x1:zone.x2]
@@ -327,7 +337,44 @@ class DetectionEngine:
 
         # Check if percentage exceeds minimum
         pct_changed = (motion_pixels / total_pixels) * 100
-        return pct_changed > self.config.min_pixel_change_pct
+        return (pct_changed > self.config.min_pixel_change_pct, pct_changed)
+
+    def _write_metrics(self, timestamp: datetime):
+        """Write detection metrics to JSON file for live calibration chart."""
+        if not self.metrics_path:
+            return
+
+        now = time.time()
+        # Only write every 0.5 seconds to avoid disk thrashing
+        if now - self._last_metrics_write < 0.5:
+            return
+        self._last_metrics_write = now
+
+        # Add entry to buffer
+        entry = {
+            't': timestamp.isoformat(),
+            'start_pct': round(self._last_start_pct, 2),
+            'end_pct': round(self._last_end_pct, 2),
+            'threshold': self.config.min_pixel_change_pct,
+            'detection_threshold': self.config.detection_threshold,
+            'min_brightness': self.config.min_brightness,
+            'run_active': self.current_run is not None,
+            'run_count': self.run_count,
+        }
+        self._metrics_buffer.append(entry)
+
+        # Atomic write: tmp file + os.replace()
+        try:
+            metrics_data = {
+                'entries': list(self._metrics_buffer),
+                'updated_at': now,
+            }
+            tmp_path = self.metrics_path + '.tmp'
+            with open(tmp_path, 'w') as f:
+                json.dump(metrics_data, f)
+            os.replace(tmp_path, self.metrics_path)
+        except Exception:
+            pass  # Non-critical, skip silently
 
     def process_frame(self, frame: np.ndarray, frame_num: int, timestamp: datetime) -> Optional[Run]:
         """
@@ -346,12 +393,18 @@ class DetectionEngine:
             return None
 
         # Check for motion in START zone
-        start_motion = self.detect_motion_in_zone(self.prev_frame, frame, self.config.start_zone)
+        start_motion, start_pct = self.detect_motion_in_zone(self.prev_frame, frame, self.config.start_zone)
 
         # Check END zone only if configured (not using duration mode)
         end_motion = False
+        end_pct = 0.0
         if self.config.end_zone:
-            end_motion = self.detect_motion_in_zone(self.prev_frame, frame, self.config.end_zone)
+            end_motion, end_pct = self.detect_motion_in_zone(self.prev_frame, frame, self.config.end_zone)
+
+        # Store latest metrics for live visualization
+        self._last_start_pct = start_pct
+        self._last_end_pct = end_pct
+        self._write_metrics(timestamp)
 
         # State machine
         if self.current_run is None:

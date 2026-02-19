@@ -355,6 +355,7 @@ class MontageResultPair:
     results: Dict[str, MontageResult]  # 'A' and 'B' keys
     elapsed_time: Optional[float] = None  # Seconds from start to end trigger zone
     embedding: Optional[list] = None  # 512-dim CLIP embedding for athlete re-identification
+    video_clip_path: Optional[str] = None  # Path to MP4 video clip of this run
 
 
 def generate_montage(frames: List[np.ndarray],

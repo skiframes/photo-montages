@@ -1035,6 +1035,42 @@ def get_all_active_configs():
     return jsonify({'sessions': sessions})
 
 
+@app.route('/api/detection/metrics/<job_id>')
+def get_detection_metrics(job_id):
+    """Get live detection metrics for a running job (for calibration chart)."""
+    with jobs_lock:
+        job = active_jobs.get(job_id)
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+
+        config_path = job.get('config_path', '')
+
+    if not config_path:
+        return jsonify({'error': 'No config path for job'}), 404
+
+    # Derive session output dir from config
+    try:
+        with open(config_path) as f:
+            config = json.load(f)
+        session_id = config.get('session_id', Path(config_path).stem)
+    except Exception:
+        session_id = Path(config_path).stem
+
+    # Look for metrics file in output directory
+    output_dir = str(Path(__file__).resolve().parent.parent / 'output')
+    metrics_path = os.path.join(output_dir, session_id, 'detection_metrics.json')
+
+    if not os.path.exists(metrics_path):
+        return jsonify({'entries': [], 'message': 'No metrics yet'})
+
+    try:
+        with open(metrics_path) as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/config/<session_id>')
 def get_config(session_id):
     """Get a specific session config."""

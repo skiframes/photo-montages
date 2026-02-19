@@ -1602,6 +1602,18 @@
             </div>
         </div>
 
+        <!-- Live Detection Metrics Chart -->
+        <div id="metricsSection" style="display: none; margin-top: 20px; padding: 16px; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border);">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: var(--text-primary);">Detection Metrics (Live)</h3>
+            <canvas id="metricsCanvas" width="600" height="200" style="width: 100%; height: 200px; background: #1a1a2e; border-radius: 4px;"></canvas>
+            <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap;">
+                <span><span style="display: inline-block; width: 12px; height: 3px; background: #22c55e; vertical-align: middle; margin-right: 4px;"></span>Start zone %</span>
+                <span><span style="display: inline-block; width: 12px; height: 3px; background: #ef4444; vertical-align: middle; margin-right: 4px;"></span>End zone %</span>
+                <span><span style="display: inline-block; width: 12px; height: 3px; background: #f59e0b; vertical-align: middle; margin-right: 4px; border-top: 2px dashed #f59e0b; height: 0;"></span>Threshold</span>
+                <span><span style="display: inline-block; width: 12px; height: 12px; background: rgba(59,130,246,0.3); border: 1px solid #3b82f6; vertical-align: middle; margin-right: 4px;"></span>Run active</span>
+            </div>
+        </div>
+
         <!-- Stop Session (bottom of page) -->
         <div id="stopSessionSection" style="display: none; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
             <button id="stopSession" class="btn btn-danger" style="width: 100%; padding: 14px; font-size: 16px;">
@@ -2915,6 +2927,174 @@
             elements.stopSessionSection.style.display = 'none';
             elements.stopSession.innerHTML = 'Stop Session';
             elements.stopSession.disabled = false;
+            stopMetricsPolling();
+        }
+
+        // ============================
+        // Live Detection Metrics Chart
+        // ============================
+        let metricsPollingInterval = null;
+
+        function startMetricsPolling() {
+            stopMetricsPolling();
+            const metricsSection = document.getElementById('metricsSection');
+            if (metricsSection) metricsSection.style.display = 'block';
+
+            metricsPollingInterval = setInterval(async () => {
+                if (!state.currentJobId) {
+                    stopMetricsPolling();
+                    return;
+                }
+                try {
+                    const res = await fetch(`/api/detection/metrics/${state.currentJobId}`);
+                    const data = await res.json();
+                    if (data.entries && data.entries.length > 0) {
+                        drawMetricsChart(data.entries);
+                    }
+                } catch (e) {
+                    // Silently ignore — metrics may not be available yet
+                }
+            }, 1000);
+        }
+
+        function stopMetricsPolling() {
+            if (metricsPollingInterval) {
+                clearInterval(metricsPollingInterval);
+                metricsPollingInterval = null;
+            }
+            const metricsSection = document.getElementById('metricsSection');
+            if (metricsSection) metricsSection.style.display = 'none';
+        }
+
+        function drawMetricsChart(entries) {
+            const canvas = document.getElementById('metricsCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            // Handle high-DPI displays
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            const W = rect.width;
+            const H = rect.height;
+
+            // Clear
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, W, H);
+
+            // Chart area with margins
+            const margin = { top: 10, right: 10, bottom: 25, left: 40 };
+            const cw = W - margin.left - margin.right;
+            const ch = H - margin.top - margin.bottom;
+
+            // Find Y max (auto-scale, minimum 10%)
+            let yMax = 10;
+            for (const e of entries) {
+                yMax = Math.max(yMax, e.start_pct, e.end_pct, e.threshold * 1.2);
+            }
+            yMax = Math.ceil(yMax / 5) * 5;  // Round up to nearest 5
+
+            // Draw grid lines
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 0.5;
+            ctx.font = '10px sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.textAlign = 'right';
+            for (let pct = 0; pct <= yMax; pct += Math.max(1, Math.round(yMax / 5))) {
+                const y = margin.top + ch - (pct / yMax) * ch;
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + cw, y);
+                ctx.stroke();
+                ctx.fillText(`${pct}%`, margin.left - 4, y + 3);
+            }
+
+            // Draw time labels on X axis
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            const n = entries.length;
+            const labelCount = Math.min(6, n);
+            for (let i = 0; i < labelCount; i++) {
+                const idx = Math.floor((i / (labelCount - 1)) * (n - 1));
+                const e = entries[idx];
+                const x = margin.left + (idx / (n - 1)) * cw;
+                try {
+                    const t = new Date(e.t);
+                    const label = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}:${t.getSeconds().toString().padStart(2,'0')}`;
+                    ctx.fillText(label, x, H - 4);
+                } catch(e) {}
+            }
+
+            // Draw run-active regions (blue vertical bands)
+            for (let i = 0; i < n; i++) {
+                if (entries[i].run_active) {
+                    const x = margin.left + (i / (n - 1)) * cw;
+                    const barW = Math.max(2, cw / n);
+                    ctx.fillStyle = 'rgba(59,130,246,0.15)';
+                    ctx.fillRect(x - barW/2, margin.top, barW, ch);
+                }
+            }
+
+            // Draw threshold line (orange dashed)
+            if (entries.length > 0) {
+                const threshold = entries[entries.length - 1].threshold;
+                const thY = margin.top + ch - (threshold / yMax) * ch;
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([6, 4]);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, thY);
+                ctx.lineTo(margin.left + cw, thY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Draw start zone line (green)
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            for (let i = 0; i < n; i++) {
+                const x = margin.left + (i / (n - 1)) * cw;
+                const y = margin.top + ch - (entries[i].start_pct / yMax) * ch;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Draw end zone line (red)
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            for (let i = 0; i < n; i++) {
+                const x = margin.left + (i / (n - 1)) * cw;
+                const y = margin.top + ch - (entries[i].end_pct / yMax) * ch;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Draw run trigger markers (blue vertical lines at run_count transitions)
+            let prevRunCount = entries[0].run_count;
+            for (let i = 1; i < n; i++) {
+                if (entries[i].run_count > prevRunCount) {
+                    const x = margin.left + (i / (n - 1)) * cw;
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(x, margin.top);
+                    ctx.lineTo(x, margin.top + ch);
+                    ctx.stroke();
+                    // Label
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`Run ${entries[i].run_count}`, x, margin.top - 1);
+                    ctx.font = '10px sans-serif';
+                }
+                prevRunCount = entries[i].run_count;
+            }
         }
 
         function startStatusPolling() {
@@ -2922,6 +3102,9 @@
             if (state.statusPollInterval) {
                 clearInterval(state.statusPollInterval);
             }
+
+            // Start metrics chart polling alongside status polling
+            startMetricsPolling();
 
             // Poll every 2 seconds
             state.statusPollInterval = setInterval(async () => {
