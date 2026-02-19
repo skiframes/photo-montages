@@ -82,7 +82,7 @@ CAMERAS = {
     },
     'Axis': {
         'name': 'Axis',
-        'rtsp_url': os.environ.get('AXIS_RTSP_URL', 'rtsp://j40:j40@192.168.0.100/axis-media/media.amp'),
+        'rtsp_url': os.environ.get('AXIS_RTSP_URL', 'rtsp://j40:j40@192.168.1.100/axis-media/media.amp'),
         'offset_pct': 20,  # 20% into the run
     },
     'R3': {
@@ -822,7 +822,17 @@ def grab_frame():
         source = video_path
 
     try:
-        cap = cv2.VideoCapture(source)
+        if source_type == 'rtsp':
+            # Use same ffmpeg options as detection engine:
+            # - TCP transport for reliable delivery
+            # - genpts to fix non-monotonic timestamps (Reolink)
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|fflags;+genpts|stimeout;5000000"
+            cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+        else:
+            cap = cv2.VideoCapture(source)
+
+        if not cap.isOpened():
+            return jsonify({'error': f'Cannot connect to camera stream'}), 500
 
         if source_type == 'video' and seek_seconds > 0:
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -833,7 +843,7 @@ def grab_frame():
         cap.release()
 
         if not ret:
-            return jsonify({'error': 'Failed to grab frame'}), 500
+            return jsonify({'error': 'Connected but failed to read frame'}), 500
 
         # Generate unique ID for this frame
         frame_id = str(uuid.uuid4())[:8]
