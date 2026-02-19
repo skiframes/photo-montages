@@ -82,7 +82,7 @@ CAMERAS = {
     },
     'Axis': {
         'name': 'Axis',
-        'rtsp_url': os.environ.get('AXIS_RTSP_URL', 'rtsp://j40:j40@192.168.0.100/axis-media/media.amp'),
+        'rtsp_url': os.environ.get('AXIS_RTSP_URL', 'rtsp://j40:j40@192.168.1.100/axis-media/media.amp'),
         'offset_pct': 20,  # 20% into the run
     },
     'R3': {
