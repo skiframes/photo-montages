@@ -212,7 +212,14 @@ class StreamManager:
         original_callback = runner._on_run_complete
 
         def async_on_run_complete(run):
-            self.montage_pool.submit(original_callback, run)
+            import traceback
+            def _safe_callback(r):
+                try:
+                    original_callback(r)
+                except Exception:
+                    print(f"[MONTAGE ERROR] Run {r.run_number} failed:\n"
+                          f"{traceback.format_exc()}")
+            self.montage_pool.submit(_safe_callback, run)
 
         runner.engine.on_run_complete = async_on_run_complete
 
