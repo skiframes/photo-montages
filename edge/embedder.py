@@ -134,34 +134,19 @@ def embed_image(image_path: str) -> Optional[list]:
 
     try:
         from PIL import Image
-        import numpy as np
-        import cv2
 
         img = Image.open(image_path).convert('RGB')
-        arr = np.array(img)
         iw, ih = img.size
 
-        # Find the athlete: dark pixels against white snow background
-        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-        dark_mask = (gray < 110).astype(np.uint8) * 255
-
-        # Clean up noise with morphological operations
-        kernel = np.ones((7, 7), np.uint8)
-        dark_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_CLOSE, kernel)
-        dark_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_OPEN, kernel)
-
-        # Find the largest dark contour (the main athlete blob)
-        contours, _ = cv2.findContours(dark_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if contours:
-            largest = max(contours, key=cv2.contourArea)
-            x, y, w, h = cv2.boundingRect(largest)
-            # Add 25% padding around the athlete
-            pad = max(w, h) // 4
-            x1 = max(0, x - pad)
-            y1 = max(0, y - pad)
-            x2 = min(iw, x + w + pad)
-            y2 = min(ih, y + h + pad)
-            img = img.crop((x1, y1, x2, y2))
+        # Crop to center-lower region: center 50% horizontally, lower 67% vertically.
+        # The athlete is largest at the bottom of the montage (closest to camera)
+        # and the center avoids edge clutter (gates, nets, poles).
+        # This gives the best embedding spread for athlete differentiation.
+        x1 = iw // 4
+        y1 = ih // 3
+        x2 = iw * 3 // 4
+        y2 = ih
+        img = img.crop((x1, y1, x2, y2))
 
         return _encode_pil_image(img)
 
