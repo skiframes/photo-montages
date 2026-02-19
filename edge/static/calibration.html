@@ -2124,6 +2124,7 @@
                         state.currentJobId = running.job_id;
                         startMetricsPolling();
                         startStatusPolling();
+                        updateSaveButtonText();
                     }
                 }
 
@@ -2737,8 +2738,13 @@
 
         function updateSaveButtonText() {
             const sourceType = elements.sourceType.value;
-            const buttonText = sourceType === 'video' ? 'Process Video' : 'Start Live Session';
-            elements.saveConfig.textContent = buttonText;
+            // If RTSP session already running, show "Add Another Course"
+            if (sourceType !== 'video' && state.currentJobId) {
+                elements.saveConfig.textContent = 'Add Another Course';
+            } else {
+                const buttonText = sourceType === 'video' ? 'Process Video' : 'Start Live Session';
+                elements.saveConfig.textContent = buttonText;
+            }
         }
 
         function showCalibrationBadge() {
@@ -2915,10 +2921,21 @@
                         elements.processingStatusText.textContent = 'Monitoring RTSP stream...';
                         elements.processingRuns.textContent = '0';
                         startStatusPolling();
-                        showStatus(`Live detection started. Job ID: ${processData.job_id}`, 'success');
+                        showStatus(`Live detection started: ${data.session_id}`, 'success');
                         elements.activeSession.style.display = 'block';
                         elements.activeSessionId.textContent = data.session_id;
                         elements.activeSessionEnd.textContent = new Date(config.session_end_time).toLocaleTimeString();
+
+                        // Clear zones so user can draw new ones for another course
+                        // on the same camera (multi-session support)
+                        state.startZone = null;
+                        state.endZone = null;
+                        state.cropZone = null;
+                        renderZones();
+                        checkReadyToSave();
+
+                        // Refresh session manager to show the new session
+                        refreshSessionManager();
                     }
                 }
 
@@ -2926,7 +2943,13 @@
                 console.error('saveConfig error:', e);
                 showStatus('Failed: ' + e.message, 'error');
             } finally {
-                elements.saveConfig.innerHTML = buttonText;
+                // After starting an RTSP session, change button to indicate
+                // another course can be added on the same camera
+                if (!isVideo && state.currentJobId) {
+                    elements.saveConfig.innerHTML = 'Add Another Course';
+                } else {
+                    elements.saveConfig.innerHTML = buttonText;
+                }
                 elements.saveConfig.disabled = false;
             }
         }
