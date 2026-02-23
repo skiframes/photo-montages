@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -31,7 +31,7 @@
 		31BCCF6A3863B5C97FBC684C /* KMLCourseParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KMLCourseParser.swift; sourceTree = "<group>"; };
 		49D23230160B819953ECCE74 /* CourseStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseStore.swift; sourceTree = "<group>"; };
 		71A44B8B1D22A5FB4B32806C /* GeolocationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeolocationBridge.swift; sourceTree = "<group>"; };
-		926DA74CECE30C490987C996 /* SkiframesGPS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SkiframesGPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		926DA74CECE30C490987C996 /* SkiframesGPS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SkiframesGPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1C70F134680942C64CC3285 /* CourseListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseListView.swift; sourceTree = "<group>"; };
 		B6D1C4FF6021BF74D0F1618D /* CourseMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseMapView.swift; sourceTree = "<group>"; };
 		BD3AF229FF8C18A9D0C2F48E /* CourseDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CourseDetailView.swift; sourceTree = "<group>"; };
@@ -118,11 +118,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
-				TargetAttributes = {
-					0C803EF69F1A244263BD1A69 = {
-						DevelopmentTeam = "";
-					};
-				};
 			};
 			buildConfigurationList = 785F29DA6A71D8D3953A0B1C /* Build configuration list for PBXProject "SkiframesGPS" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -134,7 +129,6 @@
 			);
 			mainGroup = F955B2F92664FAF1A1049FC3;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -183,7 +177,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 752LZ299XX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SkiframesGPS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -320,7 +314,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 752LZ299XX;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SkiframesGPS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -183,9 +183,6 @@ struct GeolocationWebView: UIViewRepresentable {
         webView.scrollView.bounces = false
         webView.allowsBackForwardNavigationGestures = false
 
-        // Use Safari user agent so Google OAuth doesn't block us
-        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1"
-
         // Enable Web Inspector in debug builds
         #if DEBUG
         if #available(iOS 16.4, *) {
@@ -194,6 +191,7 @@ struct GeolocationWebView: UIViewRepresentable {
         #endif
 
         webView.uiDelegate = context.coordinator
+        webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
 
         // Load the calibration UI
@@ -210,7 +208,7 @@ struct GeolocationWebView: UIViewRepresentable {
 
     // MARK: - Coordinator
 
-    class Coordinator: NSObject, WKUIDelegate {
+    class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate {
         weak var webView: WKWebView?
         private var cancellable: AnyCancellable?
 
@@ -224,6 +222,21 @@ struct GeolocationWebView: UIViewRepresentable {
                 .sink { [weak self] data in
                     self?.pushGPSData(data)
                 }
+        }
+
+        // MARK: - WKNavigationDelegate
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            print("[WebView] Navigation failed: \(error.localizedDescription)")
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            print("[WebView] Provisional navigation failed: \(error.localizedDescription)")
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            print("[WebView] Web content process terminated, reloading...")
+            webView.reload()
         }
 
         // MARK: - WKUIDelegate (JS alert/confirm/prompt)
