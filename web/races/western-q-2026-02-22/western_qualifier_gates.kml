@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>Western Qualifier GS - Feb 22, 2026</name>
+  <description>Burden Trail, Proctor Ski Hill. Gate positions from Bad Elf RTK GPS.</description>
+  <Style id="gate-red"><IconStyle><color>ff0000ff</color><scale>0.8</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/red-circle.png</href></Icon></IconStyle><LabelStyle><scale>0.7</scale></LabelStyle></Style>
+  <Style id="gate-blue"><IconStyle><color>ffff8800</color><scale>0.8</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/blu-circle.png</href></Icon></IconStyle><LabelStyle><scale>0.7</scale></LabelStyle></Style>
+  <Style id="start-finish"><IconStyle><color>ff00ff00</color><scale>1.0</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/flag.png</href></Icon></IconStyle></Style>
+  <Style id="camera"><IconStyle><color>ff00ffff</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/camera.png</href></Icon></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle></Style>
+  <Style id="raceline"><LineStyle><color>ff00b4ff</color><width>3</width></LineStyle></Style>
+  <Placemark><name>START</name><styleUrl>#start-finish</styleUrl>
+    <Point><coordinates>-71.8291623,43.4267972,0</coordinates></Point></Placemark>
+  <Folder><name>Gates</name><open>1</open>
+    <Placemark>
+      <name>G1 (B)</name>
+      <description>Gate 1, blue, label: b1, elev: 331.7m, acc: 0.95m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8292907,43.4268899,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G2 (R)</name>
+      <description>Gate 2, red, label: r2, elev: 324.3m, acc: 0.11m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8293148,43.4270414,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G3 (B)</name>
+      <description>Gate 3, blue, label: b3, elev: 318.7m, acc: 1.18m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8292853,43.4271991,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G4 (R)</name>
+      <description>Gate 4, red, label: r, elev: 314.1m, acc: 1.04m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8290741,43.42731,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G5 (B)</name>
+      <description>Gate 5, blue, label: b, elev: 309.4m, acc: 0.86m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8288515,43.427411,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G6 (R)</name>
+      <description>Gate 6, red, label: r, elev: 306.2m, acc: 0.92m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8285994,43.4274446,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G7 (B)</name>
+      <description>Gate 7, blue, label: b, elev: 301.7m, acc: 0.96m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8284168,43.4275941,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G8 (R)</name>
+      <description>Gate 8, red, label: r?, elev: 300.3m, acc: 0.01m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8282715,43.4276891,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G9 (B)</name>
+      <description>Gate 9, blue, label: b, elev: 291.6m, acc: 0.73m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8281581,43.4278878,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G10 (R)</name>
+      <description>Gate 10, red, label: r, elev: 285.2m, acc: 0.99m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8279596,43.4280241,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G11 (B)</name>
+      <description>Gate 11, blue, label: b, elev: 278.2m, acc: 1.67m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8279946,43.4282392,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G12 (R)</name>
+      <description>Gate 12, red, label: r, elev: 270.3m, acc: 0.93m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8277738,43.4284331,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G13 (B)</name>
+      <description>Gate 13, blue, label: b, elev: 262.2m, acc: 1.26m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8277721,43.4286184,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G14 (R)</name>
+      <description>Gate 14, red, label: r, elev: 254.4m, acc: 1.3m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8275937,43.428764,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G15 (B)</name>
+      <description>Gate 15, blue, label: b, elev: 251.2m, acc: 1.83m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8275641,43.4289871,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G16 (R)</name>
+      <description>Gate 16, red, label: r, elev: 241.9m, acc: 1.99m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8274418,43.4291487,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G17 (B)</name>
+      <description>Gate 17, blue, label: b, elev: 235.2m, acc: 1.8m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8274985,43.4293299,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G18 (R)</name>
+      <description>Gate 18, red, label: r, elev: 219.8m, acc: 2.15m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8274141,43.4295598,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G19 (B)</name>
+      <description>Gate 19, blue, label: b, elev: 215.4m, acc: 1.68m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8274178,43.429736,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G20 (R)</name>
+      <description>Gate 20, red, label: r, elev: 211.5m, acc: 1.23m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8272607,43.4299081,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G21 (B)</name>
+      <description>Gate 21, blue, label: b, elev: 206.8m, acc: 1.35m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8271776,43.4301121,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G22 (R)</name>
+      <description>Gate 22, red, label: r, elev: 202.4m, acc: 4.8m</description>
+      <styleUrl>#gate-red</styleUrl>
+      <Point><coordinates>-71.8269176,43.4302567,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>G23 (B)</name>
+      <description>Gate 23, blue, label: b, elev: 192.4m, acc: 4.6m</description>
+      <styleUrl>#gate-blue</styleUrl>
+      <Point><coordinates>-71.8267986,43.4304372,0</coordinates></Point>
+    </Placemark>
+  </Folder>
+  <Placemark><name>FINISH (left)</name><styleUrl>#start-finish</styleUrl>
+    <Point><coordinates>-71.8266953,43.4306555,0</coordinates></Point></Placemark>
+  <Placemark><name>FINISH (right)</name><styleUrl>#start-finish</styleUrl>
+    <Point><coordinates>-71.8265552,43.430597,0</coordinates></Point></Placemark>
+  <Folder><name>Cameras</name><open>1</open>
+    <Placemark>
+      <name>Cam1</name>
+      <description>Looking uphill at gates 6-7</description>
+      <styleUrl>#camera</styleUrl>
+      <Point><coordinates>-71.8277494,43.4280608,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Cam2</name>
+      <description>On tripod near finish, covering mid-course gates</description>
+      <styleUrl>#camera</styleUrl>
+      <Point><coordinates>-71.82723055555554,43.43029166666666,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Cam3</name>
+      <description>On tripod near finish, near-finish gates</description>
+      <styleUrl>#camera</styleUrl>
+      <Point><coordinates>-71.82723055555554,43.43029166666666,0</coordinates></Point>
+    </Placemark>
+  </Folder>
+  <Placemark><name>Race Line</name><styleUrl>#raceline</styleUrl>
+    <LineString><tessellate>1</tessellate><coordinates>
+      -71.8291623,43.4267972,0
+      -71.8292907,43.4268899,0
+      -71.8293148,43.4270414,0
+      -71.8292853,43.4271991,0
+      -71.8290741,43.42731,0
+      -71.8288515,43.427411,0
+      -71.8285994,43.4274446,0
+      -71.8284168,43.4275941,0
+      -71.8282715,43.4276891,0
+      -71.8281581,43.4278878,0
+      -71.8279596,43.4280241,0
+      -71.8279946,43.4282392,0
+      -71.8277738,43.4284331,0
+      -71.8277721,43.4286184,0
+      -71.8275937,43.428764,0
+      -71.8275641,43.4289871,0
+      -71.8274418,43.4291487,0
+      -71.8274985,43.4293299,0
+      -71.8274141,43.4295598,0
+      -71.8274178,43.429736,0
+      -71.8272607,43.4299081,0
+      -71.8271776,43.4301121,0
+      -71.8269176,43.4302567,0
+      -71.8267986,43.4304372,0
+      -71.82662525,43.43062625,0
+    </coordinates></LineString></Placemark>
+  <LookAt><longitude>-71.82798537400001</longitude><latitude>43.42853779399999</latitude>
+    <altitude>0</altitude><heading>0</heading><tilt>60</tilt><range>400</range>
+    <altitudeMode>clampToGround</altitudeMode></LookAt>
+</Document></kml>

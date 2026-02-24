@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NHARA Western Division Qualifier GS - Feb 22, 2026 | Skiframes</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="race.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <!-- Header -->
+    <header id="header">
+        <div class="header-inner">
+            <a href="https://skiframes.com" class="logo">
+                <img src="https://skiframes.com/assets/Skiframes_logo.png" alt="Skiframes" height="36">
+            </a>
+            <div class="header-title">
+                <h1>NHARA Western Division Qualifier</h1>
+                <span class="header-meta">Giant Slalom &middot; Proctor - Burden Trail &middot; Feb 22, 2026</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Search bar -->
+    <div id="search-bar">
+        <input type="text" id="search-input" placeholder="Search by name or bib #..." autocomplete="off">
+        <div id="search-results" class="hidden"></div>
+    </div>
+
+    <!-- View tabs -->
+    <nav id="view-tabs">
+        <button class="tab active" data-view="map3d">3D Course</button>
+        <button class="tab" data-view="map2d">2D Map</button>
+        <button class="tab" data-view="results">Results</button>
+    </nav>
+
+    <!-- 3D View -->
+    <div id="map3d-view" class="view active">
+        <div id="three-container"></div>
+        <div id="terrain-controls">
+            <select id="run-select-3d">
+                <option value="run1">Run 1</option>
+                <option value="run2">Run 2</option>
+            </select>
+            <span class="control-sep"></span>
+            <select id="terrain-style-3d">
+                <option value="satellite">Satellite</option>
+                <option value="terrain">1m Terrain resolution</option>
+            </select>
+            <span class="control-sep"></span>
+            <label><input type="checkbox" id="show-cameras-3d"> Cameras</label>
+            <span class="control-sep"></span>
+            <button id="flatten-btn" class="ctrl-btn">▦ Flatten</button>
+        </div>
+        <!-- Course legend -->
+        <div id="course-legend">
+            <div class="legend-title">Legend</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:#f59e0b; opacity:0.5;"></span> Cam 1 section</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:#0891b2; opacity:0.5;"></span> Cam 2 section</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:#8b5cf6; opacity:0.5;"></span> Cam 3 section</div>
+            <div class="legend-sep"></div>
+            <div class="legend-item"><span class="legend-icon">↕</span> Distance to prev gate</div>
+            <div class="legend-item"><span class="legend-icon">→←</span> Lateral offset</div>
+            <div class="legend-item"><span class="legend-icon">▼</span> Elevation drop</div>
+            <div class="legend-item"><span class="legend-icon">±</span> GPS accuracy</div>
+        </div>
+        <div id="info-tooltip" class="hidden"></div>
+        <div class="view-hint">🖱 Drag to rotate · Scroll to zoom · Right-drag to pan · ⌨ Arrow keys to pan · +/− to zoom</div>
+    </div>
+
+    <!-- 2D Map View -->
+    <div id="map2d-view" class="view">
+        <div id="map"></div>
+        <div id="map-controls">
+            <select id="run-select-2d">
+                <option value="run1">Run 1</option>
+                <option value="run2">Run 2</option>
+            </select>
+            <label class="map-cb"><input type="checkbox" id="show-cameras-2d"> Cameras</label>
+            <label class="map-cb"><input type="checkbox" id="show-measurements-2d"> Measurements</label>
+        </div>
+        <div id="course-legend-2d" class="course-legend-panel">
+            <div class="legend-title">Legend</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:#f59e0b; opacity:0.5;"></span> Cam 1 section</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:#0891b2; opacity:0.5;"></span> Cam 2 section</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:#8b5cf6; opacity:0.5;"></span> Cam 3 section</div>
+            <div class="legend-sep"></div>
+            <div class="legend-item"><span class="legend-icon">↕</span> Distance to prev gate</div>
+            <div class="legend-item"><span class="legend-icon">→←</span> Lateral offset</div>
+            <div class="legend-item"><span class="legend-icon">▼</span> Elevation drop</div>
+            <div class="legend-item"><span class="legend-icon">±</span> GPS accuracy</div>
+        </div>
+        <div class="view-hint">🖱 Drag to pan · Scroll to zoom · ⌨ Arrow keys to pan · +/− to zoom</div>
+    </div>
+
+    <!-- Results View -->
+    <div id="results-view" class="view">
+        <div id="results-toolbar">
+            <div id="category-tabs">
+                <button class="cat-tab active" data-cat="U12_Girls">U12 Girls</button>
+                <button class="cat-tab" data-cat="U12_Boys">U12 Boys</button>
+                <button class="cat-tab" data-cat="U14_Girls">U14 Girls</button>
+                <button class="cat-tab" data-cat="U14_Boys">U14 Boys</button>
+            </div>
+            <div id="run-tabs">
+                <button class="run-tab active" data-run="run1">Run 1</button>
+                <button class="run-tab" data-run="run2">Run 2</button>
+            </div>
+            <div id="team-filter">
+                <select id="team-select">
+                    <option value="">All teams</option>
+                </select>
+            </div>
+        </div>
+        <div id="results-container">
+            <table id="results-table">
+                <thead>
+                    <tr>
+                        <th class="col-rank">Run Rank</th>
+                        <th class="col-bib">Bib</th>
+                        <th class="col-name">Name</th>
+                        <th class="col-club">Club</th>
+                        <th class="col-time">Time</th>
+                        <th class="col-sections">Sections</th>
+                    </tr>
+                </thead>
+                <tbody id="results-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="hidden">
+        <div class="lb-backdrop"></div>
+        <div class="lb-content">
+            <button class="lb-close">&times;</button>
+            <button class="lb-prev">&lsaquo;</button>
+            <button class="lb-next">&rsaquo;</button>
+            <div class="lb-img-wrap">
+                <img id="lb-img" src="" alt="">
+            </div>
+            <div class="lb-info">
+                <span id="lb-name"></span>
+                <span id="lb-details"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Disclaimer Footer -->
+    <footer id="disclaimer">
+        <p>Official results are available at: <a href="https://www.nhalpine.org/2026-results" target="_blank" rel="noopener">nhalpine.org/2026-results</a></p>
+        <p><strong>Disclaimer:</strong> Intermediate section times are unofficial estimates derived from camera analysis, not from official timing equipment. They are provided as a coaching aid only and should not be used for any official purpose. Accuracy is not guaranteed.</p>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+    <script src="race.js" type="module"></script>
+</body>
+</html>

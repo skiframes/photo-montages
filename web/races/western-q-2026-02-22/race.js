@@ -1,0 +1,2272 @@
+/**
+ * Race Gallery – NHARA Western Division Qualifier GS, Feb 22, 2026
+ * 3D terrain + 2D map + results table
+ */
+
+// ── State ────────────────────────────────────────────────────────────────
+let manifest = null;
+let terrainMeta = null;
+let leafletMap = null;
+let activeView = 'map3d';
+let activeCategory = 'U12_Girls';
+let activeRun = 'run1';
+let filterTeam = '';
+
+// Three.js (loaded via import map)
+let THREE, OrbitControls;
+let scene, camera3d, renderer, controls;
+let worldGroup; // group containing terrain + all overlays (scaled for flatten)
+let terrainMesh, gateMeshes = [], camMeshes = [], sectionMeshes = [];
+let labelSprites = [];
+let trailBoundaryMeshes = [];
+let showCameras = false;
+let camFovMeshes = []; // 3D FOV cone meshes (toggled with camera checkbox)
+let terrainTexture = null;   // 1m hillshade texture
+let satelliteTexture = null; // Esri satellite imagery texture
+let terrainStyle = 'satellite'; // 'satellite' or 'terrain'
+let isFlattened = false; // toggle between 3D terrain and flat 2D view
+let showMeasurements = false; // toggle 2D measurement labels (unchecked by default)
+let terrainInfoSprites = []; // elevation + gate measurement labels
+
+const VERT_SCALE = 1.0;
+
+// Section colors (one per camera)
+const SECTION_COLORS = { 'Cam1': 0xf59e0b, 'Cam2': 0x0891b2, 'Cam3': 0x8b5cf6 };
+const SECTION_COLORS_CSS = { 'Cam1': '#f59e0b', 'Cam2': '#0891b2', 'Cam3': '#8b5cf6' };
+
+// Raycaster for gate hover tooltips
+let raycaster, mouse;
+let gateHoverTargets = [];
+
+/**
+ * Get per-run camera coverage for the active run.
+ * Falls back to gates_covered if per-run fields don't exist.
+ */
+function getCamCoverage(cam) {
+    const runKey = 'gates_covered_' + activeRun;  // gates_covered_run1 or gates_covered_run2
+    return cam[runKey] || cam.gates_covered || [];
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────
+async function init() {
+    console.log('[race] init starting...');
+
+    try {
+        const [mResp, tResp] = await Promise.all([
+            fetch('race_manifest.json'),
+            fetch('terrain_meta.json?v2'),
+        ]);
+        manifest = await mResp.json();
+        terrainMeta = await tResp.json();
+        console.log('[race] manifest loaded:', manifest.categories.length, 'categories');
+        console.log('[race] terrain:', terrainMeta.width + 'x' + terrainMeta.height, 'at', terrainMeta.resolution_m + 'm resolution');
+    } catch (e) {
+        console.error('[race] Failed to load data:', e);
+        document.body.innerHTML = '<div style="padding:40px;color:#ef4444;">Error loading data: ' + e.message + '</div>';
+        return;
+    }
+
+    setupViewTabs();
+    setupCategoryTabs();
+    setupLightbox();
+    setupTeamFilter();
+    setupSearch();
+    renderResults();
+    console.log('[race] UI setup complete');
+
+    init3D().catch(e => {
+        console.error('[race] 3D init failed:', e);
+        document.getElementById('three-container').innerHTML =
+            '<div style="padding:40px;color:#ef4444;">3D view error: ' + e.message + '</div>';
+    });
+}
+
+// ── View Switching ───────────────────────────────────────────────────────
+function setupViewTabs() {
+    document.querySelectorAll('#view-tabs .tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const view = tab.dataset.view;
+            document.querySelectorAll('#view-tabs .tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(view + '-view').classList.add('active');
+            activeView = view;
+            if (view === 'map3d' && renderer) onResize3D();
+            if (view === 'map2d') {
+                if (!leafletMap) initLeaflet();
+                else setTimeout(() => leafletMap.invalidateSize(), 100);
+                // Focus the map container so Leaflet keyboard controls work
+                setTimeout(() => {
+                    const mapEl = document.getElementById('map');
+                    if (mapEl) mapEl.focus();
+                }, 200);
+            }
+        });
+    });
+}
+
+function setupCategoryTabs() {
+    document.querySelectorAll('.cat-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            activeCategory = tab.dataset.cat;
+            renderResults();
+        });
+    });
+
+    // Run sub-tabs in results view
+    document.querySelectorAll('.run-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.run-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            activeRun = tab.dataset.run;
+            // Sync with map run selectors
+            document.getElementById('run-select-3d').value = activeRun;
+            document.getElementById('run-select-2d').value = activeRun;
+            // Update maps
+            if (scene) updateCourseOverlay();
+            if (leafletMap) updateLeafletOverlay();
+            renderResults();
+        });
+    });
+}
+
+/**
+ * Sync all run selectors/tabs to current activeRun value.
+ */
+function syncRunTabs() {
+    // Sync map dropdowns
+    const sel3d = document.getElementById('run-select-3d');
+    const sel2d = document.getElementById('run-select-2d');
+    if (sel3d) sel3d.value = activeRun;
+    if (sel2d) sel2d.value = activeRun;
+    // Sync results run tabs
+    document.querySelectorAll('.run-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.run === activeRun);
+    });
+    // Re-render results for new run
+    renderResults();
+}
+
+function setupTeamFilter() {
+    // Collect all unique team names across all categories
+    const teams = new Set();
+    manifest.categories.forEach(cat => {
+        cat.athletes.forEach(a => { if (a.club) teams.add(a.club); });
+    });
+    const sorted = [...teams].sort();
+    const sel = document.getElementById('team-select');
+    sorted.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        sel.appendChild(opt);
+    });
+    sel.addEventListener('change', (e) => {
+        filterTeam = e.target.value;
+        renderResults();
+    });
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SEARCH
+// ══════════════════════════════════════════════════════════════════════════
+
+function setupSearch() {
+    const input = document.getElementById('search-input');
+    const resultsDiv = document.getElementById('search-results');
+
+    input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        if (q.length < 1) {
+            resultsDiv.classList.add('hidden');
+            resultsDiv.innerHTML = '';
+            return;
+        }
+
+        // Search across all categories
+        const matches = [];
+        manifest.categories.forEach(cat => {
+            cat.athletes.forEach(a => {
+                const fullName = (a.first + ' ' + a.last).toLowerCase();
+                const bibStr = String(a.bib);
+                if (fullName.includes(q) || bibStr.startsWith(q)) {
+                    matches.push({ athlete: a, cat });
+                }
+            });
+        });
+
+        if (matches.length === 0) {
+            resultsDiv.innerHTML = '<div class="search-item"><span class="search-meta">No results found</span></div>';
+            resultsDiv.classList.remove('hidden');
+            return;
+        }
+
+        // Limit to 20 results
+        const shown = matches.slice(0, 20);
+        resultsDiv.innerHTML = shown.map(({ athlete: a, cat }) =>
+            `<div class="search-item" data-bib="${a.bib}" data-cat="${cat.id}">
+                <span class="search-bib">#${a.bib}</span>
+                <span class="search-name">${a.first} ${a.last}</span>
+                <span class="search-meta">${a.club} &middot; ${cat.label}</span>
+            </div>`
+        ).join('');
+        resultsDiv.classList.remove('hidden');
+    });
+
+    // Click on search result → switch to results view, select category, highlight
+    resultsDiv.addEventListener('click', (e) => {
+        const item = e.target.closest('.search-item');
+        if (!item || !item.dataset.bib) return;
+
+        const catId = item.dataset.cat;
+        const bib = parseInt(item.dataset.bib);
+
+        // Switch to results view
+        document.querySelectorAll('#view-tabs .tab').forEach(t => t.classList.remove('active'));
+        document.querySelector('#view-tabs .tab[data-view="results"]').classList.add('active');
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById('results-view').classList.add('active');
+        activeView = 'results';
+
+        // Switch category
+        activeCategory = catId;
+        document.querySelectorAll('.cat-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.cat === catId);
+        });
+
+        // Clear team filter
+        filterTeam = '';
+        document.getElementById('team-select').value = '';
+
+        renderResults();
+
+        // Scroll to the athlete row
+        setTimeout(() => {
+            const row = document.querySelector(`#results-body tr[data-bib="${bib}"]`);
+            if (row) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                row.classList.add('highlight');
+                setTimeout(() => row.classList.remove('highlight'), 2000);
+            }
+        }, 100);
+
+        // Close search
+        resultsDiv.classList.add('hidden');
+        input.value = '';
+    });
+
+    // Close on click outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#search-bar')) {
+            resultsDiv.classList.add('hidden');
+        }
+    });
+
+    // Close on Escape
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            resultsDiv.classList.add('hidden');
+            input.blur();
+        }
+    });
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// THREE.JS 3D TERRAIN
+// ══════════════════════════════════════════════════════════════════════════
+
+async function init3D() {
+    console.log('[race] loading Three.js...');
+    THREE = await import('three');
+    const OrbitMod = await import('three/addons/controls/OrbitControls.js');
+    OrbitControls = OrbitMod.OrbitControls;
+    console.log('[race] Three.js loaded');
+
+    const container = document.getElementById('three-container');
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (w === 0 || h === 0) return;
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xd4e6f1);
+    scene.fog = new THREE.Fog(0xd4e6f1, 800, 1800);
+
+    camera3d = new THREE.PerspectiveCamera(50, w / h, 0.1, 3000);
+    camera3d.position.set(60, 54, -266);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    controls = new OrbitControls(camera3d, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI / 2.2;
+    controls.minDistance = 1;
+    controls.maxDistance = 1200;
+    controls.zoomSpeed = 2.0;     // faster scroll zoom (default 1.0)
+    controls.panSpeed = 1.5;      // faster right-drag pan
+    controls.rotateSpeed = 0.8;
+    controls.target.set(99, 26, -73);
+    controls.listenToKeyEvents(window); // enable arrow keys + +/- for pan/zoom
+    controls.keys = { LEFT: 'ArrowLeft', UP: 'ArrowUp', RIGHT: 'ArrowRight', BOTTOM: 'ArrowDown' };
+    controls.keyPanSpeed = 15;    // faster arrow-key panning (default 7)
+
+    // World group: contains terrain + all course overlays. Scaled for flatten.
+    worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+    scene.add(ambient);
+    const sun = new THREE.DirectionalLight(0xfffff0, 0.85);
+    sun.position.set(-150, 300, 150);
+    sun.castShadow = true;
+    scene.add(sun);
+    const fill = new THREE.DirectionalLight(0xddeeff, 0.3);
+    fill.position.set(100, 100, -100);
+    scene.add(fill);
+
+    raycaster = new THREE.Raycaster();
+    mouse = new THREE.Vector2();
+
+    await loadTerrain();
+    addTrailBoundary();
+    updateCourseOverlay();
+
+    document.getElementById('run-select-3d').addEventListener('change', (e) => {
+        activeRun = e.target.value;
+        updateCourseOverlay();
+        syncRunTabs();
+    });
+
+    // Terrain style toggle (satellite / 1m terrain)
+    document.getElementById('terrain-style-3d').addEventListener('change', (e) => {
+        setTerrainStyle(e.target.value);
+    });
+
+    // Flatten toggle button
+    document.getElementById('flatten-btn').addEventListener('click', () => {
+        isFlattened = !isFlattened;
+        document.getElementById('flatten-btn').classList.toggle('active', isFlattened);
+        document.getElementById('flatten-btn').textContent = isFlattened ? '▦ 3D' : '▦ Flatten';
+        animateFlatten(isFlattened);
+    });
+
+    // Camera toggle checkbox (3D)
+    document.getElementById('show-cameras-3d').addEventListener('change', (e) => {
+        showCameras = e.target.checked;
+        // Sync 2D checkbox
+        const cb2d = document.getElementById('show-cameras-2d');
+        if (cb2d) cb2d.checked = showCameras;
+        toggleCameras3D();
+        if (leafletMap) toggleCameras2D();
+    });
+
+    container.addEventListener('mousemove', onMouseMove3D);
+    container.addEventListener('mouseleave', () => {
+        document.getElementById('info-tooltip').classList.add('hidden');
+    });
+
+    window.addEventListener('resize', onResize3D);
+    // Debug: press 'C' to log camera position for setting defaults
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'c' || e.key === 'C') {
+            const p = camera3d.position;
+            const t = controls.target;
+            console.log(`[camera] position.set(${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)})  target.set(${t.x.toFixed(0)}, ${t.y.toFixed(0)}, ${t.z.toFixed(0)})`);
+        }
+    });
+    animate();
+    console.log('[race] 3D init complete');
+}
+
+function onResize3D() {
+    const container = document.getElementById('three-container');
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (w === 0 || h === 0) return;
+    camera3d.aspect = w / h;
+    camera3d.updateProjectionMatrix();
+    renderer.setSize(w, h);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera3d);
+}
+
+function onMouseMove3D(event) {
+    const container = document.getElementById('three-container');
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera3d);
+    const meshes = gateHoverTargets.map(t => t.mesh);
+    const intersects = raycaster.intersectObjects(meshes, false);
+
+    const tooltip = document.getElementById('info-tooltip');
+    if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        const target = gateHoverTargets.find(t => t.mesh === hit);
+        if (target) {
+            tooltip.innerHTML = target.label;
+            tooltip.style.left = (event.clientX - rect.left + 12) + 'px';
+            tooltip.style.top = (event.clientY - rect.top - 8) + 'px';
+            tooltip.classList.remove('hidden');
+        }
+    } else {
+        tooltip.classList.add('hidden');
+    }
+}
+
+async function loadTerrain() {
+    const tm = terrainMeta;
+
+    const cacheBust = 'v3';  // bump to force reload after terrain regeneration
+    const hmResp = await fetch('terrain_heightmap.bin?' + cacheBust);
+    const hmBuf = await hmResp.arrayBuffer();
+    const heightData = new Uint16Array(hmBuf);
+
+    // Load 1m hillshade texture
+    const texLoader = new THREE.TextureLoader();
+    terrainTexture = await new Promise((resolve, reject) => {
+        texLoader.load('terrain_texture.png?' + cacheBust, resolve, undefined, reject);
+    });
+    terrainTexture.minFilter = THREE.LinearFilter;
+    terrainTexture.magFilter = THREE.LinearFilter;
+
+    // Build geometry
+    const geo = new THREE.PlaneGeometry(
+        tm.extent_m * 2, tm.extent_m * 2,
+        tm.width - 1, tm.height - 1
+    );
+
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+        const elev = heightData[i] * tm.elev_scale + tm.elev_min;
+        pos.setZ(i, (elev - tm.elev_min) * VERT_SCALE);
+    }
+    geo.computeVertexNormals();
+
+    // Start with satellite as default; use terrain as fallback while satellite loads
+    const mat = new THREE.MeshLambertMaterial({ map: terrainTexture, side: THREE.DoubleSide });
+    terrainMesh = new THREE.Mesh(geo, mat);
+    terrainMesh.rotation.x = -Math.PI / 2;
+    terrainMesh.receiveShadow = true;
+    worldGroup.add(terrainMesh);
+
+    // Load satellite texture in background
+    loadSatelliteTexture();
+}
+
+/**
+ * Fetch Esri satellite tiles and composite into a single texture for the 3D terrain.
+ * Uses a canvas to stitch tiles covering the terrain bounding box.
+ */
+async function loadSatelliteTexture() {
+    const tm = terrainMeta;
+    const bounds = tm.bounds;
+
+    // Use zoom level 19 for high detail (~0.3m/px at lat 43, Google Earth quality)
+    const zoom = 19;
+
+    // Convert lat/lon to tile coordinates
+    function latLonToTile(lat, lon, z) {
+        const n = Math.pow(2, z);
+        const x = Math.floor((lon + 180) / 360 * n);
+        const latRad = lat * Math.PI / 180;
+        const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+        return { x, y };
+    }
+
+    // Convert tile coordinates back to lat/lon (NW corner of tile)
+    function tileToLatLon(tx, ty, z) {
+        const n = Math.pow(2, z);
+        const lon = tx / n * 360 - 180;
+        const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * ty / n)));
+        const lat = latRad * 180 / Math.PI;
+        return { lat, lon };
+    }
+
+    const tileNW = latLonToTile(bounds.north, bounds.west, zoom);
+    const tileSE = latLonToTile(bounds.south, bounds.east, zoom);
+
+    const tilesX = tileSE.x - tileNW.x + 1;
+    const tilesY = tileSE.y - tileNW.y + 1;
+    const tileSize = 256;
+
+    // Create canvas to composite all tiles
+    const canvas = document.createElement('canvas');
+    canvas.width = tilesX * tileSize;
+    canvas.height = tilesY * tileSize;
+    const ctx = canvas.getContext('2d');
+
+    // Fetch all tiles in parallel
+    const tilePromises = [];
+    for (let ty = tileNW.y; ty <= tileSE.y; ty++) {
+        for (let tx = tileNW.x; tx <= tileSE.x; tx++) {
+            const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
+            const px = (tx - tileNW.x) * tileSize;
+            const py = (ty - tileNW.y) * tileSize;
+            tilePromises.push(
+                new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => { ctx.drawImage(img, px, py); resolve(); };
+                    img.onerror = () => { resolve(); }; // skip failed tiles
+                    img.src = url;
+                })
+            );
+        }
+    }
+
+    await Promise.all(tilePromises);
+    console.log(`[race] satellite: ${tilesX}x${tilesY} tiles at zoom ${zoom}`);
+
+    // Now crop the canvas to exactly match the terrain bounds
+    // Compute pixel positions of terrain bounds within the tile grid
+    const gridNW = tileToLatLon(tileNW.x, tileNW.y, zoom);
+    const gridSE = tileToLatLon(tileSE.x + 1, tileSE.y + 1, zoom);
+
+    const cropLeft = (bounds.west - gridNW.lon) / (gridSE.lon - gridNW.lon) * canvas.width;
+    const cropTop = (gridNW.lat - bounds.north) / (gridNW.lat - gridSE.lat) * canvas.height;
+    const cropRight = (bounds.east - gridNW.lon) / (gridSE.lon - gridNW.lon) * canvas.width;
+    const cropBottom = (gridNW.lat - bounds.south) / (gridNW.lat - gridSE.lat) * canvas.height;
+
+    const cropW = cropRight - cropLeft;
+    const cropH = cropBottom - cropTop;
+
+    // Create cropped canvas at high resolution
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = 2048;  // high-res output texture
+    croppedCanvas.height = 2048;
+    const cctx = croppedCanvas.getContext('2d');
+    cctx.drawImage(canvas, cropLeft, cropTop, cropW, cropH, 0, 0, 2048, 2048);
+
+    // Create Three.js texture from cropped canvas
+    satelliteTexture = new THREE.CanvasTexture(croppedCanvas);
+    satelliteTexture.minFilter = THREE.LinearFilter;
+    satelliteTexture.magFilter = THREE.LinearFilter;
+
+    // Apply satellite by default
+    if (terrainStyle === 'satellite' && terrainMesh) {
+        terrainMesh.material.map = satelliteTexture;
+        terrainMesh.material.needsUpdate = true;
+    }
+
+    console.log('[race] satellite texture ready');
+}
+
+function setTerrainStyle(style) {
+    terrainStyle = style;
+    if (!terrainMesh) return;
+    if (style === 'satellite' && satelliteTexture) {
+        terrainMesh.material.map = satelliteTexture;
+    } else {
+        terrainMesh.material.map = terrainTexture;
+    }
+    terrainMesh.material.needsUpdate = true;
+
+    // Hide B-net lines on satellite (they clutter the satellite view)
+    const showBnets = (style !== 'satellite');
+    trailBoundaryMeshes.forEach(m => { m.visible = showBnets; });
+}
+
+/**
+ * Smoothly animate between 3D terrain and flat 2D-like view.
+ * Flattens terrain geometry and rebuilds overlays at flat positions.
+ * South-up orientation: start (positive Z) at top of screen, finish (negative Z) at bottom.
+ */
+let flattenAnim = null;
+let flattenFactor = 0; // 0 = full 3D, 1 = fully flat
+const savedCamera = { pos: null, target: null }; // save 3D camera state before flattening
+let terrainOrigZ = null; // original Z values of terrain vertices (PlaneGeometry Z = elevation)
+
+function animateFlatten(flatten) {
+    if (flattenAnim) cancelAnimationFrame(flattenAnim);
+
+    const duration = 600; // ms
+    const startTime = performance.now();
+    const fromFactor = flattenFactor;
+    const toFactor = flatten ? 1 : 0;
+
+    // Save original terrain vertex Z values (elevation) on first flatten
+    if (!terrainOrigZ && terrainMesh) {
+        const pos = terrainMesh.geometry.attributes.position;
+        terrainOrigZ = new Float32Array(pos.count);
+        for (let i = 0; i < pos.count; i++) terrainOrigZ[i] = pos.getZ(i);
+    }
+
+    // Save camera state before flattening
+    if (flatten) {
+        savedCamera.pos = camera3d.position.clone();
+        savedCamera.target = controls.target.clone();
+    }
+
+    // Course center for top-down view
+    const courseCX = 4.5, courseCZ = 4.2;
+
+    // Target camera: top-down for flat, restored perspective for 3D
+    const targetTarget = flatten
+        ? new THREE.Vector3(courseCX, 0, courseCZ)
+        : (savedCamera.target || new THREE.Vector3(99, 26, -73));
+    const targetPos = flatten
+        ? new THREE.Vector3(courseCX, 500, courseCZ - 0.1)
+        : (savedCamera.pos || new THREE.Vector3(60, 54, -266));
+
+    const fromPos = camera3d.position.clone();
+    const fromTarget = controls.target.clone();
+
+    function step(now) {
+        const t = Math.min((now - startTime) / duration, 1);
+        // Ease in-out
+        const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+        flattenFactor = fromFactor + (toFactor - fromFactor) * ease;
+
+        // Interpolate terrain vertex elevations
+        if (terrainOrigZ && terrainMesh) {
+            const pos = terrainMesh.geometry.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                pos.setZ(i, terrainOrigZ[i] * (1 - flattenFactor));
+            }
+            pos.needsUpdate = true;
+            terrainMesh.geometry.computeVertexNormals();
+        }
+
+        camera3d.position.lerpVectors(fromPos, targetPos, ease);
+        controls.target.lerpVectors(fromTarget, targetTarget, ease);
+        controls.update();
+
+        if (t < 1) {
+            flattenAnim = requestAnimationFrame(step);
+        } else {
+            flattenAnim = null;
+            // Rebuild course overlays at final positions
+            updateCourseOverlay();
+            addTrailBoundary();
+            // Lock polar angle when flattened (top-down only)
+            if (flatten) {
+                controls.maxPolarAngle = 0.01;
+                controls.minPolarAngle = 0;
+            } else {
+                controls.maxPolarAngle = Math.PI / 2.2;
+                controls.minPolarAngle = 0;
+            }
+        }
+    }
+
+    // Release polar angle lock before animating back to 3D
+    if (!flatten) {
+        controls.maxPolarAngle = Math.PI / 2.2;
+        controls.minPolarAngle = 0;
+    }
+
+    flattenAnim = requestAnimationFrame(step);
+}
+
+function getTerrainElevAt(x, z) {
+    const tm = terrainMeta;
+    const halfExtent = tm.extent_m;
+    const col = Math.round(((x + halfExtent) / (2 * halfExtent)) * (tm.width - 1));
+    const row = Math.round(((z + halfExtent) / (2 * halfExtent)) * (tm.height - 1));
+    if (col < 0 || col >= tm.width || row < 0 || row >= tm.height) return 0;
+    if (!terrainMesh) return 0;
+    const idx = row * tm.width + col;
+    const pos = terrainMesh.geometry.attributes.position;
+    if (idx < 0 || idx >= pos.count) return 0;
+    return pos.getZ(idx);
+}
+
+/**
+ * Trail boundary: two solid orange lines along the edges of the trail,
+ * offset from the race center line. Represents B-net fencing.
+ */
+function addTrailBoundary() {
+    // Clear existing boundary meshes
+    trailBoundaryMeshes.forEach(m => worldGroup.remove(m));
+    trailBoundaryMeshes = [];
+
+    const course = manifest.course.run2;
+    if (!course || !course.gates || course.gates.length < 2) return;
+
+    const allPts = [];
+    if (course.start) allPts.push(course.start);
+    course.gates.forEach(g => allPts.push(g));
+    // Don't extend to finish — just use gates
+
+    const centerLine = allPts.map(g => geoTo3D(g.lat, g.lon, g.dem_elev || g.elev));
+
+    // Trail half-width widens slightly toward the bottom
+    const widthTop = 20, widthBot = 30;
+
+    const leftEdge = [];
+    const rightEdge = [];
+
+    for (let i = 0; i < centerLine.length; i++) {
+        const pt = centerLine[i];
+        let dir;
+        if (i < centerLine.length - 1) {
+            dir = new THREE.Vector3().subVectors(centerLine[i + 1], pt).normalize();
+        } else {
+            dir = new THREE.Vector3().subVectors(pt, centerLine[i - 1]).normalize();
+        }
+        const perp = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
+        const t = i / (centerLine.length - 1);
+        const halfW = widthTop + (widthBot - widthTop) * t;
+
+        const lp = new THREE.Vector3(pt.x - perp.x * halfW, 0, pt.z - perp.z * halfW);
+        const rp = new THREE.Vector3(pt.x + perp.x * halfW, 0, pt.z + perp.z * halfW);
+        const ly = getTerrainElevAt(lp.x, lp.z);
+        const ry = getTerrainElevAt(rp.x, rp.z);
+        lp.y = (ly > 0 ? ly : pt.y) + 0.5;
+        rp.y = (ry > 0 ? ry : pt.y) + 0.5;
+        leftEdge.push(lp);
+        rightEdge.push(rp);
+    }
+
+    // Subdivide for smoother draping
+    const smoothLeft = subdivideAndDrape(leftEdge);
+    const smoothRight = subdivideAndDrape(rightEdge);
+
+    // Draw as solid orange lines (B-net fencing)
+    const bnetColor = 0xf97316; // orange
+    [smoothLeft, smoothRight].forEach(edge => {
+        if (edge.length < 2) return;
+        const geo = new THREE.BufferGeometry().setFromPoints(edge);
+        const mat = new THREE.LineBasicMaterial({ color: bnetColor, linewidth: 2 });
+        const line = new THREE.Line(geo, mat);
+        line.visible = (terrainStyle !== 'satellite'); // hide on satellite by default
+        worldGroup.add(line);
+        trailBoundaryMeshes.push(line);
+    });
+
+    console.log('[race] trail boundary (B-nets) added');
+}
+
+function subdivideAndDrape(pts) {
+    if (pts.length < 2) return pts;
+    const result = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        result.push(a.clone());
+        for (let t = 1; t <= 2; t++) {
+            const f = t / 3;
+            const mid = new THREE.Vector3(a.x + (b.x - a.x) * f, 0, a.z + (b.z - a.z) * f);
+            const y = getTerrainElevAt(mid.x, mid.z);
+            mid.y = (y > 0 ? y : a.y) + 0.5;
+            result.push(mid);
+        }
+    }
+    result.push(pts[pts.length - 1].clone());
+    return result;
+}
+
+// Convert lat/lon to 3D scene coordinates
+function geoTo3D(lat, lon, elev) {
+    const tm = terrainMeta;
+    const dLon = (lon - tm.center.lon) * Math.cos(tm.center.lat * Math.PI / 180) * 111320;
+    const dLat = (lat - tm.center.lat) * 110540;
+    const y = ((elev || tm.elev_min) - tm.elev_min) * VERT_SCALE * (1 - flattenFactor);
+    return new THREE.Vector3(dLon, y + 1, -dLat);
+}
+
+function clearCourseOverlay() {
+    gateMeshes.forEach(m => worldGroup.remove(m));
+    camMeshes.forEach(m => worldGroup.remove(m));
+    camFovMeshes.forEach(m => worldGroup.remove(m));
+    sectionMeshes.forEach(m => worldGroup.remove(m));
+    labelSprites.forEach(m => worldGroup.remove(m));
+    terrainInfoSprites.forEach(m => worldGroup.remove(m));
+    gateMeshes = []; camMeshes = []; camFovMeshes = []; sectionMeshes = []; labelSprites = [];
+    terrainInfoSprites = [];
+    gateHoverTargets = [];
+}
+
+function makeTextSprite(text, opts = {}) {
+    const fontSize = opts.fontSize || 28;
+    const color = opts.color || '#ffffff';
+    const bgColor = opts.bgColor || 'rgba(0,0,0,0.6)';
+    const padding = opts.padding || 6;
+    const lineHeight = opts.lineHeight || 1.3;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+
+    // Support multi-line text
+    const lines = text.split('\n');
+    const lineWidths = lines.map(l => ctx.measureText(l).width);
+    const maxWidth = Math.max(...lineWidths);
+    const totalHeight = lines.length * fontSize * lineHeight;
+
+    canvas.width = maxWidth + padding * 2;
+    canvas.height = totalHeight + padding * 2;
+
+    ctx.fillStyle = bgColor;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(0, 0, canvas.width, canvas.height, 4);
+    else ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.fill();
+
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+    ctx.fillStyle = color;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    lines.forEach((line, idx) => {
+        const y = padding + fontSize * lineHeight * (idx + 0.5);
+        ctx.fillText(line, canvas.width / 2, y);
+    });
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+    const sprite = new THREE.Sprite(spriteMat);
+    const aspect = canvas.width / canvas.height;
+    const spriteScale = opts.scale || 20;
+    sprite.scale.set(spriteScale * aspect, spriteScale, 1);
+    return sprite;
+}
+
+function updateCourseOverlay() {
+    clearCourseOverlay();
+
+    const course = manifest.course[activeRun];
+    if (!course) return;
+    const gates = course.gates;
+
+    // ── GS Gates: two poles + banner panel (like real GS gates) ──
+    // Real GS panels: ~75cm wide banner stretched between two bamboo poles ~4m apart.
+    // Scaled up for 3D overview visibility. GPS point = internal (turning) pole.
+    // Panel orientation: perpendicular to the fall line (cross-slope), so the
+    // skier sees the panel face-on when approaching.
+    gates.forEach((g, idx) => {
+        const elev = g.dem_elev || g.elev;
+        const pos = geoTo3D(g.lat, g.lon, elev);
+        const isRed = g.color === 'red';
+        const color = isRed ? 0xdc2626 : 0x2563eb;
+        const poleColor = isRed ? 0xb91c1c : 0x1d4ed8;
+
+        // Fall-line direction: average of vectors to previous and next gate
+        let fallX = 0, fallZ = 0;
+        if (idx < gates.length - 1) {
+            const next = geoTo3D(gates[idx + 1].lat, gates[idx + 1].lon, gates[idx + 1].dem_elev || gates[idx + 1].elev);
+            fallX += next.x - pos.x;
+            fallZ += next.z - pos.z;
+        }
+        if (idx > 0) {
+            const prev = geoTo3D(gates[idx - 1].lat, gates[idx - 1].lon, gates[idx - 1].dem_elev || gates[idx - 1].elev);
+            fallX += pos.x - prev.x;
+            fallZ += pos.z - prev.z;
+        }
+        // Normalize fall line direction
+        const fallLen = Math.sqrt(fallX * fallX + fallZ * fallZ) || 1;
+        fallX /= fallLen;
+        fallZ /= fallLen;
+
+        // Cross-slope perpendicular (rotate fall line 90°)
+        const perpX = -fallZ;
+        const perpZ = fallX;
+
+        const poleSpacing = 0.6; // ~60cm between poles within one panel gate
+        const poleHeight = 3.0; // exaggerated from 1.83m for overview visibility
+        const poleRadius = 0.06;
+
+        // Two pole positions: both at same base elevation (turning pole's)
+        const pole1X = pos.x;
+        const pole1Z = pos.z;
+        const baseY = pos.y;
+        const pole2X = pos.x + perpX * poleSpacing;
+        const pole2Z = pos.z + perpZ * poleSpacing;
+
+        // Pole 1 (internal/turning pole)
+        const poleGeo1 = new THREE.CylinderGeometry(poleRadius, poleRadius, poleHeight, 6);
+        const poleMat = new THREE.MeshLambertMaterial({ color: poleColor });
+        const pole1 = new THREE.Mesh(poleGeo1, poleMat);
+        pole1.position.set(pole1X, baseY + poleHeight / 2, pole1Z);
+        worldGroup.add(pole1);
+        gateMeshes.push(pole1);
+
+        // Pole 2 (external pole) — same height as pole 1
+        const poleGeo2 = new THREE.CylinderGeometry(poleRadius, poleRadius, poleHeight, 6);
+        const pole2 = new THREE.Mesh(poleGeo2, poleMat);
+        pole2.position.set(pole2X, baseY + poleHeight / 2, pole2Z);
+        worldGroup.add(pole2);
+        gateMeshes.push(pole2);
+
+        // Banner panel stretched between the tops of the two poles
+        const panelH = 1.2; // exaggerated from 0.75m for overview visibility
+        const poleTop = baseY + poleHeight;
+        const panelTopY = poleTop - 0.1;
+        const panelCenterY = panelTopY - panelH / 2;
+
+        // Panel center is midpoint between the two pole positions
+        const panelCenterX = (pole1X + pole2X) / 2;
+        const panelCenterZ = (pole1Z + pole2Z) / 2;
+
+        // Actual distance between poles for panel width
+        const actualSpacing = Math.sqrt(
+            (pole2X - pole1X) * (pole2X - pole1X) +
+            (pole2Z - pole1Z) * (pole2Z - pole1Z)
+        );
+
+        // Panel orientation: the panel should be perpendicular to the fall line,
+        // meaning its flat face is visible when looking down the slope.
+        // PlaneGeometry default normal = +Z, so rotation.y should orient the
+        // plane normal along the fall line direction.
+        const panelAngle = Math.atan2(fallX, fallZ);
+
+        const panelGeo = new THREE.PlaneGeometry(actualSpacing, panelH);
+        const panelMat = new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide });
+        const panel = new THREE.Mesh(panelGeo, panelMat);
+        panel.position.set(panelCenterX, panelCenterY, panelCenterZ);
+        panel.rotation.y = panelAngle;
+        worldGroup.add(panel);
+        gateMeshes.push(panel);
+
+        // Gate number label floating above the panel — bare colored number, no background
+        const gateLabelColor = isRed ? '#dc2626' : '#2563eb';
+        const gateLabel = makeTextSprite(String(g.number), {
+            bgColor: 'rgba(0,0,0,0)', color: gateLabelColor, scale: 3, fontSize: 20, padding: 2
+        });
+        gateLabel.position.set(panelCenterX, poleTop + 3, panelCenterZ);
+        worldGroup.add(gateLabel);
+        labelSprites.push(gateLabel);
+
+        // Hover target — tall capsule covering gate panel + number label above
+        const hoverGeo = new THREE.SphereGeometry(3.5, 8, 8);
+        const hoverMat = new THREE.MeshBasicMaterial({ visible: false });
+        const hoverMesh = new THREE.Mesh(hoverGeo, hoverMat);
+        hoverMesh.position.set(panelCenterX, poleTop + 1, panelCenterZ);
+        worldGroup.add(hoverMesh);
+        gateMeshes.push(hoverMesh);
+
+        // Compute per-gate stats for tooltip
+        const mPerLat_h = 110540;
+        const mPerLon_h = 111320 * Math.cos(g.lat * Math.PI / 180);
+        let tooltipHtml = `<b>Gate ${g.number}</b> (${g.color})`;
+
+        const refLat_h = (idx === 0 && course.start) ? course.start.lat : (idx > 0 ? gates[idx - 1].lat : null);
+        const refLon_h = (idx === 0 && course.start) ? course.start.lon : (idx > 0 ? gates[idx - 1].lon : null);
+        const refElev_h = (idx === 0 && course.start) ? (course.start.dem_elev || course.start.elev) : (idx > 0 ? (gates[idx - 1].dem_elev || gates[idx - 1].elev) : null);
+
+        if (refLat_h != null) {
+            const dLatH = (g.lat - refLat_h) * mPerLat_h;
+            const dLonH = (g.lon - refLon_h) * mPerLon_h;
+            const dElevH = refElev_h - elev;
+            const dist2DH = Math.sqrt(dLatH * dLatH + dLonH * dLonH);
+            const dist3DH = Math.sqrt(dist2DH * dist2DH + dElevH * dElevH);
+            tooltipHtml += `<br>↕ ${dist3DH.toFixed(1)}m from prev`;
+
+            // Lateral offset
+            if (idx >= 1) {
+                const r2Lat = (idx === 1 && course.start) ? course.start.lat : (idx >= 2 ? gates[idx - 2].lat : refLat_h);
+                const r2Lon = (idx === 1 && course.start) ? course.start.lon : (idx >= 2 ? gates[idx - 2].lon : refLon_h);
+                const bdLat = (refLat_h - r2Lat) * mPerLat_h;
+                const bdLon = (refLon_h - r2Lon) * mPerLon_h;
+                const bLen = Math.sqrt(bdLat * bdLat + bdLon * bdLon) || 1;
+                const pLat = bdLon / bLen;
+                const pLon = -bdLat / bLen;
+                const off = dLatH * pLat + dLonH * pLon;
+                if (Math.abs(off) > 0.01) {
+                    const dir = off > 0 ? 'right' : 'left';
+                    tooltipHtml += `<br>${off > 0 ? '→' : '←'} ${Math.abs(off).toFixed(1)}m ${dir}`;
+                }
+            }
+
+            tooltipHtml += `<br>▼ ${dElevH.toFixed(1)}m drop`;
+        }
+
+        if (g.accuracy != null) tooltipHtml += `<br>± ${g.accuracy.toFixed(2)}m GPS`;
+
+        gateHoverTargets.push({
+            mesh: hoverMesh,
+            label: tooltipHtml
+        });
+
+    });
+
+    // ── Start cabin (wooden shack like Proctor start house) ──
+    if (course.start) {
+        const startPos = geoTo3D(course.start.lat, course.start.lon, course.start.dem_elev || course.start.elev);
+
+        // Determine downhill direction from start toward first gate
+        let downX = 0, downZ = 0;
+        if (gates.length > 0) {
+            const g1 = geoTo3D(gates[0].lat, gates[0].lon, gates[0].dem_elev || gates[0].elev);
+            downX = g1.x - startPos.x;
+            downZ = g1.z - startPos.z;
+        }
+        const downLen = Math.sqrt(downX * downX + downZ * downZ) || 1;
+        downX /= downLen; downZ /= downLen;
+        // Cabin faces downhill; rotation angle for the group
+        const cabinAngle = Math.atan2(downX, downZ);
+
+        const cabinGroup = new THREE.Group();
+        cabinGroup.position.copy(startPos);
+        cabinGroup.rotation.y = cabinAngle;
+
+        const woodDark = 0x6b4226;   // dark brown (walls/structure)
+        const woodLight = 0x8b6914;  // lighter brown (trim)
+        const roofColor = 0x4a4a4a;  // dark grey shingles
+        const deckColor = 0x9e7c4a;  // light wood deck
+        const ww = 5, wd = 4, wh = 4; // cabin width, depth, wall height
+
+        // ── Deck/platform in front of cabin ──
+        const deckGeo = new THREE.BoxGeometry(ww + 2, 0.3, 3);
+        const deckMat = new THREE.MeshLambertMaterial({ color: deckColor });
+        const deck = new THREE.Mesh(deckGeo, deckMat);
+        deck.position.set(0, 0.15, wd / 2 + 1.5);
+        cabinGroup.add(deck);
+
+        // ── Floor ──
+        const floorGeo = new THREE.BoxGeometry(ww, 0.2, wd);
+        const floorMat = new THREE.MeshLambertMaterial({ color: deckColor });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.position.set(0, 0.1, 0);
+        cabinGroup.add(floor);
+
+        // ── Back wall ──
+        const backGeo = new THREE.BoxGeometry(ww, wh, 0.25);
+        const wallMat = new THREE.MeshLambertMaterial({ color: woodDark });
+        const backWall = new THREE.Mesh(backGeo, wallMat);
+        backWall.position.set(0, wh / 2, -wd / 2);
+        cabinGroup.add(backWall);
+
+        // ── Left wall ──
+        const sideGeo = new THREE.BoxGeometry(0.25, wh, wd);
+        const leftWall = new THREE.Mesh(sideGeo, wallMat);
+        leftWall.position.set(-ww / 2, wh / 2, 0);
+        cabinGroup.add(leftWall);
+
+        // ── Right wall ──
+        const rightWall = new THREE.Mesh(sideGeo, wallMat);
+        rightWall.position.set(ww / 2, wh / 2, 0);
+        cabinGroup.add(rightWall);
+
+        // ── Window opening — a darker inset on the back wall (starter's window) ──
+        const windowGeo = new THREE.BoxGeometry(2, 1.5, 0.3);
+        const windowMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+        const windowMesh = new THREE.Mesh(windowGeo, windowMat);
+        windowMesh.position.set(0, wh * 0.65, -wd / 2 + 0.05);
+        cabinGroup.add(windowMesh);
+
+        // ── Corner posts (4 vertical timber posts) ──
+        const postGeo = new THREE.BoxGeometry(0.4, wh + 1, 0.4);
+        const postMat = new THREE.MeshLambertMaterial({ color: woodLight });
+        [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx, sz]) => {
+            const post = new THREE.Mesh(postGeo, postMat);
+            post.position.set(sx * ww / 2, (wh + 1) / 2, sz * wd / 2);
+            cabinGroup.add(post);
+        });
+
+        // ── Peaked roof (two slanted planes) ──
+        const roofMat = new THREE.MeshLambertMaterial({ color: roofColor, side: THREE.DoubleSide });
+        const roofOverhang = 0.8;
+        const roofRise = 2.0; // peak height above walls
+        const roofHalfW = ww / 2 + roofOverhang;
+        const roofHalfD = wd / 2 + roofOverhang;
+
+        // Left roof slope
+        const lRoofGeo = new THREE.BufferGeometry();
+        const lRoofVerts = new Float32Array([
+            -roofHalfW, wh, -roofHalfD,
+             0, wh + roofRise, -roofHalfD,
+            -roofHalfW, wh, roofHalfD,
+             0, wh + roofRise, -roofHalfD,
+             0, wh + roofRise, roofHalfD,
+            -roofHalfW, wh, roofHalfD
+        ]);
+        lRoofGeo.setAttribute('position', new THREE.BufferAttribute(lRoofVerts, 3));
+        lRoofGeo.computeVertexNormals();
+        cabinGroup.add(new THREE.Mesh(lRoofGeo, roofMat));
+
+        // Right roof slope
+        const rRoofGeo = new THREE.BufferGeometry();
+        const rRoofVerts = new Float32Array([
+            roofHalfW, wh, -roofHalfD,
+            0, wh + roofRise, -roofHalfD,
+            roofHalfW, wh, roofHalfD,
+            0, wh + roofRise, -roofHalfD,
+            0, wh + roofRise, roofHalfD,
+            roofHalfW, wh, roofHalfD
+        ]);
+        rRoofGeo.setAttribute('position', new THREE.BufferAttribute(rRoofVerts, 3));
+        rRoofGeo.computeVertexNormals();
+        cabinGroup.add(new THREE.Mesh(rRoofGeo, roofMat));
+
+        // ── Gable triangles (front & back) ──
+        const gableMat = new THREE.MeshLambertMaterial({ color: woodDark, side: THREE.DoubleSide });
+        // Back gable
+        const bgGeo = new THREE.BufferGeometry();
+        const bgVerts = new Float32Array([
+            -ww / 2, wh, -wd / 2,
+             ww / 2, wh, -wd / 2,
+             0, wh + roofRise, -wd / 2
+        ]);
+        bgGeo.setAttribute('position', new THREE.BufferAttribute(bgVerts, 3));
+        bgGeo.computeVertexNormals();
+        cabinGroup.add(new THREE.Mesh(bgGeo, gableMat));
+
+        // Front gable (open side — no lower wall, just the triangle above)
+        const fgGeo = new THREE.BufferGeometry();
+        const fgVerts = new Float32Array([
+            -ww / 2, wh, wd / 2,
+             ww / 2, wh, wd / 2,
+             0, wh + roofRise, wd / 2
+        ]);
+        fgGeo.setAttribute('position', new THREE.BufferAttribute(fgVerts, 3));
+        fgGeo.computeVertexNormals();
+        cabinGroup.add(new THREE.Mesh(fgGeo, gableMat));
+
+        // ── Yellow start wand (timing pole) ──
+        const wandGeo = new THREE.CylinderGeometry(0.12, 0.12, 5, 6);
+        const wandMat = new THREE.MeshLambertMaterial({ color: 0xfbbf24 });
+        const wand = new THREE.Mesh(wandGeo, wandMat);
+        wand.position.set(ww / 2 + 1, 2.5, wd / 2 + 1.5);
+        cabinGroup.add(wand);
+
+        worldGroup.add(cabinGroup);
+        gateMeshes.push(cabinGroup);
+
+        // START label floating above cabin
+        const startLabel = makeTextSprite('START', { bgColor: 'rgba(22,163,74,0.85)', color: '#fff', scale: 8 });
+        startLabel.position.set(startPos.x, startPos.y + wh + roofRise + 3, startPos.z);
+        worldGroup.add(startLabel);
+        labelSprites.push(startLabel);
+    }
+
+    // ── Finish label + line ──
+    let finishPos = null;
+    if (course.finish_left && course.finish_right) {
+        const fLat = (course.finish_left.lat + course.finish_right.lat) / 2;
+        const fLon = (course.finish_left.lon + course.finish_right.lon) / 2;
+        finishPos = geoTo3D(fLat, fLon, course.finish_left.dem_elev || course.finish_left.elev);
+        const fl = geoTo3D(course.finish_left.lat, course.finish_left.lon, course.finish_left.dem_elev || course.finish_left.elev);
+        const fr = geoTo3D(course.finish_right.lat, course.finish_right.lon, course.finish_right.dem_elev || course.finish_right.elev);
+        // Blue finish line draped on terrain — thick ribbon mesh
+        const finLinePoints = [];
+        const finSegs = 16;
+        for (let i = 0; i <= finSegs; i++) {
+            const t = i / finSegs;
+            const px = fl.x + (fr.x - fl.x) * t;
+            const pz = fl.z + (fr.z - fl.z) * t;
+            const py = getTerrainElevAt(px, pz);
+            finLinePoints.push(new THREE.Vector3(px, (py > 0 ? py : fl.y) + 0.5, pz));
+        }
+        // Build a ribbon: for each point, offset perpendicular to the line direction
+        const ribbonWidth = 3.5; // meters wide — visible from overview
+        const ribbonVerts = [];
+        const ribbonIdx = [];
+        for (let i = 0; i < finLinePoints.length; i++) {
+            const p = finLinePoints[i];
+            let dir;
+            if (i < finLinePoints.length - 1) {
+                dir = new THREE.Vector3().subVectors(finLinePoints[i + 1], p).normalize();
+            } else {
+                dir = new THREE.Vector3().subVectors(p, finLinePoints[i - 1]).normalize();
+            }
+            // Perpendicular in xz plane, offset up slightly
+            const perp = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
+            ribbonVerts.push(
+                p.x + perp.x * ribbonWidth / 2, p.y + 0.3, p.z + perp.z * ribbonWidth / 2,
+                p.x - perp.x * ribbonWidth / 2, p.y + 0.3, p.z - perp.z * ribbonWidth / 2
+            );
+            if (i < finLinePoints.length - 1) {
+                const base = i * 2;
+                ribbonIdx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+            }
+        }
+        const ribbonGeo = new THREE.BufferGeometry();
+        ribbonGeo.setAttribute('position', new THREE.Float32BufferAttribute(ribbonVerts, 3));
+        ribbonGeo.setIndex(ribbonIdx);
+        ribbonGeo.computeVertexNormals();
+        const ribbonMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, side: THREE.DoubleSide }); // bright blue
+        const finLine = new THREE.Mesh(ribbonGeo, ribbonMat);
+        worldGroup.add(finLine);
+        gateMeshes.push(finLine);
+    } else if (course.finish_approx) {
+        finishPos = geoTo3D(course.finish_approx.lat, course.finish_approx.lon, course.finish_approx.dem_elev || course.finish_approx.elev);
+    }
+    if (finishPos) {
+        const finishLabel = makeTextSprite('FINISH', { bgColor: 'rgba(220,38,38,0.85)', color: '#fff', scale: 8 });
+        finishLabel.position.set(finishPos.x + 5, finishPos.y + 6, finishPos.z);
+        worldGroup.add(finishLabel);
+        labelSprites.push(finishLabel);
+    }
+
+    // ── Camera markers + FOV cones (only cameras with coverage for this run) ──
+    // Group cameras by position to combine labels for co-located cameras (e.g. Cam 2 & 3)
+    const camGroups = {};
+    manifest.cameras.forEach(cam => {
+        if (!cam.position || !cam.position.lat) return;
+        const coverage = getCamCoverage(cam);
+        if (coverage.length === 0) return; // no coverage this run
+
+        const posKey = cam.position.lat.toFixed(4) + ',' + cam.position.lon.toFixed(4);
+        if (!camGroups[posKey]) camGroups[posKey] = { cams: [], position: cam.position };
+        camGroups[posKey].cams.push(cam);
+    });
+
+    Object.values(camGroups).forEach(group => {
+        const pos0 = group.position;
+        const elev = pos0.dem_elev || pos0.elev || terrainMeta.elev_min + 50;
+        const pos = geoTo3D(pos0.lat, pos0.lon, elev);
+
+        const camGeo = new THREE.BoxGeometry(1.5, 2.5, 1.5);
+        const camMat3d = new THREE.MeshLambertMaterial({ color: 0x0891b2 });
+        const camBox = new THREE.Mesh(camGeo, camMat3d);
+        camBox.position.copy(pos);
+        camBox.position.y += 1.5;
+        if (showCameras) worldGroup.add(camBox);
+        camMeshes.push(camBox);
+
+        // Label: "Camera" for single, "Cameras" for co-located
+        const label = group.cams.length > 1 ? 'Cameras' : 'Camera';
+        const camLabel = makeTextSprite(label, { bgColor: 'rgba(8,145,178,0.85)', color: '#fff', scale: 7 });
+        camLabel.position.set(pos.x, pos.y + 6, pos.z);
+        if (showCameras) worldGroup.add(camLabel);
+        camMeshes.push(camLabel);
+
+        // ── FOV cones: one per camera, edges matching section trapezoid ──
+        group.cams.forEach(cam => {
+            const coverage = getCamCoverage(cam);
+            if (coverage.length === 0) return;
+            const covGates = gates.filter(g => coverage.includes(g.number));
+            if (covGates.length === 0) return;
+
+            const gatePositions = covGates.map(g => geoTo3D(g.lat, g.lon, g.dem_elev || g.elev));
+
+            // Camera position
+            const camPosY = pos.y + 2.0;
+            const camX = pos.x, camZ = pos.z;
+
+            // Direction from camera to center of covered gates
+            let avgGX = 0, avgGZ = 0;
+            gatePositions.forEach(p => { avgGX += p.x; avgGZ += p.z; });
+            avgGX /= gatePositions.length;
+            avgGZ /= gatePositions.length;
+
+            const toGateX = avgGX - camX;
+            const toGateZ = avgGZ - camZ;
+            const camDist = Math.sqrt(toGateX * toGateX + toGateZ * toGateZ) || 1;
+            const dirX = toGateX / camDist;
+            const dirZ = toGateZ / camDist;
+            const perpX = -dirZ, perpZ = dirX;
+
+            // Project gates to find far edge extent
+            let minPerp = Infinity, maxPerp = -Infinity;
+            let maxAlong = -Infinity;
+            let avgY = 0;
+            gatePositions.forEach(p => {
+                const dx = p.x - camX;
+                const dz = p.z - camZ;
+                const along = dx * dirX + dz * dirZ;
+                const perp = dx * perpX + dz * perpZ;
+                minPerp = Math.min(minPerp, perp);
+                maxPerp = Math.max(maxPerp, perp);
+                maxAlong = Math.max(maxAlong, along);
+                avgY += p.y;
+            });
+            avgY /= gatePositions.length;
+
+            const pad = 12;
+            const farDist = maxAlong + 8;
+            const farLeftX = camX + dirX * farDist + perpX * (minPerp - pad);
+            const farLeftZ = camZ + dirZ * farDist + perpZ * (minPerp - pad);
+            const farRightX = camX + dirX * farDist + perpX * (maxPerp + pad);
+            const farRightZ = camZ + dirZ * farDist + perpZ * (maxPerp + pad);
+
+            // Build FOV triangle: camera → far-left → far-right
+            const triGeo = new THREE.BufferGeometry();
+            const vertices = new Float32Array([
+                camX, camPosY, camZ,
+                farLeftX, avgY, farLeftZ,
+                farRightX, avgY, farRightZ
+            ]);
+            triGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            triGeo.computeVertexNormals();
+
+            const sectionColor = SECTION_COLORS[cam.id] || 0x888888;
+            const triMat = new THREE.MeshBasicMaterial({
+                color: sectionColor, transparent: true, opacity: 0.25,
+                side: THREE.DoubleSide, depthWrite: false
+            });
+            const triMesh = new THREE.Mesh(triGeo, triMat);
+            if (showCameras) worldGroup.add(triMesh);
+            camFovMeshes.push(triMesh);
+
+            // Cone outline
+            const outlineGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(camX, camPosY, camZ),
+                new THREE.Vector3(farLeftX, avgY, farLeftZ),
+                new THREE.Vector3(farRightX, avgY, farRightZ),
+                new THREE.Vector3(camX, camPosY, camZ)
+            ]);
+            const outlineMat = new THREE.LineBasicMaterial({ color: sectionColor, linewidth: 1, transparent: true, opacity: 0.6 });
+            const outlineLine = new THREE.Line(outlineGeo, outlineMat);
+            if (showCameras) worldGroup.add(outlineLine);
+            camFovMeshes.push(outlineLine);
+        });
+    });
+
+    drawCameraSections(gates);
+    addTerrainInfo(gates);
+}
+
+/**
+ * Draw a trapezoid (FOV footprint) for each camera section in 3D.
+ * The trapezoid has its wide edge spanning the covered gates and narrows
+ * toward the camera position, with a shaded ground area showing the
+ * approximate field of view on the slope.
+ * Section numbering is fixed per camera: Cam1=Section 1, Cam2=Section 2, Cam3=Section 3.
+ */
+function drawCameraSections(gates) {
+    manifest.cameras.forEach((cam, camIdx) => {
+        const covered = getCamCoverage(cam);
+        if (covered.length === 0) return;
+
+        const coveredGates = gates.filter(g => covered.includes(g.number));
+        if (coveredGates.length === 0) return;
+
+        if (!cam.position || !cam.position.lat) return;
+
+        const sectionNum = camIdx + 1;
+        const sectionColor = SECTION_COLORS[cam.id] || 0x888888;
+
+        // Camera 3D position
+        const camElev = cam.position.dem_elev || cam.position.elev || terrainMeta.elev_min + 50;
+        const camPos = geoTo3D(cam.position.lat, cam.position.lon, camElev);
+
+        // Covered gate 3D positions
+        const gatePositions = coveredGates.map(g => geoTo3D(g.lat, g.lon, g.dem_elev || g.elev));
+
+        // Direction from camera to center of covered gates
+        let avgX = 0, avgZ = 0;
+        gatePositions.forEach(p => { avgX += p.x; avgZ += p.z; });
+        avgX /= gatePositions.length;
+        avgZ /= gatePositions.length;
+
+        const camToGateX = avgX - camPos.x;
+        const camToGateZ = avgZ - camPos.z;
+        const camDist = Math.sqrt(camToGateX * camToGateX + camToGateZ * camToGateZ) || 1;
+        const dirX = camToGateX / camDist;
+        const dirZ = camToGateZ / camDist;
+
+        // Perpendicular direction (cross-slope relative to camera view)
+        const perpX = -dirZ;
+        const perpZ = dirX;
+
+        // Project gate positions onto the perpendicular axis to find width
+        let minPerp = Infinity, maxPerp = -Infinity;
+        // Also find the along-axis extent (distance from camera)
+        let minAlong = Infinity, maxAlong = -Infinity;
+        gatePositions.forEach(p => {
+            const dx = p.x - camPos.x;
+            const dz = p.z - camPos.z;
+            const along = dx * dirX + dz * dirZ;
+            const perp = dx * perpX + dz * perpZ;
+            minPerp = Math.min(minPerp, perp);
+            maxPerp = Math.max(maxPerp, perp);
+            minAlong = Math.min(minAlong, along);
+            maxAlong = Math.max(maxAlong, along);
+        });
+
+        // Pad the gate span for the far edge (gate side)
+        const gatePadding = 12; // meters of padding beyond outermost gates
+        const extraLeftPad = cam.id === 'Cam3' ? 6 : 0; // widen left to include gate 21
+        const farLeft = minPerp - gatePadding - extraLeftPad;
+        const farRight = maxPerp + gatePadding;
+
+        // Far edge: at the furthest gate distance + padding
+        const farDist = maxAlong + 8;
+        // Near edge: at the closest gate distance - padding (toward camera)
+        const nearDist = minAlong - 8;
+
+        // Near edge width narrows proportionally (perspective)
+        const narrowFactor = nearDist / farDist;
+        const nearLeft = farLeft * narrowFactor;
+        const nearRight = farRight * narrowFactor;
+
+        // Build 4 corners of the trapezoid (in 3D space)
+        // Near-left, near-right (closer to camera), far-left, far-right (at gates)
+        const corners = [
+            { x: camPos.x + dirX * nearDist + perpX * nearLeft, z: camPos.z + dirZ * nearDist + perpZ * nearLeft },
+            { x: camPos.x + dirX * nearDist + perpX * nearRight, z: camPos.z + dirZ * nearDist + perpZ * nearRight },
+            { x: camPos.x + dirX * farDist + perpX * farRight, z: camPos.z + dirZ * farDist + perpZ * farRight },
+            { x: camPos.x + dirX * farDist + perpX * farLeft, z: camPos.z + dirZ * farDist + perpZ * farLeft },
+        ];
+
+        // Subdivide each edge and drape on terrain for smooth ground following
+        const subdivs = 8;
+        const trapPts = [];
+        for (let side = 0; side < 4; side++) {
+            const c1 = corners[side];
+            const c2 = corners[(side + 1) % 4];
+            for (let i = 0; i < subdivs; i++) {
+                const t = i / subdivs;
+                const px = c1.x + (c2.x - c1.x) * t;
+                const pz = c1.z + (c2.z - c1.z) * t;
+                const py = getTerrainElevAt(px, pz);
+                trapPts.push(new THREE.Vector3(px, (py > 0 ? py : camPos.y) + 0.8, pz));
+            }
+        }
+
+        // Shaded ground area — build a mesh from the trapezoid corners draped on terrain
+        const gridRes = 10; // subdivisions along each axis for smooth draping
+        const groundVerts = [];
+        const groundIdx = [];
+
+        // Parameterize: u = 0 (near) to 1 (far), v = 0 (left) to 1 (right)
+        for (let iu = 0; iu <= gridRes; iu++) {
+            const u = iu / gridRes;
+            // Interpolate near edge to far edge
+            const leftX = corners[0].x + (corners[3].x - corners[0].x) * u;
+            const leftZ = corners[0].z + (corners[3].z - corners[0].z) * u;
+            const rightX = corners[1].x + (corners[2].x - corners[1].x) * u;
+            const rightZ = corners[1].z + (corners[2].z - corners[1].z) * u;
+
+            for (let iv = 0; iv <= gridRes; iv++) {
+                const v = iv / gridRes;
+                const px = leftX + (rightX - leftX) * v;
+                const pz = leftZ + (rightZ - leftZ) * v;
+                const py = getTerrainElevAt(px, pz);
+                groundVerts.push(px, (py > 0 ? py : camPos.y) + 0.5, pz);
+
+                if (iu < gridRes && iv < gridRes) {
+                    const base = iu * (gridRes + 1) + iv;
+                    groundIdx.push(base, base + 1, base + gridRes + 1);
+                    groundIdx.push(base + 1, base + gridRes + 2, base + gridRes + 1);
+                }
+            }
+        }
+
+        const groundGeo = new THREE.BufferGeometry();
+        groundGeo.setAttribute('position', new THREE.Float32BufferAttribute(groundVerts, 3));
+        groundGeo.setIndex(groundIdx);
+        groundGeo.computeVertexNormals();
+        const groundMat = new THREE.MeshBasicMaterial({
+            color: sectionColor, transparent: true, opacity: 0.18,
+            side: THREE.DoubleSide, depthWrite: false
+        });
+        const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+        worldGroup.add(groundMesh);
+        sectionMeshes.push(groundMesh);
+
+        // Trapezoid outline (dashed)
+        const outlinePts = trapPts.concat([trapPts[0].clone()]);
+        const dashLen = 4, gapLen = 3;
+        const dashPts = [];
+        for (let i = 0; i < outlinePts.length - 1; i++) {
+            const a = outlinePts[i], b = outlinePts[i + 1];
+            const segLen = a.distanceTo(b);
+            if (segLen < 0.1) continue;
+            const segDir = new THREE.Vector3().subVectors(b, a).normalize();
+            let d = 0, drawing = true;
+            while (d < segLen) {
+                const end = Math.min(d + (drawing ? dashLen : gapLen), segLen);
+                if (drawing) {
+                    dashPts.push(
+                        new THREE.Vector3().copy(a).addScaledVector(segDir, d),
+                        new THREE.Vector3().copy(a).addScaledVector(segDir, end)
+                    );
+                }
+                d = end;
+                drawing = !drawing;
+            }
+        }
+
+        if (dashPts.length >= 2) {
+            const geo = new THREE.BufferGeometry().setFromPoints(dashPts);
+            const mat = new THREE.LineBasicMaterial({ color: sectionColor, linewidth: 2, transparent: true, opacity: 0.7 });
+            const line = new THREE.LineSegments(geo, mat);
+            worldGroup.add(line);
+            sectionMeshes.push(line);
+        }
+
+        // Section label as floating sprite
+        const midGate = coveredGates[Math.floor(coveredGates.length / 2)];
+        const midPos = geoTo3D(midGate.lat, midGate.lon, midGate.dem_elev || midGate.elev);
+
+        const hexColor = SECTION_COLORS_CSS[cam.id] || '#888888';
+        const r = parseInt(hexColor.slice(1,3), 16) || 0;
+        const gv = parseInt(hexColor.slice(3,5), 16) || 0;
+        const b = parseInt(hexColor.slice(5,7), 16) || 0;
+        const sectionBg = `rgba(${r},${gv},${b},0.8)`;
+        const sectionLabel = makeTextSprite('Section ' + sectionNum, {
+            bgColor: sectionBg, color: '#fff', scale: 7, fontSize: 24
+        });
+        sectionLabel.position.set(midPos.x + 12, midPos.y + 6, midPos.z);
+        worldGroup.add(sectionLabel);
+        labelSprites.push(sectionLabel);
+    });
+}
+
+
+/**
+ * Add terrain measurement info (toggled via Measurements checkbox):
+ * - Elevation labels along the trail boundary (B-net)
+ * Per-gate stats are shown via hover tooltip on gate markers.
+ */
+function addTerrainInfo(gates) {
+    // Clear previous terrain info sprites
+    terrainInfoSprites.forEach(m => worldGroup.remove(m));
+    terrainInfoSprites = [];
+
+    const course = manifest.course[activeRun];
+    if (!course || !gates || gates.length < 2) return;
+
+    // ── Elevation labels along the B-net (trail boundary) ──
+    // Place elevation labels at every 3rd gate position, offset to the right side
+    const allPts = [];
+    if (course.start) allPts.push(course.start);
+    gates.forEach(g => allPts.push(g));
+
+    for (let i = 0; i < allPts.length; i += 3) {
+        const pt = allPts[i];
+        const elev = pt.dem_elev || pt.elev;
+        const pos = geoTo3D(pt.lat, pt.lon, elev);
+
+        // Compute perpendicular offset for placement near B-net
+        let dirX = 0, dirZ = 0;
+        if (i < allPts.length - 1) {
+            const next = geoTo3D(allPts[i + 1].lat, allPts[i + 1].lon, allPts[i + 1].dem_elev || allPts[i + 1].elev);
+            dirX = next.x - pos.x;
+            dirZ = next.z - pos.z;
+        } else if (i > 0) {
+            const prev = geoTo3D(allPts[i - 1].lat, allPts[i - 1].lon, allPts[i - 1].dem_elev || allPts[i - 1].elev);
+            dirX = pos.x - prev.x;
+            dirZ = pos.z - prev.z;
+        }
+        const len = Math.sqrt(dirX * dirX + dirZ * dirZ) || 1;
+        const perpX = -(dirZ / len);
+        const perpZ = (dirX / len);
+
+        const elevLabel = makeTextSprite(Math.round(elev) + 'm', {
+            bgColor: 'rgba(0,0,0,0.55)', color: '#fff', scale: 3, fontSize: 16, padding: 3
+        });
+        elevLabel.position.set(pos.x + perpX * 22, pos.y + 1, pos.z + perpZ * 22);
+        worldGroup.add(elevLabel);
+        terrainInfoSprites.push(elevLabel);
+    }
+
+    console.log('[race] terrain info labels added:', terrainInfoSprites.length);
+}
+
+// ── Camera visibility toggles ───────────────────────────────────────────
+
+function toggleCameras3D() {
+    camMeshes.forEach(m => {
+        if (showCameras) worldGroup.add(m);
+        else worldGroup.remove(m);
+    });
+    camFovMeshes.forEach(m => {
+        if (showCameras) worldGroup.add(m);
+        else worldGroup.remove(m);
+    });
+}
+
+function toggleCameras2D() {
+    if (!leafletMap) return;
+    leafletLayers.cameras.forEach(l => {
+        if (showCameras) l.addTo(leafletMap);
+        else leafletMap.removeLayer(l);
+    });
+    if (leafletLayers.camFov) {
+        leafletLayers.camFov.forEach(l => {
+            if (showCameras) l.addTo(leafletMap);
+            else leafletMap.removeLayer(l);
+        });
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// LEAFLET 2D MAP
+// ══════════════════════════════════════════════════════════════════════════
+
+let leafletLayers = { gates: [], cameras: [], sections: [], camFov: [], measurements: [] };
+
+function initLeaflet() {
+    const course = manifest.course.run2;
+    const allLats = course.gates.map(g => g.lat);
+    const allLons = course.gates.map(g => g.lon);
+    if (course.start) { allLats.push(course.start.lat); allLons.push(course.start.lon); }
+    if (course.finish_left) { allLats.push(course.finish_left.lat); allLons.push(course.finish_left.lon); }
+    if (course.finish_right) { allLats.push(course.finish_right.lat); allLons.push(course.finish_right.lon); }
+
+    const cLat = allLats.reduce((a, b) => a + b, 0) / allLats.length;
+    const cLon = allLons.reduce((a, b) => a + b, 0) / allLons.length;
+
+    // South-up orientation: bearing 180° so start (south) is at top, finish (north) at bottom
+    leafletMap = L.map('map', {
+        rotate: true, bearing: 180,
+        touchRotate: false,
+        rotateControl: false,
+        keyboard: true,
+        maxZoom: 19
+    }).setView([cLat, cLon], 16);
+
+    // Auto-focus map so keyboard controls work immediately
+    leafletMap.whenReady(() => {
+        leafletMap.getContainer().focus();
+    });
+
+    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 20, attribution: 'Esri'
+    });
+    const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: 'OpenTopoMap'
+    });
+    sat.addTo(leafletMap);
+
+    L.control.layers(
+        { 'Satellite': sat, 'Topo contours': topo },
+        {},
+        { collapsed: false }
+    ).addTo(leafletMap);
+    L.control.scale({ imperial: true, metric: true }).addTo(leafletMap);
+
+    updateLeafletOverlay();
+
+    document.getElementById('run-select-2d').addEventListener('change', (e) => {
+        activeRun = e.target.value;
+        document.getElementById('run-select-3d').value = activeRun;
+        updateLeafletOverlay();
+        if (scene) updateCourseOverlay();
+        syncRunTabs();
+    });
+
+    // Camera toggle checkbox (2D)
+    document.getElementById('show-cameras-2d').addEventListener('change', (e) => {
+        showCameras = e.target.checked;
+        // Sync 3D checkbox
+        const cb3d = document.getElementById('show-cameras-3d');
+        if (cb3d) cb3d.checked = showCameras;
+        toggleCameras2D();
+        if (scene) toggleCameras3D();
+    });
+
+    // Measurements toggle checkbox (2D)
+    document.getElementById('show-measurements-2d').addEventListener('change', (e) => {
+        showMeasurements = e.target.checked;
+        toggleMeasurements2D();
+    });
+
+    // Fit bounds with all course points including start and finish
+    const bounds = [];
+    if (course.start) bounds.push([course.start.lat, course.start.lon]);
+    course.gates.forEach(g => bounds.push([g.lat, g.lon]));
+    if (course.finish_left) bounds.push([course.finish_left.lat, course.finish_left.lon]);
+    if (course.finish_right) bounds.push([course.finish_right.lat, course.finish_right.lon]);
+    leafletMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+}
+
+function clearLeafletOverlay() {
+    leafletLayers.gates.forEach(l => leafletMap.removeLayer(l));
+    leafletLayers.cameras.forEach(l => leafletMap.removeLayer(l));
+    leafletLayers.sections.forEach(l => leafletMap.removeLayer(l));
+    if (leafletLayers.camFov) leafletLayers.camFov.forEach(l => leafletMap.removeLayer(l));
+    if (leafletLayers.measurements) leafletLayers.measurements.forEach(l => leafletMap.removeLayer(l));
+    leafletLayers = { gates: [], cameras: [], sections: [], camFov: [], measurements: [] };
+}
+
+function updateLeafletOverlay() {
+    if (!leafletMap) return;
+    clearLeafletOverlay();
+
+    const course = manifest.course[activeRun];
+    if (!course) return;
+
+    // ── Start marker ──
+    if (course.start) {
+        const m = L.marker([course.start.lat, course.start.lon], {
+            icon: L.divIcon({
+                className: 'gate-label-2d',
+                html: '<span style="color:#16a34a;font-size:14px;font-weight:900;">&#9650; START</span>',
+                iconSize: [80, 18], iconAnchor: [10, 9]
+            })
+        }).addTo(leafletMap);
+        leafletLayers.gates.push(m);
+    }
+
+    // ── Finish marker ──
+    if (course.finish_left && course.finish_right) {
+        const fLat = (course.finish_left.lat + course.finish_right.lat) / 2;
+        const fLon = (course.finish_left.lon + course.finish_right.lon) / 2;
+        const m = L.marker([fLat, fLon], {
+            icon: L.divIcon({
+                className: 'gate-label-2d',
+                html: '<span style="color:#dc2626;font-size:14px;font-weight:900;">&#9632; FINISH</span>',
+                iconSize: [80, 18], iconAnchor: [10, 9]
+            })
+        }).addTo(leafletMap);
+        leafletLayers.gates.push(m);
+        leafletLayers.gates.push(L.polyline(
+            [[course.finish_left.lat, course.finish_left.lon], [course.finish_right.lat, course.finish_right.lon]],
+            { color: '#3b82f6', weight: 5 }
+        ).addTo(leafletMap));
+    }
+
+    // ── Gate markers: panel gates (two poles + line) ──
+    const gateSpacingM = 0.6; // ~60cm between poles within one panel gate
+    const metersPerLat = 110540;
+    const metersPerLon = 111320 * Math.cos((course.gates[0]?.lat || 43.43) * Math.PI / 180);
+
+    course.gates.forEach((g, idx) => {
+        const color = g.color === 'red' ? '#dc2626' : '#2563eb';
+        const gates = course.gates;
+
+        // Fall-line direction in lat/lon
+        let fallLat = 0, fallLon = 0;
+        if (idx < gates.length - 1) {
+            fallLat += gates[idx + 1].lat - g.lat;
+            fallLon += gates[idx + 1].lon - g.lon;
+        }
+        if (idx > 0) {
+            fallLat += g.lat - gates[idx - 1].lat;
+            fallLon += g.lon - gates[idx - 1].lon;
+        }
+        // Normalize in meters then back to degrees
+        const fLenM = Math.sqrt((fallLat * metersPerLat) ** 2 + (fallLon * metersPerLon) ** 2) || 1;
+        const fLatN = (fallLat * metersPerLat) / fLenM;
+        const fLonN = (fallLon * metersPerLon) / fLenM;
+
+        // Perpendicular (cross-slope): rotate 90°
+        const perpLatM = -fLonN; // in meters
+        const perpLonM = fLatN;
+
+        // Second pole position (offset by gateSpacingM)
+        const pole2Lat = g.lat + (perpLatM * gateSpacingM) / metersPerLat;
+        const pole2Lon = g.lon + (perpLonM * gateSpacingM) / metersPerLon;
+
+        // Pole 1 (turning pole at GPS position)
+        const p1 = L.circleMarker([g.lat, g.lon], {
+            radius: 3, fillColor: color, color: color, weight: 1, fillOpacity: 0.9
+        }).addTo(leafletMap).bindPopup(`<b>Gate ${g.number}</b> (${g.color})<br>Elev: ${Math.round(g.dem_elev || g.elev)}m`);
+        leafletLayers.gates.push(p1);
+
+        // Pole 2 (outside pole)
+        const p2 = L.circleMarker([pole2Lat, pole2Lon], {
+            radius: 3, fillColor: color, color: color, weight: 1, fillOpacity: 0.9
+        }).addTo(leafletMap);
+        leafletLayers.gates.push(p2);
+
+        // Panel line between poles
+        const panelLine = L.polyline([[g.lat, g.lon], [pole2Lat, pole2Lon]], {
+            color: color, weight: 3, opacity: 0.9
+        }).addTo(leafletMap);
+        leafletLayers.gates.push(panelLine);
+
+        // Gate number label
+        leafletLayers.gates.push(L.marker([g.lat, g.lon], {
+            icon: L.divIcon({ className: 'gate-label-2d', html: `<span style="color:${color}">${g.number}</span>`, iconSize: [20, 14], iconAnchor: [-8, 7] })
+        }).addTo(leafletMap));
+    });
+
+    // ── Camera markers + FOV cones (grouped by position for co-located cameras) ──
+    const camGroups2D = {};
+    manifest.cameras.forEach(cam => {
+        if (!cam.position || !cam.position.lat) return;
+        const coverage = getCamCoverage(cam);
+        if (coverage.length === 0) return;
+        const posKey = cam.position.lat.toFixed(4) + ',' + cam.position.lon.toFixed(4);
+        if (!camGroups2D[posKey]) camGroups2D[posKey] = { cams: [], position: cam.position };
+        camGroups2D[posKey].cams.push(cam);
+    });
+
+    Object.values(camGroups2D).forEach(group => {
+        const pos = [group.position.lat, group.position.lon];
+        const label = group.cams.length > 1 ? 'Cameras' : 'Camera';
+        const notes = group.cams.map(c => c.note || '').filter(Boolean).join('; ');
+
+        // Camera icon pointing south (uphill) — FOV cones show exact coverage direction
+        const camMarker = L.marker(pos, {
+            icon: L.divIcon({
+                className: 'cam-label-2d',
+                html: `<span style="display:inline-flex;align-items:center;gap:3px;font-size:13px;font-weight:700;color:#0891b2;">` +
+                      `<span style="font-size:16px;">&#127909;</span> ${label}</span>`,
+                iconSize: [110, 24], iconAnchor: [12, 12]
+            })
+        }).bindPopup(`<b>${label}</b> (pointing south/uphill)<br>${notes}`);
+        if (showCameras) camMarker.addTo(leafletMap);
+        leafletLayers.cameras.push(camMarker);
+
+        // ── FOV cones in 2D: triangle from camera to far edge of section trapezoid ──
+        group.cams.forEach(cam => {
+            const coverage = getCamCoverage(cam);
+            if (coverage.length === 0) return;
+            const covGates = course.gates.filter(g => coverage.includes(g.number));
+            if (covGates.length === 0) return;
+
+            const camLat = group.position.lat, camLon = group.position.lon;
+            const mPerLat = 110540;
+            const mPerLon = 111320 * Math.cos(camLat * Math.PI / 180);
+
+            // Direction from camera to center of covered gates
+            const avgLat = covGates.reduce((s, g) => s + g.lat, 0) / covGates.length;
+            const avgLon = covGates.reduce((s, g) => s + g.lon, 0) / covGates.length;
+            const dx = (avgLat - camLat) * mPerLat;
+            const dy = (avgLon - camLon) * mPerLon;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const dirLat = dx / dist, dirLon = dy / dist;
+            const perpLat = -dirLon, perpLon = dirLat;
+
+            // Project gates onto perpendicular + along axes
+            let minPerp = Infinity, maxPerp = -Infinity, maxAlong = -Infinity;
+            covGates.forEach(g => {
+                const gx = (g.lat - camLat) * mPerLat;
+                const gy = (g.lon - camLon) * mPerLon;
+                const along = gx * dirLat + gy * dirLon;
+                const perp = gx * perpLat + gy * perpLon;
+                minPerp = Math.min(minPerp, perp);
+                maxPerp = Math.max(maxPerp, perp);
+                maxAlong = Math.max(maxAlong, along);
+            });
+
+            const pad = 12;
+            const farDist = maxAlong + 8;
+            const farLeft = minPerp - pad;
+            const farRight = maxPerp + pad;
+
+            // Far corners of the FOV
+            const farLeftLat = camLat + (dirLat * farDist + perpLat * farLeft) / mPerLat;
+            const farLeftLon = camLon + (dirLon * farDist + perpLon * farLeft) / mPerLon;
+            const farRightLat = camLat + (dirLat * farDist + perpLat * farRight) / mPerLat;
+            const farRightLon = camLon + (dirLon * farDist + perpLon * farRight) / mPerLon;
+
+            const sectionColor = SECTION_COLORS_CSS[cam.id] || '#888';
+            const fovTriangle = L.polygon([
+                [camLat, camLon],
+                [farLeftLat, farLeftLon],
+                [farRightLat, farRightLon]
+            ], {
+                color: sectionColor, weight: 1, opacity: 0.6,
+                fillColor: sectionColor, fillOpacity: 0.15
+            });
+            if (showCameras) fovTriangle.addTo(leafletMap);
+            leafletLayers.camFov.push(fovTriangle);
+        });
+    });
+
+    // ── Camera section overlays (per-run) — trapezoid FOV footprints, fixed numbering ──
+    manifest.cameras.forEach((cam, camIdx) => {
+        if (!cam.position || !cam.position.lat) return;
+        const coverage = getCamCoverage(cam);
+        if (coverage.length === 0) return;
+
+        const sectionNum = camIdx + 1; // Fixed: Cam1=1, Cam2=2, Cam3=3
+
+        const covGates = course.gates.filter(g => coverage.includes(g.number));
+        if (covGates.length >= 1) {
+            const sectionColor = SECTION_COLORS_CSS[cam.id] || '#888';
+
+            const camLat = cam.position.lat;
+            const camLon = cam.position.lon;
+
+            // Direction from camera to center of covered gates (in meter space)
+            const gateLats = covGates.map(g => g.lat);
+            const gateLons = covGates.map(g => g.lon);
+            const avgLat = gateLats.reduce((a, b) => a + b, 0) / gateLats.length;
+            const avgLon = gateLons.reduce((a, b) => a + b, 0) / gateLons.length;
+
+            const mPerLat = 110540;
+            const mPerLon = 111320 * Math.cos(camLat * Math.PI / 180);
+
+            const camToGateLat = (avgLat - camLat) * mPerLat;
+            const camToGateLon = (avgLon - camLon) * mPerLon;
+            const camDist = Math.sqrt(camToGateLat ** 2 + camToGateLon ** 2) || 1;
+            const dirLat = camToGateLat / camDist;
+            const dirLon = camToGateLon / camDist;
+
+            // Perpendicular (cross-view)
+            const perpLat = -dirLon;
+            const perpLon = dirLat;
+
+            // Project gate positions onto the perpendicular and along axes
+            let minPerp = Infinity, maxPerp = -Infinity;
+            let minAlong = Infinity, maxAlong = -Infinity;
+            covGates.forEach(g => {
+                const dx = (g.lat - camLat) * mPerLat;
+                const dy = (g.lon - camLon) * mPerLon;
+                const along = dx * dirLat + dy * dirLon;
+                const perp = dx * perpLat + dy * perpLon;
+                minPerp = Math.min(minPerp, perp);
+                maxPerp = Math.max(maxPerp, perp);
+                minAlong = Math.min(minAlong, along);
+                maxAlong = Math.max(maxAlong, along);
+            });
+
+            // Pad the gate span
+            const gatePadding = 12; // meters
+            const extraLeftPad = cam.id === 'Cam3' ? 6 : 0; // widen left to include gate 21
+            const farLeft = minPerp - gatePadding - extraLeftPad;
+            const farRight = maxPerp + gatePadding;
+            const farDist = maxAlong + 8;
+            const nearDist = minAlong - 8;
+
+            // Near edge narrows proportionally (perspective)
+            const narrowFactor = nearDist / farDist;
+            const nearLeft = farLeft * narrowFactor;
+            const nearRight = farRight * narrowFactor;
+
+            // Convert back to lat/lon: camera + offset in meters
+            function mToLatLon(alongM, perpM) {
+                const lat = camLat + (dirLat * alongM + perpLat * perpM) / mPerLat;
+                const lon = camLon + (dirLon * alongM + perpLon * perpM) / mPerLon;
+                return [lat, lon];
+            }
+
+            const trapCorners = [
+                mToLatLon(nearDist, nearLeft),   // near-left
+                mToLatLon(nearDist, nearRight),  // near-right
+                mToLatLon(farDist, farRight),    // far-right
+                mToLatLon(farDist, farLeft),     // far-left
+            ];
+
+            // Shaded trapezoid polygon
+            leafletLayers.sections.push(L.polygon(trapCorners, {
+                color: sectionColor, weight: 2, opacity: 0.7,
+                dashArray: '8,6',
+                fillColor: sectionColor, fillOpacity: 0.12
+            }).addTo(leafletMap));
+
+            // Section label
+            const midGate = covGates[Math.floor(covGates.length / 2)];
+            leafletLayers.sections.push(L.marker([midGate.lat, midGate.lon], {
+                icon: L.divIcon({
+                    className: 'cam-label-2d',
+                    html: `<span style="color:${sectionColor};font-size:11px;">Section ${sectionNum}</span>`,
+                    iconSize: [70, 16], iconAnchor: [-12, 8]
+                })
+            }).addTo(leafletMap));
+        }
+    });
+
+    // ── Per-gate measurements + elevation labels (2D) ──
+    addLeafletMeasurements(course);
+}
+
+/**
+ * Add per-gate measurement labels and elevation markers to the 2D Leaflet map.
+ */
+function addLeafletMeasurements(course) {
+    if (!course || !course.gates || course.gates.length < 2) return;
+    const gates = course.gates;
+
+    const mPerLat = 110540;
+    const mPerLon = 111320 * Math.cos((gates[0].lat) * Math.PI / 180);
+
+    // ── Elevation labels every 3 gates ──
+    const allPts = [];
+    if (course.start) allPts.push(course.start);
+    gates.forEach(g => allPts.push(g));
+
+    for (let i = 0; i < allPts.length; i += 3) {
+        const pt = allPts[i];
+        const elev = pt.dem_elev || pt.elev;
+
+        // Offset position slightly to the right for placement
+        let fallLat = 0, fallLon = 0;
+        if (i < allPts.length - 1) {
+            fallLat = allPts[i + 1].lat - pt.lat;
+            fallLon = allPts[i + 1].lon - pt.lon;
+        } else if (i > 0) {
+            fallLat = pt.lat - allPts[i - 1].lat;
+            fallLon = pt.lon - allPts[i - 1].lon;
+        }
+        const fLen = Math.sqrt((fallLat * mPerLat) ** 2 + (fallLon * mPerLon) ** 2) || 1;
+        // Perpendicular offset (~20m to the right)
+        const perpLatM = -(fallLon * mPerLon) / fLen;
+        const perpLonM = (fallLat * mPerLat) / fLen;
+        const offsetM = 20;
+        const labelLat = pt.lat + (perpLatM * offsetM) / mPerLat;
+        const labelLon = pt.lon + (perpLonM * offsetM) / mPerLon;
+
+        const m = L.marker([labelLat, labelLon], {
+            icon: L.divIcon({
+                className: 'gate-label-2d',
+                html: `<span style="color:#1e293b;font-size:10px;font-weight:600;background:rgba(255,255,255,0.7);padding:1px 3px;border-radius:2px;">${Math.round(elev)}m</span>`,
+                iconSize: [36, 14], iconAnchor: [18, 7]
+            })
+        });
+        if (showMeasurements) m.addTo(leafletMap);
+        leafletLayers.measurements.push(m);
+    }
+
+    // ── Per-gate stats ──
+    for (let i = 0; i < gates.length; i++) {
+        const g = gates[i];
+        const elev = g.dem_elev || g.elev;
+
+        const refLat = (i === 0 && course.start) ? course.start.lat : (i > 0 ? gates[i - 1].lat : g.lat);
+        const refLon = (i === 0 && course.start) ? course.start.lon : (i > 0 ? gates[i - 1].lon : g.lon);
+        const refElev = (i === 0 && course.start) ? (course.start.dem_elev || course.start.elev) : (i > 0 ? (gates[i - 1].dem_elev || gates[i - 1].elev) : elev);
+
+        if (i === 0 && !course.start) continue; // no previous reference
+
+        const dLat = (g.lat - refLat) * mPerLat;
+        const dLon = (g.lon - refLon) * mPerLon;
+        const dElev = refElev - elev;
+        const dist2D = Math.sqrt(dLat * dLat + dLon * dLon);
+        const dist3D = Math.sqrt(dist2D * dist2D + dElev * dElev);
+
+        // Lateral offset (same corrected formula as 3D)
+        let offset = 0;
+        if (i >= 1) {
+            const ref2Lat = (i === 1 && course.start) ? course.start.lat : (i >= 2 ? gates[i - 2].lat : refLat);
+            const ref2Lon = (i === 1 && course.start) ? course.start.lon : (i >= 2 ? gates[i - 2].lon : refLon);
+            const baseDirLat = (refLat - ref2Lat) * mPerLat;
+            const baseDirLon = (refLon - ref2Lon) * mPerLon;
+            const baseLen = Math.sqrt(baseDirLat * baseDirLat + baseDirLon * baseDirLon) || 1;
+            const perpLat = baseDirLon / baseLen;
+            const perpLon = -baseDirLat / baseLen;
+            offset = dLat * perpLat + dLon * perpLon;
+        }
+
+        const accuracy = g.accuracy;
+
+        // Build compact label
+        const parts = [];
+        parts.push(`↕${dist3D.toFixed(1)}`);
+        if (Math.abs(offset) > 0.01) {
+            const dir = offset > 0 ? '→' : '←';
+            parts.push(`${dir}${Math.abs(offset).toFixed(1)}`);
+        }
+        parts.push(`▼${dElev.toFixed(1)}`);
+        if (accuracy != null) parts.push(`±${accuracy.toFixed(1)}`);
+
+        const labelText = parts.join(' ');
+
+        // Position: offset to the left of the gate
+        let fallLat = 0, fallLon = 0;
+        if (i < gates.length - 1) {
+            fallLat += gates[i + 1].lat - g.lat;
+            fallLon += gates[i + 1].lon - g.lon;
+        }
+        if (i > 0) {
+            fallLat += g.lat - gates[i - 1].lat;
+            fallLon += g.lon - gates[i - 1].lon;
+        }
+        const fLen = Math.sqrt((fallLat * mPerLat) ** 2 + (fallLon * mPerLon) ** 2) || 1;
+        const perpLatM = (fallLon * mPerLon) / fLen;
+        const perpLonM = -(fallLat * mPerLat) / fLen;
+        const offsetDist = 5; // meters offset
+        const labelLat = g.lat + (perpLatM * offsetDist) / mPerLat;
+        const labelLon = g.lon + (perpLonM * offsetDist) / mPerLon;
+
+        const m = L.marker([labelLat, labelLon], {
+            icon: L.divIcon({
+                className: 'measure-label-2d',
+                html: `<span>${labelText}</span>`,
+                iconSize: [120, 14], iconAnchor: [-4, 7]
+            })
+        });
+        if (showMeasurements) m.addTo(leafletMap);
+        leafletLayers.measurements.push(m);
+    }
+}
+
+function toggleMeasurements2D() {
+    if (!leafletMap) return;
+    leafletLayers.measurements.forEach(l => {
+        if (showMeasurements) l.addTo(leafletMap);
+        else leafletMap.removeLayer(l);
+    });
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// RESULTS TABLE — Per-run, fully independent
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get time and status for an athlete for the active run.
+ */
+function getRunTime(a) {
+    if (activeRun === 'run1') return { time: a.run1_time, status: a.run1_status };
+    return { time: a.run2_time, status: a.run2_status };
+}
+
+/**
+ * Compute ranking for the active run only.
+ * Only athletes who finished the active run get a rank.
+ */
+function computeRunRanks(athletes) {
+    const finished = athletes
+        .filter(a => {
+            const { time, status } = getRunTime(a);
+            return status === 'finished' && time != null;
+        })
+        .sort((a, b) => getRunTime(a).time - getRunTime(b).time);
+
+    const ranks = {};
+    finished.forEach((a, i) => { ranks[a.bib] = i + 1; });
+    return ranks;
+}
+
+function formatTimeCell(time, status) {
+    if (status === 'DSQ') return '<span class="run-dsq">DSQ</span>';
+    if (status === 'DNF') return '<span class="run-dnf">DNF</span>';
+    if (status === 'DNS') return '<span class="run-dns">DNS</span>';
+    if (time != null) return `<span class="run-val">${time.toFixed(2)}</span>`;
+    return '';
+}
+
+/**
+ * Get which cameras have coverage for the active run.
+ * Returns array of {cam, sectionIdx} for cameras active this run.
+ * Section numbering is fixed: Cam1=1, Cam2=2, Cam3=3 (not sequential).
+ */
+function getActiveSections() {
+    const sections = [];
+    manifest.cameras.forEach((cam, camIdx) => {
+        const coverage = getCamCoverage(cam);
+        if (coverage.length > 0) {
+            sections.push({ cam, sectionIdx: camIdx + 1 });
+        }
+    });
+    return sections;
+}
+
+function renderResults() {
+    const cat = manifest.categories.find(c => c.id === activeCategory);
+    if (!cat) return;
+
+    const tbody = document.getElementById('results-body');
+    const thead = document.querySelector('#results-table thead tr');
+
+    // Get sections active for this run
+    const activeSections = getActiveSections();
+
+    // Update table header dynamically
+    thead.innerHTML = `
+        <th class="col-rank">Run Rank</th>
+        <th class="col-bib">Bib</th>
+        <th class="col-name">Name</th>
+        <th class="col-club">Club</th>
+        <th class="col-time">Time</th>
+        <th class="col-sections">Sections</th>
+    `;
+
+    // Filter athletes: exclude DNS for this run
+    const allAthletes = cat.athletes.filter(a => {
+        const { status } = getRunTime(a);
+        return status !== 'DNS';
+    });
+
+    // Compute ranking for the active run across ALL athletes (overall rank)
+    const ranks = computeRunRanks(allAthletes);
+
+    // Apply team filter AFTER computing overall ranks
+    let athletes = allAthletes;
+    if (filterTeam) {
+        athletes = athletes.filter(a => a.club === filterTeam);
+    }
+
+    // Sort: ranked first (by rank), then DNF/DSQ
+    athletes.sort((a, b) => {
+        const ra = ranks[a.bib], rb = ranks[b.bib];
+        if (ra && rb) return ra - rb;
+        if (ra) return -1;
+        if (rb) return 1;
+        return 0;
+    });
+
+    tbody.innerHTML = athletes.map(a => athleteRow(a, cat, ranks, activeSections)).join('');
+}
+
+function athleteRow(a, cat, ranks, activeSections) {
+    const rank = ranks[a.bib] || null;
+    const { time, status } = getRunTime(a);
+
+    let html = `<tr data-bib="${a.bib}">`;
+    html += `<td class="col-rank"><span class="rank-val">${rank || ''}</span></td>`;
+    html += `<td class="col-bib">${a.bib}</td>`;
+    html += `<td class="col-name">${a.first} ${a.last}</td>`;
+    html += `<td class="col-club">${a.club}</td>`;
+    html += `<td class="col-time">${formatTimeCell(time, status)}</td>`;
+    html += '<td class="col-sections">';
+    activeSections.forEach(({ cam, sectionIdx }) => {
+        const montageKey = activeRun; // montages keyed by run
+        const hasMontage = a.montages && a.montages[cam.id] && a.montages[cam.id][montageKey];
+        html += `<button class="section-btn ${hasMontage ? 'active' : 'inactive'}" ${hasMontage ? `onclick="window._openMontage('${cam.id}',${a.bib},'${cat.id}')"` : ''}>S${sectionIdx}</button>`;
+    });
+    html += '</td></tr>';
+    return html;
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// LIGHTBOX
+// ══════════════════════════════════════════════════════════════════════════
+
+let lbList = [];
+let lbIdx = 0;
+
+window._openMontage = function (camId, bib, catId) {
+    const cat = manifest.categories.find(c => c.id === catId);
+    if (!cat) return;
+    const athlete = cat.athletes.find(a => a.bib === bib);
+    if (!athlete || !athlete.montages || !athlete.montages[camId]) return;
+
+    const runKey = activeRun;
+    lbList = cat.athletes
+        .filter(a => a.montages && a.montages[camId] && a.montages[camId][runKey])
+        .map(a => ({ athlete: a, camId, catId, runKey }));
+    lbIdx = lbList.findIndex(item => item.athlete.bib === bib);
+    if (lbIdx < 0) lbIdx = 0;
+    showLightbox();
+};
+
+function setupLightbox() {
+    const lb = document.getElementById('lightbox');
+    lb.querySelector('.lb-backdrop').addEventListener('click', closeLB);
+    lb.querySelector('.lb-close').addEventListener('click', closeLB);
+    lb.querySelector('.lb-prev').addEventListener('click', () => { if (lbIdx > 0) { lbIdx--; showLightbox(); } });
+    lb.querySelector('.lb-next').addEventListener('click', () => { if (lbIdx < lbList.length - 1) { lbIdx++; showLightbox(); } });
+    document.addEventListener('keydown', e => {
+        if (lb.classList.contains('hidden')) return;
+        if (e.key === 'Escape') closeLB();
+        if (e.key === 'ArrowLeft' && lbIdx > 0) { lbIdx--; showLightbox(); }
+        if (e.key === 'ArrowRight' && lbIdx < lbList.length - 1) { lbIdx++; showLightbox(); }
+    });
+}
+
+function showLightbox() {
+    const lb = document.getElementById('lightbox');
+    const item = lbList[lbIdx];
+    if (!item) return;
+    const a = item.athlete;
+    const runKey = item.runKey || activeRun;
+    const montage = a.montages[item.camId][runKey];
+    if (!montage) return;
+    const thumbUrl = manifest.media_base_url + '/' + montage.thumb;
+    const sectionIdx = manifest.cameras.findIndex(c => c.id === item.camId);
+    const runLabel = runKey === 'run1' ? 'Run 1' : 'Run 2';
+    const sectionLabel = 'Section ' + (sectionIdx + 1);
+
+    lb.classList.remove('hidden');
+    document.getElementById('lb-img').src = thumbUrl;
+    document.getElementById('lb-name').textContent = `${a.first} ${a.last} (#${a.bib})`;
+    document.getElementById('lb-details').textContent = `${runLabel} | ${sectionLabel}`;
+    lb.querySelector('.lb-prev').style.display = lbIdx > 0 ? '' : 'none';
+    lb.querySelector('.lb-next').style.display = lbIdx < lbList.length - 1 ? '' : 'none';
+}
+
+function closeLB() { document.getElementById('lightbox').classList.add('hidden'); }
+
+
+// ── Boot ─────────────────────────────────────────────────────────────────
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}

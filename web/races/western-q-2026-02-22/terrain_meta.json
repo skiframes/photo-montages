@@ -1,0 +1,20 @@
+{
+  "width": 800,
+  "height": 800,
+  "resolution_m": 1.0,
+  "elev_min": 184.4,
+  "elev_max": 329.6,
+  "elev_scale": 0.002246,
+  "snow_depth_m": 0.0,
+  "bounds": {
+    "north": 43.432469438964944,
+    "south": 43.4250303759885,
+    "east": -71.8228467316946,
+    "west": -71.83305385152367
+  },
+  "center": {
+    "lat": 43.42875,
+    "lon": -71.82795
+  },
+  "extent_m": 400
+}
