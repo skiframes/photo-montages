@@ -37,13 +37,13 @@
 
     <!-- View tabs -->
     <nav id="view-tabs">
-        <button class="tab active" data-view="map3d">3D Course</button>
+        <button class="tab active" data-view="results">Results</button>
+        <button class="tab" data-view="map3d">3D Course</button>
         <button class="tab" data-view="map2d">2D Map</button>
-        <button class="tab" data-view="results">Results</button>
     </nav>
 
     <!-- 3D View -->
-    <div id="map3d-view" class="view active">
+    <div id="map3d-view" class="view">
         <div id="three-container"></div>
         <div id="terrain-controls">
             <select id="run-select-3d">
@@ -92,17 +92,19 @@
             <div class="legend-item"><span class="legend-swatch" style="background:#f59e0b; opacity:0.5;"></span> Cam 1 section</div>
             <div class="legend-item"><span class="legend-swatch" style="background:#0891b2; opacity:0.5;"></span> Cam 2 section</div>
             <div class="legend-item"><span class="legend-swatch" style="background:#8b5cf6; opacity:0.5;"></span> Cam 3 section</div>
-            <div class="legend-sep"></div>
-            <div class="legend-item"><span class="legend-icon">↕</span> Distance to prev gate</div>
-            <div class="legend-item"><span class="legend-icon">→←</span> Lateral offset</div>
-            <div class="legend-item"><span class="legend-icon">▼</span> Elevation drop</div>
-            <div class="legend-item"><span class="legend-icon">±</span> GPS accuracy</div>
+            <div id="legend-measurements-2d" style="display: none;">
+                <div class="legend-sep"></div>
+                <div class="legend-item"><span class="legend-icon">↕</span> Distance to prev gate</div>
+                <div class="legend-item"><span class="legend-icon">→←</span> Lateral offset</div>
+                <div class="legend-item"><span class="legend-icon">▼</span> Elevation drop</div>
+                <div class="legend-item"><span class="legend-icon">±</span> GPS accuracy</div>
+            </div>
         </div>
         <div class="view-hint">🖱 Drag to pan · Scroll to zoom · ⌨ Arrow keys to pan · +/− to zoom</div>
     </div>
 
     <!-- Results View -->
-    <div id="results-view" class="view">
+    <div id="results-view" class="view active">
         <div id="results-toolbar">
             <div id="category-tabs">
                 <button class="cat-tab active" data-cat="U12_Girls">U12 Girls</button>
@@ -122,16 +124,7 @@
         </div>
         <div id="results-container">
             <table id="results-table">
-                <thead>
-                    <tr>
-                        <th class="col-rank">Run Rank</th>
-                        <th class="col-bib">Bib</th>
-                        <th class="col-name">Name</th>
-                        <th class="col-club">Club</th>
-                        <th class="col-time">Time</th>
-                        <th class="col-sections">Sections</th>
-                    </tr>
-                </thead>
+                <thead id="results-thead"></thead>
                 <tbody id="results-body"></tbody>
             </table>
         </div>
@@ -154,10 +147,40 @@
         </div>
     </div>
 
+    <!-- Video Lightbox -->
+    <div id="video-lightbox" class="hidden">
+        <div class="vlb-backdrop"></div>
+        <div class="vlb-content">
+            <button class="vlb-close">&times;</button>
+            <button class="vlb-prev">&lsaquo;</button>
+            <button class="vlb-next">&rsaquo;</button>
+            <div class="vlb-video-wrap">
+                <video id="vlb-video" playsinline></video>
+            </div>
+            <div class="vlb-controls">
+                <button class="vlb-play-btn" id="vlb-play-btn">&#9654;</button>
+                <div class="vlb-speed-btns">
+                    <button class="vlb-speed" data-speed="0.1">0.1x</button>
+                    <button class="vlb-speed" data-speed="0.25">0.25x</button>
+                    <button class="vlb-speed" data-speed="0.5">0.5x</button>
+                    <button class="vlb-speed active" data-speed="1">1x</button>
+                </div>
+                <div class="vlb-progress-wrap">
+                    <input type="range" id="vlb-scrubber" min="0" max="1000" value="0" class="vlb-scrubber">
+                </div>
+                <span class="vlb-time" id="vlb-time">0.00s / 0.00s</span>
+            </div>
+            <div class="vlb-info">
+                <span id="vlb-name"></span>
+                <span id="vlb-details"></span>
+            </div>
+        </div>
+    </div>
+
     <!-- Disclaimer Footer -->
     <footer id="disclaimer">
         <p>Official results are available at: <a href="https://www.nhalpine.org/2026-results" target="_blank" rel="noopener">nhalpine.org/2026-results</a></p>
-        <p><strong>Disclaimer:</strong> Intermediate section times are unofficial estimates derived from camera analysis, not from official timing equipment. They are provided as a coaching aid only and should not be used for any official purpose. Accuracy is not guaranteed.</p>
+        <p><strong>Disclaimer:</strong> Intermediate section times are unofficial estimates derived from camera analysis, not from official timing equipment. They are provided as a coaching aid only and should not be used for any official purpose. Accuracy is &plusmn;0.08s</p>
     </footer>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

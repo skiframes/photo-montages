@@ -266,26 +266,6 @@
         {
           "number": 1,
           "color": "blue",
-          "label": "GPS_1",
-          "lat": 43.4269072,
-          "lon": -71.8292231,
-          "elev": 332.5,
-          "accuracy": 0.76,
-          "dem_elev": 323.1
-        },
-        {
-          "number": 2,
-          "color": "red",
-          "label": "POI_01",
-          "lat": 43.4270436,
-          "lon": -71.8293336,
-          "elev": 325.9,
-          "accuracy": 0.87,
-          "dem_elev": 317.7
-        },
-        {
-          "number": 3,
-          "color": "blue",
           "label": "POI_02",
           "lat": 43.4272018,
           "lon": -71.8292662,
@@ -294,7 +274,7 @@
           "dem_elev": 312.2
         },
         {
-          "number": 4,
+          "number": 2,
           "color": "red",
           "label": "POI_03",
           "lat": 43.4273423,
@@ -304,7 +284,7 @@
           "dem_elev": 306.7
         },
         {
-          "number": 5,
+          "number": 3,
           "color": "blue",
           "label": "POI_04",
           "lat": 43.4273668,
@@ -314,7 +294,7 @@
           "dem_elev": 302.5
         },
         {
-          "number": 6,
+          "number": 4,
           "color": "red",
           "label": "POI_05",
           "lat": 43.427484,
@@ -324,7 +304,7 @@
           "dem_elev": 298.1
         },
         {
-          "number": 7,
+          "number": 5,
           "color": "blue",
           "label": "POI_06",
           "lat": 43.4275634,
@@ -334,7 +314,7 @@
           "dem_elev": 294.4
         },
         {
-          "number": 8,
+          "number": 6,
           "color": "red",
           "label": "POI_07",
           "lat": 43.4277521,
@@ -344,7 +324,7 @@
           "dem_elev": 289.5
         },
         {
-          "number": 9,
+          "number": 7,
           "color": "blue",
           "label": "POI_08",
           "lat": 43.4278724,
@@ -354,7 +334,7 @@
           "dem_elev": 282.6
         },
         {
-          "number": 10,
+          "number": 8,
           "color": "red",
           "label": "POI_09",
           "lat": 43.4280756,
@@ -364,7 +344,7 @@
           "dem_elev": 274.8
         },
         {
-          "number": 11,
+          "number": 9,
           "color": "blue",
           "label": "POI_10",
           "lat": 43.4282239,
@@ -374,7 +354,7 @@
           "dem_elev": 268.8
         },
         {
-          "number": 12,
+          "number": 10,
           "color": "red",
           "label": "POI_11",
           "lat": 43.4284227,
@@ -384,7 +364,7 @@
           "dem_elev": 262.5
         },
         {
-          "number": 13,
+          "number": 11,
           "color": "blue",
           "label": "POI_12",
           "lat": 43.4285817,
@@ -394,7 +374,7 @@
           "dem_elev": 256.5
         },
         {
-          "number": 14,
+          "number": 12,
           "color": "red",
           "label": "POI_13",
           "lat": 43.4287689,
@@ -404,7 +384,7 @@
           "dem_elev": 248.1
         },
         {
-          "number": 15,
+          "number": 13,
           "color": "blue",
           "label": "POI_14",
           "lat": 43.4289203,
@@ -414,7 +394,7 @@
           "dem_elev": 239.6
         },
         {
-          "number": 16,
+          "number": 14,
           "color": "red",
           "label": "POI_15",
           "lat": 43.4291139,
@@ -424,7 +404,7 @@
           "dem_elev": 231.2
         },
         {
-          "number": 17,
+          "number": 15,
           "color": "blue",
           "label": "POI_16",
           "lat": 43.4292973,
@@ -434,7 +414,7 @@
           "dem_elev": 224.7
         },
         {
-          "number": 18,
+          "number": 16,
           "color": "red",
           "label": "POI_17",
           "lat": 43.4294965,
@@ -444,7 +424,7 @@
           "dem_elev": 219.0
         },
         {
-          "number": 19,
+          "number": 17,
           "color": "blue",
           "label": "POI_18",
           "lat": 43.4296833,
@@ -454,7 +434,7 @@
           "dem_elev": 214.5
         },
         {
-          "number": 20,
+          "number": 18,
           "color": "red",
           "label": "POI_19",
           "lat": 43.4298739,
@@ -464,7 +444,7 @@
           "dem_elev": 208.7
         },
         {
-          "number": 21,
+          "number": 19,
           "color": "blue",
           "label": "POI_20",
           "lat": 43.4300275,
@@ -474,7 +454,7 @@
           "dem_elev": 203.3
         },
         {
-          "number": 22,
+          "number": 20,
           "color": "red",
           "label": "POI_21",
           "lat": 43.4302183,
@@ -484,7 +464,7 @@
           "dem_elev": 197.9
         },
         {
-          "number": 23,
+          "number": 21,
           "color": "blue",
           "label": "POI_22",
           "lat": 43.4303544,
@@ -494,7 +474,7 @@
           "dem_elev": 195.2
         },
         {
-          "number": 24,
+          "number": 22,
           "color": "red",
           "label": "POI_23",
           "lat": 43.4304934,
@@ -505,29 +485,30 @@
         }
       ],
       "start": {
-        "lat": 43.4267972,
-        "lon": -71.8291623,
-        "elev": 335.7,
-        "accuracy": 1.2,
-        "dem_elev": 328.8
+        "lat": 43.4270436,
+        "lon": -71.8293336,
+        "elev": 325.9,
+        "accuracy": 0.87,
+        "dem_elev": 317.7
       },
       "finish_left": {
-        "lat": 43.4306555,
-        "lon": -71.8266953,
-        "elev": 187.1,
-        "dem_elev": 189.3
+        "lat": 43.4305551,
+        "lon": -71.8265501,
+        "elev": 196.3,
+        "dem_elev": 190.1
       },
       "finish_right": {
-        "lat": 43.430597,
-        "lon": -71.8265552,
-        "elev": 192.2,
-        "dem_elev": 189.8
+        "lat": 43.4306439,
+        "lon": -71.8266851,
+        "elev": 194.9,
+        "dem_elev": 189.5
       }
     }
   },
   "cameras": [
     {
       "id": "Cam1",
+      "edge_camera": "R2",
       "position": {
         "lat": 43.4280608,
         "lon": -71.8277494,
@@ -535,15 +516,15 @@
         "dem_elev": 276.2
       },
       "gates_covered_run1": [
-        8,
-        9
+        6,
+        7
       ],
       "gates_covered_run2": [],
       "gates_covered": [
-        7,
-        8
+        6,
+        7
       ],
-      "note": "Looking uphill at gates 7-8",
+      "note": "Looking uphill at gates 6-7",
       "has_run1": true,
       "has_run2": false,
       "fov_h_deg": 55,
@@ -551,6 +532,7 @@
     },
     {
       "id": "Cam2",
+      "edge_camera": "R3",
       "position": {
         "lat": 43.43029166666666,
         "lon": -71.82723055555554,
@@ -558,22 +540,25 @@
         "dem_elev": 197.7
       },
       "gates_covered_run1": [
+        7,
+        8,
+        9,
+        10,
+        11,
         12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18
+        13
       ],
       "gates_covered_run2": [
+        8,
+        9,
+        10,
+        11,
+        12,
         13,
-        14,
-        15,
-        16,
-        17
+        14
       ],
       "gates_covered": [
+        7,
         8,
         9,
         10,
@@ -590,6 +575,7 @@
     },
     {
       "id": "Cam3",
+      "edge_camera": "R1",
       "position": {
         "lat": 43.43029166666666,
         "lon": -71.82723055555554,
@@ -597,8 +583,8 @@
         "dem_elev": 197.7
       },
       "gates_covered_run1": [
-        19,
-        20
+        17,
+        18
       ],
       "gates_covered_run2": [
         19,
@@ -606,6 +592,7 @@
         21
       ],
       "gates_covered": [
+        17,
         18,
         19,
         20,
@@ -808,7 +795,15 @@
           "run1_start_sec": 32945.78689,
           "run2_start_tod": "12:16:42.72",
           "run2_start_sec": 44202.71886,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/g4_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/g4_4.0fps.jpg",
+                "section_time": 1.52
+              }
+            }
+          }
         },
         {
           "bib": 35,
@@ -842,7 +837,15 @@
           "run1_start_sec": 33012.96622,
           "run2_start_tod": "12:15:41.60",
           "run2_start_sec": 44141.59899,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/g6_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/g6_4.0fps.jpg",
+                "section_time": 1.36
+              }
+            }
+          }
         },
         {
           "bib": 7,
@@ -1012,7 +1015,15 @@
           "run1_start_sec": 32979.9556,
           "run2_start_tod": "12:16:06.61",
           "run2_start_sec": 44166.61132,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/g5_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/g5_4.0fps.jpg",
+                "section_time": 1.28
+              }
+            }
+          }
         },
         {
           "bib": 8,
@@ -1199,7 +1210,15 @@
           "run1_start_sec": 32871.73224,
           "run2_start_tod": "12:17:36.31",
           "run2_start_sec": 44256.31366,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/g1_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/g1_4.0fps.jpg",
+                "section_time": 1.6
+              }
+            }
+          }
         },
         {
           "bib": 32,
@@ -1250,7 +1269,15 @@
           "run1_start_sec": 32906.04705,
           "run2_start_tod": "12:17:08.24",
           "run2_start_sec": 44228.24455,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/g2_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/g2_4.0fps.jpg",
+                "section_time": 1.76
+              }
+            }
+          }
         },
         {
           "bib": 9,
@@ -1324,7 +1351,15 @@
           "run1_start_sec": 34304.48338,
           "run2_start_tod": "12:36:01.17",
           "run2_start_sec": 45361.17154,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b4_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b4_4.0fps.jpg",
+                "section_time": 1.52
+              }
+            }
+          }
         },
         {
           "bib": 35,
@@ -1460,7 +1495,15 @@
           "run1_start_sec": 34707.0528,
           "run2_start_tod": "12:29:55.10",
           "run2_start_sec": 44995.10299,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b18_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b18_4.0fps.jpg",
+                "section_time": 1.76
+              }
+            }
+          }
         },
         {
           "bib": 21,
@@ -1647,7 +1690,15 @@
           "run1_start_sec": 34733.5805,
           "run2_start_tod": "12:29:30.21",
           "run2_start_sec": 44970.20899,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b19_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b19_4.0fps.jpg",
+                "section_time": 3.52
+              }
+            }
+          }
         },
         {
           "bib": 1,
@@ -1664,7 +1715,15 @@
           "run1_start_sec": 34220.67297,
           "run2_start_tod": "12:37:19.17",
           "run2_start_sec": 45439.16823,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b1_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b1_4.0fps.jpg",
+                "section_time": 1.6
+              }
+            }
+          }
         },
         {
           "bib": 2,
@@ -1681,7 +1740,15 @@
           "run1_start_sec": 34250.40706,
           "run2_start_tod": "12:36:54.01",
           "run2_start_sec": 45414.01388,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b2_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b2_4.0fps.jpg",
+                "section_time": 1.76
+              }
+            }
+          }
         },
         {
           "bib": 30,
@@ -1732,7 +1799,15 @@
           "run1_start_sec": 34384.25316,
           "run2_start_tod": "12:34:39.43",
           "run2_start_sec": 45279.43334,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b7_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b7_4.0fps.jpg",
+                "section_time": 2.8
+              }
+            }
+          }
         },
         {
           "bib": 6,
@@ -1749,7 +1824,15 @@
           "run1_start_sec": 34356.74105,
           "run2_start_tod": "12:35:07.55",
           "run2_start_sec": 45307.54589,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b6_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b6_4.0fps.jpg",
+                "section_time": 1.36
+              }
+            }
+          }
         },
         {
           "bib": 17,
@@ -1783,7 +1866,15 @@
           "run1_start_sec": 34493.58189,
           "run2_start_tod": "12:32:53.37",
           "run2_start_sec": 45173.36609,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b11_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b11_4.0fps.jpg",
+                "section_time": 11.52
+              }
+            }
+          }
         },
         {
           "bib": 26,
@@ -1834,7 +1925,15 @@
           "run1_start_sec": 34328.9505,
           "run2_start_tod": "12:35:32.51",
           "run2_start_sec": 45332.50609,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b5_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b5_4.0fps.jpg",
+                "section_time": 3.52
+              }
+            }
+          }
         },
         {
           "bib": 37,
@@ -1868,7 +1967,15 @@
           "run1_start_sec": 34411.00225,
           "run2_start_tod": "12:34:11.56",
           "run2_start_sec": 45251.56065,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b8_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b8_4.0fps.jpg",
+                "section_time": 3.68
+              }
+            }
+          }
         },
         {
           "bib": 14,
@@ -1919,7 +2026,15 @@
           "run1_start_sec": 34533.99487,
           "run2_start_tod": "12:32:20.59",
           "run2_start_sec": 45140.58666,
-          "montages": {}
+          "montages": {
+            "Cam1": {
+              "run1": {
+                "thumb": "Cam1/run1/b12_4.0fps_thumb.jpg",
+                "full": "Cam1/run1/b12_4.0fps.jpg",
+                "section_time": 1.6
+              }
+            }
+          }
         },
         {
           "bib": 16,
@@ -3269,5 +3384,5 @@
     }
   ],
   "media_base_url": "https://media.skiframes.com/races/western-q-2026-02-22",
-  "generated_at": "2026-02-23T19:12:25.704622-05:00"
+  "generated_at": "2026-02-24T11:11:06.969670-05:00"
 }

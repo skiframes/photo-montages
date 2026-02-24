@@ -29,12 +29,6 @@ from stream_manager import StreamManager
 from runner import SkiFramesRunner
 
 try:
-    import openpyxl
-    HAS_OPENPYXL = True
-except ImportError:
-    HAS_OPENPYXL = False
-
-try:
     import pdfplumber
     HAS_PDFPLUMBER = True
 except ImportError:
@@ -112,8 +106,15 @@ DEVICE_ID = os.environ.get('SKIFRAMES_DEVICE_ID', socket.gethostname().split('.'
 # Admin API URL for device heartbeat
 ADMIN_API_URL = os.environ.get('SKIFRAMES_ADMIN_API', 'https://skiframes-admin-api.avillach.workers.dev')
 
-# Vola Excel file location
+# Vola timing file location
 VOLA_DIR = DATA_BASE_DIR / 'vola'
+
+# Project root and web races directory (for race_manifest.json)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+WEB_RACES_DIR = PROJECT_ROOT / 'web' / 'races'
+
+# Montage staging directory (organized by race/camera/run for website integration)
+MONTAGES_DIR = DATA_BASE_DIR / 'montages'
 
 # Session types and groups
 SESSION_TYPES = ['test', 'race', 'gate_training', 'free_skiing']
@@ -124,6 +125,23 @@ GROUPS = ['U10', 'U12', 'U14', 'Scored', 'Masters', 'Free Ski']
 def index():
     """Serve the calibration UI."""
     return send_from_directory('static', 'calibration.html')
+
+
+@app.route('/montages/<path:filepath>')
+def serve_montage(filepath):
+    """Serve montage images from the staging directory (with CORS for file:// access)."""
+    resp = send_from_directory(str(MONTAGES_DIR), filepath)
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
+
+
+@app.route('/race/<path:filepath>')
+def serve_race_web(filepath):
+    """Serve the web gallery files (race page) for local preview."""
+    race_dir = WEB_RACES_DIR / 'western-q-2026-02-22'
+    resp = send_from_directory(str(race_dir), filepath)
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
 
 
 @app.route('/api/cameras')
@@ -151,15 +169,11 @@ def list_sessions():
 
 @app.route('/api/vola/files')
 def list_vola_files():
-    """List available Vola Excel files (searches subdirectories)."""
-    if not HAS_OPENPYXL:
-        return jsonify({'error': 'openpyxl not installed'}), 500
-
+    """List available Vola CSV timing files (searches subdirectories)."""
     files = []
     if VOLA_DIR.exists():
-        # Search recursively for xlsx files
-        for f in VOLA_DIR.glob('**/*.xlsx'):
-            # Show relative path from VOLA_DIR for clarity
+        # Search recursively for csv files
+        for f in VOLA_DIR.glob('**/*.csv'):
             rel_path = f.relative_to(VOLA_DIR)
             files.append({
                 'name': str(rel_path),
@@ -168,19 +182,75 @@ def list_vola_files():
     return jsonify(sorted(files, key=lambda x: x['name']))
 
 
-@app.route('/api/vola/startlist-files')
-def list_startlist_files():
-    """List available start list PDF files (for racer names and teams)."""
-    files = []
-    if VOLA_DIR.exists():
-        # Search recursively for PDF files containing 'start-list'
-        for f in VOLA_DIR.glob('**/*start-list*.pdf'):
-            rel_path = f.relative_to(VOLA_DIR)
-            files.append({
-                'name': str(rel_path),
-                'path': str(f),
+@app.route('/api/race-manifest/cameras')
+def get_race_manifest_cameras():
+    """
+    Get camera→section mapping from race_manifest.json for a given Vola file.
+    Query param: vola_file - path to Vola CSV (used to find matching race manifest)
+
+    Returns camera mapping with section info, gate coverage, and edge camera IDs.
+    """
+    vola_file = request.args.get('vola_file', '')
+    if not vola_file:
+        return jsonify({'error': 'vola_file required'}), 400
+
+    # Find race manifest by matching date from Vola path
+    manifest_path = None
+    vola_path = Path(vola_file)
+    vola_dir = vola_path.parent
+
+    # Check same directory as Vola CSV
+    candidate = vola_dir / 'race_manifest.json'
+    if candidate.exists():
+        manifest_path = candidate
+    else:
+        # Extract date from Vola directory name and search web/races/
+        date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', vola_dir.name)
+        if date_match:
+            race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+            if WEB_RACES_DIR.exists():
+                for race_dir in WEB_RACES_DIR.iterdir():
+                    if race_date in race_dir.name:
+                        candidate = race_dir / 'race_manifest.json'
+                        if candidate.exists():
+                            manifest_path = candidate
+                            break
+
+    if not manifest_path:
+        return jsonify({'cameras': [], 'race_slug': None})
+
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        # Extract race slug from manifest path (e.g., "western-q-2026-02-22")
+        race_slug = manifest_path.parent.name
+
+        cameras = []
+        for i, cam in enumerate(manifest.get('cameras', [])):
+            cameras.append({
+                'id': cam.get('id'),                    # "Cam1", "Cam2", "Cam3"
+                'edge_camera': cam.get('edge_camera'),  # "R1", "R2", "R3"
+                'section_num': i + 1,                   # 1, 2, 3
+                'gates_covered_run1': cam.get('gates_covered_run1', []),
+                'gates_covered_run2': cam.get('gates_covered_run2', []),
+                'has_run1': cam.get('has_run1', False),
+                'has_run2': cam.get('has_run2', False),
+                'note': cam.get('note', ''),
             })
-    return jsonify(sorted(files, key=lambda x: x['name']))
+
+        # Derive staging path
+        staging_dir = str(MONTAGES_DIR / race_slug)
+
+        return jsonify({
+            'cameras': cameras,
+            'race_slug': race_slug,
+            'staging_dir': staging_dir,
+            'event': manifest.get('event', {}),
+        })
+    except Exception as e:
+        print(f"Error reading race manifest: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 def get_gender_from_bib(bib: int) -> str:
@@ -192,65 +262,6 @@ def get_gender_from_bib(bib: int) -> str:
     elif 61 <= bib <= 110 or 171 <= bib <= 220:
         return 'Men'
     return ''
-
-
-def parse_startlist_pdf(pdf_path: str) -> dict:
-    """
-    Parse a start list PDF to extract bib-to-racer mapping.
-
-    Start list format: "111 Stellato Brigid 2013 SUN"
-    (bib lastname firstname year team)
-
-    PDF has two columns, so a line might contain two racers.
-    Gender is determined by bib number ranges:
-    - U12 Women: 1-60, U12 Men: 61-99
-    - U14 Women: 111-170, U14 Men: 171-220
-
-    Returns dict mapping bib number to {'name': 'Firstname Lastname', 'team': 'SUN', 'gender': 'Women'}
-    """
-    if not HAS_PDFPLUMBER:
-        return {}
-
-    bib_to_racer = {}
-
-    try:
-        with pdfplumber.open(pdf_path) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                if not text:
-                    continue
-
-                for line in text.split('\n'):
-                    # Find all racers in the line (may have 2 due to two-column layout)
-                    # Pattern: bib (name words) year team
-                    # Name can be 2-4 words (e.g., "Van Der Berg John", "Doe Jane", "O'Brien Mary")
-                    # Match: bib, then name words, then 4-digit year, then 2-4 letter team code
-                    matches = re.findall(r'(\d+)\s+((?:[A-Za-z\'\-]+\s+){1,3}[A-Za-z\'\-]+)\s+(\d{4})\s+([A-Z]{2,4})', line)
-                    for match in matches:
-                        bib = int(match[0])
-                        name_parts = match[1].strip().split()
-                        year = match[2]
-                        team = match[3]
-
-                        # Name format: last word is firstname, rest is lastname
-                        # "Stellato Brigid" -> firstname=Brigid, lastname=Stellato
-                        # "Van Der Berg John" -> firstname=John, lastname=Van Der Berg
-                        if len(name_parts) >= 2:
-                            firstname = name_parts[-1]
-                            lastname = ' '.join(name_parts[:-1])  # Keep spaces in multi-word last names
-                        else:
-                            firstname = name_parts[0] if name_parts else ''
-                            lastname = ''
-
-                        bib_to_racer[bib] = {
-                            'name': f"{firstname} {lastname}".strip(),
-                            'team': team,
-                            'gender': get_gender_from_bib(bib)
-                        }
-    except Exception as e:
-        print(f"Error parsing start list PDF {pdf_path}: {e}")
-
-    return bib_to_racer
 
 
 def parse_results_pdf(pdf_path: str) -> dict:
@@ -433,7 +444,7 @@ def parse_results_pdf(pdf_path: str) -> dict:
                                     name = name_cell
                             bib_to_racer[bib] = {
                                 'ussa_id': ussa_id,
-                                'name': name,  # Leave empty if not found; startlist can fill it
+                                'name': name,  # Leave empty if not found; race_manifest can fill it
                                 'team': team,
                                 'gender': get_gender_from_bib(bib),
                                 'rank': None,
@@ -467,7 +478,7 @@ def parse_race_time(time_str: str) -> Optional[float]:
 
 @app.route('/api/vola/results-files')
 def list_results_files():
-    """List available results PDF files (for racer names) - DEPRECATED, use startlist-files."""
+    """List available results PDF files (for USSA IDs, rankings, DSQ/DNF status)."""
     files = []
     if VOLA_DIR.exists():
         # Search recursively for PDF files containing 'results'
@@ -543,130 +554,208 @@ def seconds_to_time_str(seconds):
     return f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
 
 
+def parse_vola_csv(filepath):
+    """
+    Parse Vola timing CSV file. Returns dict of {bib: start_seconds}.
+
+    CSV format (comma or tab separated):
+        Num,Hour Cell.
+        86,10h10:11.58575
+        85,10h09:46.64594
+        80,Did Not Start
+
+    Handles:
+    - Auto-detects comma vs tab separator
+    - Skips header row
+    - Skips DNS/DNF entries
+    - Skips non-numeric bibs (forerunners like 901-A)
+    """
+    results = {}
+    with open(filepath, 'r') as f:
+        content = f.read()
+
+    # Detect separator from second line (first data line)
+    lines = content.strip().split('\n')
+    if len(lines) < 2:
+        return results
+    sep = ',' if ',' in lines[1] else '\t'
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(sep)
+        if len(parts) < 2:
+            continue
+
+        bib_str = parts[0].strip()
+        time_str = parts[1].strip()
+
+        # Skip header
+        if bib_str == 'Num' or not bib_str:
+            continue
+
+        # Skip DNS/DNF
+        if 'Did Not Start' in time_str or 'Did Not Finish' in time_str:
+            continue
+
+        # Skip non-numeric bibs (forerunners like 901-A)
+        if not bib_str.isdigit():
+            continue
+
+        bib = int(bib_str)
+
+        # Parse time using existing parse_vola_time()
+        start_seconds = parse_vola_time(time_str)
+        if start_seconds is not None:
+            results[bib] = start_seconds
+
+    return results
+
+
+def build_racers_from_start_times(start_times, camera_id, estimated_duration=40.0):
+    """
+    Build racer list with camera timing windows from start times dict.
+
+    Args:
+        start_times: dict of {bib: start_seconds}
+        camera_id: camera ID for offset calculation
+        estimated_duration: estimated run duration in seconds (CSV has no end times)
+
+    Returns:
+        list of racer dicts with timing windows
+    """
+    camera_offset_pct = CAMERAS.get(camera_id, {}).get('offset_pct', 0) / 100.0
+
+    racers = []
+    for bib in sorted(start_times.keys()):
+        start_sec = start_times[bib]
+
+        # CSV files only have start times, so estimate duration
+        camera_start_sec = start_sec + (estimated_duration * camera_offset_pct)
+        camera_duration = estimated_duration * 0.2
+        camera_end_sec = camera_start_sec + camera_duration
+
+        racer = {
+            'bib': bib,
+            'start_time_sec': start_sec,
+            'start_time_str': seconds_to_time_str(start_sec),
+            'run_duration': None,  # Not available from CSV
+            'finished': True,  # Assume finished if they have a start time
+            'camera_start_sec': camera_start_sec,
+            'camera_start_str': seconds_to_time_str(camera_start_sec),
+            'camera_end_sec': camera_end_sec,
+            'camera_end_str': seconds_to_time_str(camera_end_sec),
+        }
+        racers.append(racer)
+
+    # Sort by start time
+    racers.sort(key=lambda r: r['start_time_sec'])
+    return racers
+
+
+def load_race_manifest(vola_file_path: str) -> dict:
+    """
+    Load race_manifest.json and return a bib_to_racer dict.
+
+    Searches for the manifest in:
+    1. Same directory as the Vola CSV file
+    2. web/races/*/race_manifest.json matching the race date
+
+    Returns dict mapping bib number to:
+        {'name': 'Firstname Lastname', 'team': 'PROC', 'gender': 'Girls',
+         'category': 'U12', 'rank': 1, 'run1_time': 39.61, ...}
+    """
+    bib_to_racer = {}
+    manifest_path = None
+
+    vola_path = Path(vola_file_path)
+    vola_dir = vola_path.parent
+
+    # 1. Check same directory as Vola CSV
+    candidate = vola_dir / 'race_manifest.json'
+    if candidate.exists():
+        manifest_path = candidate
+    else:
+        # 2. Extract date from Vola directory name and search web/races/
+        race_date = None
+        date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', vola_dir.name)
+        if date_match:
+            race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+
+        if race_date and WEB_RACES_DIR.exists():
+            for race_dir in WEB_RACES_DIR.iterdir():
+                if race_date in race_dir.name:
+                    candidate = race_dir / 'race_manifest.json'
+                    if candidate.exists():
+                        manifest_path = candidate
+                        break
+
+    if not manifest_path:
+        print(f"No race_manifest.json found for {vola_file_path}")
+        return bib_to_racer
+
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        for category in manifest.get('categories', []):
+            cat_id = category.get('id', '')  # e.g. "U12_Girls"
+            parts = cat_id.split('_')
+            cat_label = parts[0] if parts else ''  # "U12"
+            gender = parts[1] if len(parts) > 1 else ''  # "Girls"
+
+            for athlete in category.get('athletes', []):
+                bib = athlete.get('bib')
+                if bib is None:
+                    continue
+                bib_to_racer[bib] = {
+                    'name': f"{athlete.get('first', '')} {athlete.get('last', '')}".strip(),
+                    'team': athlete.get('club', ''),
+                    'gender': gender,
+                    'category': cat_label,
+                    'rank': athlete.get('rank'),
+                    'run1_time': athlete.get('run1_time'),
+                    'run2_time': athlete.get('run2_time'),
+                    'total': athlete.get('total'),
+                    'run1_status': athlete.get('run1_status', 'finished'),
+                    'run2_status': athlete.get('run2_status', 'finished'),
+                }
+
+        print(f"Loaded {len(bib_to_racer)} athletes from {manifest_path}")
+    except Exception as e:
+        print(f"Error loading race manifest {manifest_path}: {e}")
+
+    return bib_to_racer
+
+
 @app.route('/api/vola/parse', methods=['POST'])
 def parse_vola_file():
     """
-    Parse a Vola Excel file and return timing data for a specific race.
+    Parse a Vola CSV timing file and return timing data.
 
     Request body:
     {
-        "file_path": "/path/to/vola.xlsx",
-        "race": "U12 run 1",  // One of: "U12 run 1", "U12 run 2", "U14 run 1", "U14 run 2"
+        "file_path": "/path/to/girls-run1.csv",
         "camera_id": "R1",  // Camera to use for offset calculation
     }
 
     Returns list of racers with their timing windows for the specified camera.
     """
-    if not HAS_OPENPYXL:
-        return jsonify({'error': 'openpyxl not installed'}), 500
-
     data = request.get_json() or {}
     file_path = data.get('file_path')
-    race = data.get('race', '').lower()
     camera_id = data.get('camera_id', 'R1')
 
     if not file_path or not Path(file_path).exists():
         return jsonify({'error': 'Invalid file_path'}), 400
 
-    # Map race selection to sheet names
-    race_map = {
-        'u12 run 1': ('u12 start run 1', 'u12 end run 1'),
-        'u12 run 2': ('u12 start run 2', 'u12 end run 2'),
-        'u14 run 1': ('u14 start run 1', 'u14 end run 1'),
-        'u14 run 2': ('u14 start run 2', 'u14 end run 2'),
-    }
-
-    if race not in race_map:
-        return jsonify({'error': f'Invalid race. Must be one of: {list(race_map.keys())}'}), 400
-
-    start_sheet, end_sheet = race_map[race]
-    camera_offset_pct = CAMERAS.get(camera_id, {}).get('offset_pct', 0) / 100.0
-
     try:
-        wb = openpyxl.load_workbook(file_path, data_only=True)
-
-        # Parse start times (Column B = bib, Column C = time)
-        start_times = {}
-        ws_start = wb[start_sheet]
-        for row in ws_start.iter_rows(min_row=2, values_only=True):
-            bib_raw = row[1]  # Column B (index 1)
-            time_str = row[2]  # Column C (index 2)
-            if bib_raw and time_str:
-                try:
-                    bib = int(bib_raw)  # Convert to int for consistent sorting
-                except (ValueError, TypeError):
-                    continue
-                start_seconds = parse_vola_time(str(time_str))
-                if start_seconds is not None:
-                    start_times[bib] = start_seconds
-
-        # Parse end times and run durations (Column B = bib, Column C = time, Column D = duration)
-        end_times = {}
-        run_durations = {}
-        ws_end = wb[end_sheet]
-        for row in ws_end.iter_rows(min_row=2, values_only=True):
-            bib_raw = row[1]  # Column B
-            time_str = row[2]  # Column C
-            duration = row[3] if len(row) > 3 else None  # Column D
-            if bib_raw:
-                try:
-                    bib = int(bib_raw)  # Convert to int for consistent sorting
-                except (ValueError, TypeError):
-                    continue
-                if time_str:
-                    end_seconds = parse_vola_time(str(time_str))
-                    if end_seconds is not None:
-                        end_times[bib] = end_seconds
-                if duration is not None and isinstance(duration, (int, float)):
-                    run_durations[bib] = float(duration)
-
-        wb.close()
-
-        # Build racer list with timing windows for the camera
-        racers = []
-        for bib in sorted(start_times.keys()):
-            start_sec = start_times[bib]
-
-            # Calculate run duration from end time or direct duration
-            run_duration = None
-            if bib in end_times:
-                run_duration = end_times[bib] - start_sec
-            elif bib in run_durations:
-                run_duration = run_durations[bib]
-
-            # Calculate camera-specific timing window
-            # Camera offset: when the skier enters this camera's view
-            if run_duration and run_duration > 0:
-                camera_start_sec = start_sec + (run_duration * camera_offset_pct)
-                # Assume camera covers ~20% of the run (configurable)
-                camera_duration = run_duration * 0.2
-                camera_end_sec = camera_start_sec + camera_duration
-            else:
-                # No finish time - estimate based on average run duration (~40 seconds)
-                estimated_duration = 40.0
-                camera_start_sec = start_sec + (estimated_duration * camera_offset_pct)
-                camera_duration = estimated_duration * 0.2
-                camera_end_sec = camera_start_sec + camera_duration
-                run_duration = None  # Mark as estimated
-
-            racer = {
-                'bib': bib,
-                'start_time_sec': start_sec,
-                'start_time_str': seconds_to_time_str(start_sec),
-                'run_duration': run_duration,
-                'finished': bib in end_times,
-                'camera_start_sec': camera_start_sec,
-                'camera_start_str': seconds_to_time_str(camera_start_sec),
-                'camera_end_sec': camera_end_sec,
-                'camera_end_str': seconds_to_time_str(camera_end_sec),
-            }
-            racers.append(racer)
-
-        # Sort by start time
-        racers.sort(key=lambda r: r['start_time_sec'])
+        start_times = parse_vola_csv(file_path)
+        camera_offset_pct = CAMERAS.get(camera_id, {}).get('offset_pct', 0) / 100.0
+        racers = build_racers_from_start_times(start_times, camera_id)
 
         return jsonify({
-            'race': race,
+            'file': file_path,
             'camera_id': camera_id,
             'camera_offset_pct': camera_offset_pct * 100,
             'racers': racers,
@@ -747,8 +836,7 @@ def get_racers_for_video():
 
     Request body:
     {
-        "file_path": "/path/to/vola.xlsx",
-        "race": "U12 run 1",
+        "file_path": "/path/to/girls-run1.csv",
         "camera_id": "R1",
         "video_start_time": "10:41:00",  // HH:MM:SS format (Boston time)
         "video_duration_sec": 120  // Video length in seconds
@@ -756,12 +844,8 @@ def get_racers_for_video():
 
     Returns list of racers with their camera timing windows.
     """
-    if not HAS_OPENPYXL:
-        return jsonify({'error': 'openpyxl not installed'}), 500
-
     data = request.get_json() or {}
     file_path = data.get('file_path')
-    race = data.get('race', '').lower()
     camera_id = data.get('camera_id', 'R1')
     video_start = data.get('video_start_time', '')
     video_duration = data.get('video_duration_sec', 0)
@@ -778,13 +862,11 @@ def get_racers_for_video():
 
     video_end_sec = video_start_sec + video_duration
 
-    # Get all racers for this race
-    from flask import url_for
-    response = parse_vola_file()
-    if response.status_code != 200:
-        return response
-
-    all_racers = response.get_json().get('racers', [])
+    try:
+        start_times = parse_vola_csv(file_path)
+        all_racers = build_racers_from_start_times(start_times, camera_id)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
     # Filter to racers whose camera window overlaps with video timespan
     matching_racers = []
@@ -801,7 +883,7 @@ def get_racers_for_video():
             matching_racers.append(racer)
 
     return jsonify({
-        'race': race,
+        'file': file_path,
         'camera_id': camera_id,
         'video_start': video_start,
         'video_duration_sec': video_duration,
@@ -1337,6 +1419,15 @@ def list_recording_dates():
                 if date_folder.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}', date_folder.name):
                     dates.add(date_folder.name)
 
+    # Check exported SD card copies (flat structure: export_sd_R1/R1_YYYYMMDD_HHMMSS.mp4)
+    for camera_folder in ['export_sd_R1', 'export_sd_R2', 'export_sd_R3']:
+        cam_path = RECORDINGS_DIR / camera_folder
+        if cam_path.exists():
+            for video_file in cam_path.glob('*.mp4'):
+                parsed_date, _, _ = parse_j40_video_times(video_file.name)
+                if parsed_date:
+                    dates.add(parsed_date)
+
     # Also check J40 SD card data (flat structure: R1/R1_YYYYMMDD_HHMMSS.mp4)
     if J40_SD_DATA_DIR.exists():
         for camera_folder in ['R1', 'R2', 'R3', 'Axis']:
@@ -1409,7 +1500,29 @@ def list_recording_videos():
                 'duration_sec': end_sec - start_sec,
             })
 
-    # Source 2: J40 SD card data (R1/R1_YYYYMMDD_HHMMSS.mp4)
+    # Source 2: Exported SD card copies (export_sd_R1/R1_YYYYMMDD_HHMMSS.mp4)
+    export_cam_path = RECORDINGS_DIR / f'export_{folder_name}'
+    if export_cam_path.exists():
+        for video_file in sorted(export_cam_path.glob('*.mp4')):
+            parsed_date, start_sec, end_sec = parse_j40_video_times(video_file.name)
+            if start_sec is None or parsed_date != date:
+                continue
+            if filter_start is not None and filter_end is not None:
+                if end_sec < filter_start or start_sec > filter_end:
+                    continue
+            start_time_str = f"{start_sec // 3600:02d}:{(start_sec % 3600) // 60:02d}:{start_sec % 60:02d}"
+            end_time_str = f"{end_sec // 3600:02d}:{(end_sec % 3600) // 60:02d}:{end_sec % 60:02d}"
+            videos.append({
+                'name': video_file.name,
+                'path': str(video_file),
+                'start_time_sec': start_sec,
+                'end_time_sec': end_sec,
+                'start_time_str': start_time_str,
+                'end_time_str': end_time_str,
+                'duration_sec': end_sec - start_sec,
+            })
+
+    # Source 3: J40 SD card data (R1/R1_YYYYMMDD_HHMMSS.mp4)
     j40_cam_path = J40_SD_DATA_DIR / camera_id
     if j40_cam_path.exists():
         for video_file in sorted(j40_cam_path.glob('*.mp4')):
@@ -1452,125 +1565,35 @@ def get_videos_for_race():
 
     Request body:
     {
-        "vola_file": "/path/to/vola.xlsx",
-        "race": "U12 run 1",
+        "vola_file": "/path/to/girls-run1.csv",
         "camera_id": "R1",
-        "num_athletes": 5,  // Number of athletes to process (0 or null = all)
-        "startlist_file": "/path/to/start-list.pdf"  // Optional: PDF with racer names and teams
+        "num_athletes": 5  // Number of athletes to process (0 or null = all)
     }
 
-    Returns list of videos needed and the racers they cover (with names/teams if startlist_file provided).
+    Returns list of videos needed and the racers they cover (with names/teams from race_manifest.json).
     """
-    if not HAS_OPENPYXL:
-        return jsonify({'error': 'openpyxl not installed'}), 500
-
     data = request.get_json() or {}
     vola_file = data.get('vola_file')
-    race = data.get('race', '').lower()
     camera_id = data.get('camera_id', 'R1')
     num_athletes = data.get('num_athletes', 0)  # 0 = all
-    startlist_file = data.get('startlist_file')  # Optional PDF with names and teams
+    race_date_override = data.get('race_date')  # Optional: YYYY-MM-DD from UI date picker
 
-    # Parse start list PDF for names and teams if provided
-    bib_to_racer = {}
-    if startlist_file and Path(startlist_file).exists():
-        bib_to_racer = parse_startlist_pdf(startlist_file)
+    # Load athlete names/teams from race_manifest.json
+    bib_to_racer = load_race_manifest(vola_file) if vola_file else {}
 
     if not vola_file or not Path(vola_file).exists():
         return jsonify({'error': 'Invalid vola_file'}), 400
 
-    # First, parse the Vola file to get racer timing data
-    # Re-use the parse_vola_file logic
-    race_map = {
-        'u12 run 1': ('u12 start run 1', 'u12 end run 1'),
-        'u12 run 2': ('u12 start run 2', 'u12 end run 2'),
-        'u14 run 1': ('u14 start run 1', 'u14 end run 1'),
-        'u14 run 2': ('u14 start run 2', 'u14 end run 2'),
-    }
-
-    if race not in race_map:
-        return jsonify({'error': f'Invalid race: {race}'}), 400
-
-    start_sheet, end_sheet = race_map[race]
-    camera_offset_pct = CAMERAS.get(camera_id, {}).get('offset_pct', 0) / 100.0
-
     try:
-        wb = openpyxl.load_workbook(vola_file, data_only=True)
+        start_times = parse_vola_csv(vola_file)
+        racers = build_racers_from_start_times(start_times, camera_id)
 
-        # Parse start times
-        start_times = {}
-        ws_start = wb[start_sheet]
-        for row in ws_start.iter_rows(min_row=2, values_only=True):
-            bib_raw = row[1]
-            time_str = row[2]
-            if bib_raw and time_str:
-                try:
-                    bib = int(bib_raw)
-                except (ValueError, TypeError):
-                    continue
-                start_seconds = parse_vola_time(str(time_str))
-                if start_seconds is not None:
-                    start_times[bib] = start_seconds
-
-        # Parse end times
-        end_times = {}
-        run_durations = {}
-        ws_end = wb[end_sheet]
-        for row in ws_end.iter_rows(min_row=2, values_only=True):
-            bib_raw = row[1]
-            time_str = row[2]
-            duration = row[3] if len(row) > 3 else None
-            if bib_raw:
-                try:
-                    bib = int(bib_raw)
-                except (ValueError, TypeError):
-                    continue
-                if time_str:
-                    end_seconds = parse_vola_time(str(time_str))
-                    if end_seconds is not None:
-                        end_times[bib] = end_seconds
-                if duration is not None and isinstance(duration, (int, float)):
-                    run_durations[bib] = float(duration)
-
-        wb.close()
-
-        # Build racer list with camera timing windows
-        racers = []
-        for bib in sorted(start_times.keys()):
-            start_sec = start_times[bib]
-
-            run_duration = None
-            if bib in end_times:
-                run_duration = end_times[bib] - start_sec
-            elif bib in run_durations:
-                run_duration = run_durations[bib]
-
-            if run_duration and run_duration > 0:
-                camera_start_sec = start_sec + (run_duration * camera_offset_pct)
-                camera_duration = run_duration * 0.2
-                camera_end_sec = camera_start_sec + camera_duration
-            else:
-                estimated_duration = 40.0
-                camera_start_sec = start_sec + (estimated_duration * camera_offset_pct)
-                camera_duration = estimated_duration * 0.2
-                camera_end_sec = camera_start_sec + camera_duration
-
-            # Get name, team, and gender from start list
-            racer_info = bib_to_racer.get(bib, {})
-            racers.append({
-                'bib': bib,
-                'name': racer_info.get('name', ''),  # Name from start list PDF
-                'team': racer_info.get('team', ''),  # Team from start list PDF
-                'gender': racer_info.get('gender', ''),  # Gender from start list PDF
-                'start_time_sec': start_sec,
-                'run_duration': run_duration,  # Actual run time from Vola (for start offset calculation)
-                'camera_start_sec': camera_start_sec,
-                'camera_end_sec': camera_end_sec,
-                'finished': bib in end_times,
-            })
-
-        # Sort by start time
-        racers.sort(key=lambda r: r['start_time_sec'])
+        # Enrich racers with name/team/gender from start list
+        for racer in racers:
+            racer_info = bib_to_racer.get(racer['bib'], {})
+            racer['name'] = racer_info.get('name', '')
+            racer['team'] = racer_info.get('team', '')
+            racer['gender'] = racer_info.get('gender', '')
 
         # Limit to num_athletes if specified
         if num_athletes and num_athletes > 0:
@@ -1587,29 +1610,51 @@ def get_videos_for_race():
         filter_start = first_camera_time - 30
         filter_end = last_camera_time + 30
 
-        # Extract date from Vola filename (format: Vola_export_U12_U14_02-01-2026.xlsx)
-        vola_name = Path(vola_file).stem
-        date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', vola_name)
-        if date_match:
-            race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+        # Use date override from UI if provided, otherwise extract from Vola file path
+        race_date = None
+        if race_date_override and re.match(r'\d{4}-\d{2}-\d{2}$', race_date_override):
+            race_date = race_date_override
         else:
-            return jsonify({'error': 'Could not extract date from Vola filename'}), 400
+            # Extract date from Vola file's parent directory or filename
+            # Supports: folder name like "U12_U14_02-02-2026" or filename like "Vola_export_02-01-2026.xlsx"
+            vola_path = Path(vola_file)
+            for name_to_check in [vola_path.parent.name, vola_path.stem]:
+                date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', name_to_check)
+                if date_match:
+                    race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+                    break
 
-        # Get videos that cover this time range
-        videos_response = list_recording_videos()
-        # Actually call the function with proper request context
-        from flask import request as flask_request
+        if not race_date:
+            return jsonify({'error': 'Could not determine race date. Please select a date in the Race Date picker.'}), 400
 
-        # Build path to videos
+        # Build path to videos - try multiple directory structures
         camera_folders = {'R1': 'sd_R1', 'R2': 'sd_R2', 'R3': 'sd_R3', 'Axis': 'sd_Axis'}
         folder_name = camera_folders.get(camera_id, 'sd_R1')
-        videos_path = RECORDINGS_DIR / folder_name / 'sdcard' / 'Mp4Record' / race_date
+
+        # Try multiple directory structures: exported copies, Reolink SD card, flat J40
+        videos_paths = [
+            RECORDINGS_DIR / f'export_{folder_name}',  # Exported SD card copies
+            RECORDINGS_DIR / folder_name / 'sdcard' / 'Mp4Record' / race_date,  # Reolink SD card
+            RECORDINGS_DIR / folder_name,  # Flat directory (J40 recordings)
+        ]
 
         videos = []
-        if videos_path.exists():
+        race_date_compact = race_date.replace('-', '')  # YYYYMMDD for filename matching
+
+        for videos_path in videos_paths:
+            if not videos_path.exists():
+                continue
             for video_file in sorted(videos_path.glob('*.mp4')):
+                # Try Reolink RecM03 format
                 parsed_date, start_sec, end_sec = parse_reolink_video_times(video_file.name)
                 if start_sec is None:
+                    # Try J40 format (R1_YYYYMMDD_HHMMSS.mp4)
+                    parsed_date, start_sec, end_sec = parse_j40_video_times(video_file.name)
+                if start_sec is None:
+                    continue
+
+                # Filter by date
+                if parsed_date and parsed_date != race_date:
                     continue
 
                 # Check if video overlaps with the time range we need
@@ -1628,8 +1673,11 @@ def get_videos_for_race():
                     'end_time_str': end_time_str,
                 })
 
+            if videos:  # Stop after first directory that has matching videos
+                break
+
         return jsonify({
-            'race': race,
+            'file': vola_file,
             'camera_id': camera_id,
             'date': race_date,
             'num_athletes': len(racers),
@@ -2020,6 +2068,190 @@ def montages_image(image_path):
     return send_file(str(full_path), mimetype='image/jpeg')
 
 
+@app.route('/api/montages/populate-manifest', methods=['POST'])
+def populate_manifest_with_montages():
+    """
+    Scan staging directory and populate race_manifest.json with montage paths.
+
+    Request body:
+    {
+        "race_slug": "western-q-2026-02-22"  // Race directory name
+    }
+
+    Scans /Volumes/OWC_48/data/montages/{race_slug}/{CamX}/{runN}/
+    for montage images and updates the corresponding race_manifest.json.
+    """
+    data = request.get_json() or {}
+    race_slug = data.get('race_slug')
+
+    if not race_slug:
+        return jsonify({'error': 'race_slug required'}), 400
+
+    staging_dir = MONTAGES_DIR / race_slug
+    if not staging_dir.exists():
+        return jsonify({'error': f'Staging directory not found: {staging_dir}'}), 404
+
+    # Find race manifest
+    manifest_path = None
+    if WEB_RACES_DIR.exists():
+        candidate = WEB_RACES_DIR / race_slug / 'race_manifest.json'
+        if candidate.exists():
+            manifest_path = candidate
+
+    if not manifest_path:
+        return jsonify({'error': f'No race_manifest.json found for {race_slug}'}), 404
+
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        # Build bib → list of (cat_idx, athlete_idx, gender_key) for all matches
+        # Boys and girls share bib numbers, so we need gender-aware lookup
+        bib_lookup = {}  # {bib: [(cat_idx, athlete_idx, gender_key), ...]}
+        for cat_idx, category in enumerate(manifest.get('categories', [])):
+            cat_id = category.get('id', '')
+            # Determine gender from category id: "U12_Girls" → "girls", "U14_Boys" → "boys"
+            if 'Girls' in cat_id or 'girls' in cat_id:
+                gender_key = 'girls'
+            elif 'Boys' in cat_id or 'boys' in cat_id:
+                gender_key = 'boys'
+            else:
+                gender_key = ''
+            for ath_idx, athlete in enumerate(category.get('athletes', [])):
+                bib = athlete['bib']
+                if bib not in bib_lookup:
+                    bib_lookup[bib] = []
+                bib_lookup[bib].append((cat_idx, ath_idx, gender_key))
+
+        # Scan staging directory: {CamX}/{runN}/{bib}[_thumb|_fps].jpg
+        updated_count = 0
+        cam_ids = set()
+        for cam_dir in sorted(staging_dir.iterdir()):
+            if not cam_dir.is_dir() or not cam_dir.name.startswith('Cam'):
+                continue
+            cam_id = cam_dir.name  # e.g., "Cam1"
+            cam_ids.add(cam_id)
+
+            for run_dir in sorted(cam_dir.iterdir()):
+                if not run_dir.is_dir() or not run_dir.name.startswith('run'):
+                    continue
+                run_key = run_dir.name  # e.g., "run1"
+
+                # Read _meta.json if present to determine gender context
+                run_gender = ''
+                meta_file = run_dir / '_meta.json'
+                if meta_file.exists():
+                    try:
+                        with open(meta_file) as mf:
+                            meta = json.load(mf)
+                        run_gender = meta.get('gender', '')
+                        print(f"  {cam_id}/{run_key}: gender={run_gender} (from _meta.json)")
+                    except Exception:
+                        pass
+
+                # Load per-bib timing data from {prefix}{bib}_timing.json files
+                timing_data = {}  # {(gender_char, bib): section_elapsed_sec}
+                for tf in run_dir.glob('*_timing.json'):
+                    try:
+                        with open(tf) as tfh:
+                            td = json.load(tfh)
+                        timing_data[(td.get('gender', ''), td['bib'])] = td.get('section_elapsed_sec')
+                    except Exception:
+                        pass
+
+                # Find all fullres images (not thumbs)
+                # Filename formats:
+                #   New: {g|b}{bib}_{fps}fps.jpg  (gender-prefixed)
+                #   Old: {bib}_{fps}fps.jpg       (no prefix)
+                seen_keys = set()  # (gender_char, bib) to avoid duplicates
+                for img_file in sorted(run_dir.glob('*.jpg')):
+                    filename = img_file.stem  # e.g., "g4_4.0fps" or "4_4.0fps"
+
+                    # Skip thumbnails
+                    if '_thumb' in filename:
+                        continue
+
+                    # Extract gender prefix and bib from filename
+                    first_part = filename.split('_')[0]  # "g4" or "4" or "b12"
+                    gender_char = ''
+                    if first_part and first_part[0] in ('g', 'b') and first_part[1:].isdigit():
+                        gender_char = first_part[0]  # 'g' or 'b'
+                        bib = int(first_part[1:])
+                    elif first_part.isdigit():
+                        bib = int(first_part)
+                    else:
+                        continue
+
+                    key = (gender_char, bib)
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+
+                    if bib not in bib_lookup:
+                        print(f"  Warning: bib {bib} not found in manifest")
+                        continue
+
+                    # Find correct athlete entry using gender from filename prefix
+                    matches = bib_lookup[bib]
+                    file_gender = 'girls' if gender_char == 'g' else 'boys' if gender_char == 'b' else run_gender
+                    if file_gender and len(matches) > 1:
+                        gender_matches = [m for m in matches if m[2] == file_gender]
+                        if gender_matches:
+                            matches = gender_matches
+                    cat_idx, ath_idx, _ = matches[0]
+
+                    # Build montage paths relative to media_base_url
+                    full_path = f"{cam_id}/{run_key}/{filename}.jpg"
+                    thumb_name = f"{filename}_thumb.jpg"
+                    thumb_file = run_dir / thumb_name
+                    thumb_path = f"{cam_id}/{run_key}/{thumb_name}" if thumb_file.exists() else full_path
+
+                    # Get section elapsed time if available
+                    gender_code = 'F' if gender_char == 'g' else 'M' if gender_char == 'b' else ''
+                    section_time = timing_data.get((gender_code, bib))
+
+                    # Update manifest
+                    athlete = manifest['categories'][cat_idx]['athletes'][ath_idx]
+
+                    if 'montages' not in athlete:
+                        athlete['montages'] = {}
+                    if cam_id not in athlete['montages']:
+                        athlete['montages'][cam_id] = {}
+
+                    montage_entry = {
+                        'thumb': thumb_path,
+                        'full': full_path,
+                    }
+                    if section_time is not None:
+                        montage_entry['section_time'] = section_time
+
+                    # Check for video clip ({gender_prefix}{bib}.mp4)
+                    video_prefix = f"{gender_char}{bib}" if gender_char else str(bib)
+                    video_file = run_dir / f"{video_prefix}.mp4"
+                    if video_file.exists():
+                        montage_entry['video'] = f"{cam_id}/{run_key}/{video_prefix}.mp4"
+
+                    athlete['montages'][cam_id][run_key] = montage_entry
+                    updated_count += 1
+
+        # Save updated manifest
+        with open(manifest_path, 'w') as f:
+            json.dump(manifest, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'updated_count': updated_count,
+            'cameras_found': sorted(cam_ids),
+            'manifest_path': str(manifest_path),
+        })
+
+    except Exception as e:
+        print(f"Error populating manifest: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 # =============================================================================
 # VIDEO STITCH ENDPOINTS
 # =============================================================================
@@ -2173,97 +2405,39 @@ def save_stitch_config():
 @app.route('/api/stitch/parse-racers', methods=['POST'])
 def parse_racers_for_stitch():
     """
-    Parse Vola file, start list PDF, and results PDF to get racer data for stitching.
+    Parse Vola CSV file and results PDF to get racer data for stitching.
+    Athlete names/teams loaded automatically from race_manifest.json.
 
     Request body:
     {
-        "vola_file": "/path/to/vola.xlsx",
-        "race": "U12 run 1",
-        "startlist_file": "/path/to/startlist.pdf",  // Optional
+        "vola_file": "/path/to/girls-run1.csv",
         "results_file": "/path/to/results.pdf",  // Optional - for USSA IDs, rankings, DSQ/DNF
         "include_dsq_dnf": true  // Optional - include DSQ/DNF racers with 60s replacement time
     }
 
     Returns list of racers with timing, name, USSA ID, ranking, and status data.
     """
-    if not HAS_OPENPYXL:
-        return jsonify({'error': 'openpyxl not installed'}), 500
-
     data = request.get_json() or {}
     vola_file = data.get('vola_file')
-    race = data.get('race', '').lower()
-    startlist_file = data.get('startlist_file')
     results_file = data.get('results_file')
     include_dsq_dnf = data.get('include_dsq_dnf', True)
 
     if not vola_file or not Path(vola_file).exists():
         return jsonify({'error': 'Invalid vola_file'}), 400
 
-    # Map race selection to sheet names
-    race_map = {
-        'u12 run 1': ('u12 start run 1', 'u12 end run 1'),
-        'u12 run 2': ('u12 start run 2', 'u12 end run 2'),
-        'u14 run 1': ('u14 start run 1', 'u14 end run 1'),
-        'u14 run 2': ('u14 start run 2', 'u14 end run 2'),
-    }
-
-    if race not in race_map:
-        return jsonify({'error': f'Invalid race. Must be one of: {list(race_map.keys())}'}), 400
-
-    # Parse start list for names if provided
-    bib_to_startlist = {}
-    if startlist_file and Path(startlist_file).exists():
-        bib_to_startlist = parse_startlist_pdf(startlist_file)
+    # Load athlete names/teams from race_manifest.json
+    bib_to_manifest = load_race_manifest(vola_file)
 
     # Parse results PDF for USSA IDs, rankings, and status
     bib_to_results = {}
     if results_file and Path(results_file).exists():
         bib_to_results = parse_results_pdf(results_file)
 
-    start_sheet, end_sheet = race_map[race]
-
     # Default replacement time for DSQ/DNF (60 seconds)
     DSQ_DNF_REPLACEMENT_TIME = 60.0
 
     try:
-        wb = openpyxl.load_workbook(vola_file, data_only=True)
-
-        # Parse start times
-        start_times = {}
-        ws_start = wb[start_sheet]
-        for row in ws_start.iter_rows(min_row=2, values_only=True):
-            bib_raw = row[1]
-            time_str = row[2]
-            if bib_raw and time_str:
-                try:
-                    bib = int(bib_raw)
-                except (ValueError, TypeError):
-                    continue
-                start_seconds = parse_vola_time(str(time_str))
-                if start_seconds is not None:
-                    start_times[bib] = start_seconds
-
-        # Parse end times and durations
-        end_times = {}
-        run_durations = {}
-        ws_end = wb[end_sheet]
-        for row in ws_end.iter_rows(min_row=2, values_only=True):
-            bib_raw = row[1]
-            time_str = row[2]
-            duration = row[3] if len(row) > 3 else None
-            if bib_raw:
-                try:
-                    bib = int(bib_raw)
-                except (ValueError, TypeError):
-                    continue
-                if time_str:
-                    end_seconds = parse_vola_time(str(time_str))
-                    if end_seconds is not None:
-                        end_times[bib] = end_seconds
-                if duration is not None and isinstance(duration, (int, float)):
-                    run_durations[bib] = float(duration)
-
-        wb.close()
+        start_times = parse_vola_csv(vola_file)
 
         # Build racer list
         racers = []
@@ -2272,30 +2446,26 @@ def parse_racers_for_stitch():
 
             # Get data from results PDF (has USSA ID, rank, status)
             results_info = bib_to_results.get(bib, {})
-            startlist_info = bib_to_startlist.get(bib, {})
+            manifest_info = bib_to_manifest.get(bib, {})
 
-            # Determine status from results
-            status = results_info.get('status', 'finished')
-            rank = results_info.get('rank')
+            # Determine status from results PDF, fallback to manifest
+            status = results_info.get('status') or manifest_info.get('run1_status', 'finished')
+            rank = results_info.get('rank') or manifest_info.get('rank')
 
-            # Calculate run duration
-            run_duration = None
-            if bib in end_times:
-                run_duration = end_times[bib] - start_sec
-            elif bib in run_durations:
-                run_duration = run_durations[bib]
+            # Use actual run time from manifest if available, then results PDF, then estimate
+            run_duration = manifest_info.get('run1_time') or results_info.get('run_duration') or 40.0
 
             # Handle DSQ/DNF/DNS - use replacement time
-            if run_duration is None or run_duration <= 0:
-                if status in ('DSQ', 'DNF', 'DNS') and include_dsq_dnf:
+            if status in ('DSQ', 'DNF', 'DNS'):
+                if include_dsq_dnf:
                     run_duration = DSQ_DNF_REPLACEMENT_TIME
                 else:
-                    continue  # Skip racers without valid finish and not DSQ/DNF
+                    continue
 
-            # Get name/team - prefer results (has parsed name), fallback to startlist
-            name = results_info.get('name') or startlist_info.get('name', f'Bib{bib}')
-            team = results_info.get('team') or startlist_info.get('team', '')
-            gender = results_info.get('gender') or startlist_info.get('gender', '') or get_gender_from_bib(bib)
+            # Get name/team - prefer manifest (has clean data), fallback to results
+            name = manifest_info.get('name') or results_info.get('name', f'Bib{bib}')
+            team = manifest_info.get('team') or results_info.get('team', '')
+            gender = manifest_info.get('gender') or results_info.get('gender', '') or get_gender_from_bib(bib)
 
             # Get USSA ID from results
             ussa_id = results_info.get('ussa_id', '')
@@ -2320,14 +2490,17 @@ def parse_racers_for_stitch():
         # Sort by start time
         racers.sort(key=lambda r: r['start_time_sec'])
 
-        # Find videos for all 4 cameras
-        # Extract date from Vola filename (format: Vola_export_U12_U14_02-01-2026.xlsx)
-        vola_name = Path(vola_file).stem
-        date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', vola_name)
-        if not date_match:
-            return jsonify({'error': 'Could not extract date from Vola filename'}), 400
+        # Extract date from Vola file path (parent dir or filename)
+        vola_path = Path(vola_file)
+        race_date = None
+        for name_to_check in [vola_path.parent.name, vola_path.stem]:
+            date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', name_to_check)
+            if date_match:
+                race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+                break
 
-        race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+        if not race_date:
+            return jsonify({'error': 'Could not extract date from Vola file path'}), 400
 
         # Calculate time range needed (earliest start - 60s buffer, latest finish + 60s buffer)
         if racers:
@@ -2345,28 +2518,23 @@ def parse_racers_for_stitch():
             camera_videos = []
 
             if camera_id == 'Axis':
-                # Axis has different folder structure: sd_Axis/sdcard/YYYYMMDD/HH/YYYYMMDD_HHMMSS_XXXX_XXX/YYYYMMDD_HH/*.mkv
-                axis_date_str = race_date.replace('-', '')  # 2026-02-01 -> 20260201
+                # Axis has different folder structure: sd_Axis/sdcard/YYYYMMDD/HH/.../*.mkv
+                axis_date_str = race_date.replace('-', '')
                 axis_base = RECORDINGS_DIR / folder_name / 'sdcard' / axis_date_str
                 if axis_base.exists():
-                    # Search through hour folders
                     for hour_folder in sorted(axis_base.glob('*')):
                         if not hour_folder.is_dir():
                             continue
                         for recording_folder in sorted(hour_folder.glob('*')):
                             if not recording_folder.is_dir():
                                 continue
-                            # Find mkv files in subdirectories
                             for mkv_file in recording_folder.glob('**/*.mkv'):
-                                # Parse Axis filename: YYYYMMDD_HHMMSS_XXXX.mkv
-                                fname = mkv_file.stem  # e.g., 20260201_081402_A4CC
+                                fname = mkv_file.stem
                                 match = re.match(r'(\d{8})_(\d{6})_', fname)
                                 if match:
                                     start_str = match.group(2)
                                     start_sec = int(start_str[0:2]) * 3600 + int(start_str[2:4]) * 60 + int(start_str[4:6])
-                                    # Estimate end time (Axis videos are typically ~5 min segments)
                                     end_sec = start_sec + 300
-
                                     if end_sec >= earliest_start and start_sec <= latest_finish:
                                         camera_videos.append({
                                             'path': str(mkv_file),
@@ -2374,32 +2542,45 @@ def parse_racers_for_stitch():
                                             'end_sec': end_sec,
                                         })
             else:
-                # Reolink cameras: sd_XX/sdcard/Mp4Record/YYYY-MM-DD/*.mp4
-                videos_path = RECORDINGS_DIR / folder_name / 'sdcard' / 'Mp4Record' / race_date
-                if videos_path.exists():
-                    for video_file in sorted(videos_path.glob('*.mp4')):
+                # Try multiple directory structures for Reolink cameras
+                search_paths = [
+                    ('export', RECORDINGS_DIR / f'export_{folder_name}'),  # Exported SD copies
+                    ('reolink', RECORDINGS_DIR / folder_name / 'sdcard' / 'Mp4Record' / race_date),  # Reolink SD
+                    ('flat', RECORDINGS_DIR / folder_name),  # Flat directory
+                ]
+
+                for source_type, search_path in search_paths:
+                    if not search_path.exists():
+                        continue
+                    for video_file in sorted(search_path.glob('*.mp4')):
+                        # Try Reolink RecM03 format
                         parsed_date, start_sec, end_sec = parse_reolink_video_times(video_file.name)
                         if start_sec is None:
+                            # Try J40 format (R1_YYYYMMDD_HHMMSS.mp4)
+                            parsed_date, start_sec, end_sec = parse_j40_video_times(video_file.name)
+                        if start_sec is None:
                             continue
-
+                        if parsed_date and parsed_date != race_date:
+                            continue
                         if end_sec >= earliest_start and start_sec <= latest_finish:
                             camera_videos.append({
                                 'path': str(video_file),
                                 'start_sec': start_sec,
                                 'end_sec': end_sec,
                             })
+                    if camera_videos:
+                        break  # Stop after first directory with matches
 
-            # Return ALL videos that overlap with the race time range, sorted by start time
             if camera_videos:
                 camera_videos.sort(key=lambda v: v['start_sec'])
                 video_paths[camera_id] = [v['path'] for v in camera_videos]
 
         return jsonify({
-            'race': race,
+            'file': vola_file,
             'race_date': race_date,
             'racers': racers,
             'total_racers': len(racers),
-            'video_paths': video_paths,  # Now a dict of camera_id -> list of video paths
+            'video_paths': video_paths,
             'time_range': {
                 'start_sec': earliest_start,
                 'end_sec': latest_finish,

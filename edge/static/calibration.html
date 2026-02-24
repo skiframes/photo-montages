@@ -846,27 +846,14 @@
             <div class="card">
                 <div class="card-title">1. Select Race Data</div>
 
-                <label for="stitchVolaFile">Vola Excel File</label>
+                <label for="stitchVolaFile">Vola Timing File (CSV)</label>
                 <select id="stitchVolaFile">
                     <option value="">Loading...</option>
-                </select>
-
-                <label for="stitchStartlistFile" style="margin-top: 8px;">Start List PDF (for names/teams)</label>
-                <select id="stitchStartlistFile">
-                    <option value="">-- None (use bib numbers) --</option>
                 </select>
 
                 <label for="stitchResultsFile" style="margin-top: 8px;">Results PDF (for USSA IDs & rankings)</label>
                 <select id="stitchResultsFile">
                     <option value="">-- None --</option>
-                </select>
-
-                <label for="stitchRace" style="margin-top: 8px;">Age Group / Run</label>
-                <select id="stitchRace">
-                    <option value="U12 run 1">U12 Run 1</option>
-                    <option value="U12 run 2">U12 Run 2</option>
-                    <option value="U14 run 1">U14 Run 1</option>
-                    <option value="U14 run 2">U14 Run 2</option>
                 </select>
 
                 <!-- Race Info Fields (for manifest and title overlay) -->
@@ -1393,24 +1380,11 @@
                 <div id="volaSelect" style="margin-top: 16px; padding: 12px; background: #f0f9ff; border-radius: 8px; border: 1px solid #bfdbfe;">
                     <label style="font-weight: 600; color: #1e40af; margin-bottom: 8px; display: block;">Race Timing (Vola)</label>
 
-                    <label for="volaFile" style="font-size: 13px;">Vola Excel File</label>
+                    <label for="volaFile" style="font-size: 13px;">Vola Timing File (CSV)</label>
                     <select id="volaFile">
                         <option value="">-- None (manual detection) --</option>
                     </select>
-
-                    <label for="startlistFile" style="margin-top: 8px; font-size: 13px;">Start List PDF (for names/teams)</label>
-                    <select id="startlistFile">
-                        <option value="">-- None (no names) --</option>
-                    </select>
-                    <div class="help-text">Adds athlete names and organizes by team folder</div>
-
-                    <label for="volaRace" style="margin-top: 8px; font-size: 13px;">Race</label>
-                    <select id="volaRace">
-                        <option value="U12 run 1">U12 Run 1</option>
-                        <option value="U12 run 2">U12 Run 2</option>
-                        <option value="U14 run 1">U14 Run 1</option>
-                        <option value="U14 run 2">U14 Run 2</option>
-                    </select>
+                    <div class="help-text">Select CSV file for the specific run (e.g., girls-run1.csv)</div>
 
                     <label for="volaCamera" style="margin-top: 8px; font-size: 13px;">Camera Position</label>
                     <select id="volaCamera">
@@ -1420,15 +1394,20 @@
                         Time offset: <span id="volaCameraOffsetPct">0</span>% into run
                     </div>
 
-                    <label for="volaView" style="margin-top: 8px; font-size: 13px;">View Number</label>
-                    <select id="volaView" style="width: 100px;">
-                        <option value="1">View 1</option>
-                        <option value="2">View 2</option>
-                        <option value="3">View 3</option>
-                        <option value="4">View 4</option>
-                        <option value="5">View 5</option>
-                    </select>
+                    <div id="volaSectionInfo" style="margin-top: 8px; padding: 8px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; font-size: 13px; display: none;">
+                        <strong id="volaSectionLabel">Section ?</strong>
+                        <span id="volaSectionGates" style="color: #666; margin-left: 8px;"></span>
+                        <div id="volaStagingPath" style="color: #888; font-size: 11px; margin-top: 4px;"></div>
+                    </div>
                     <div class="help-text">For filename: Name_bib_runX_ViewY</div>
+
+                    <label for="raceDate" style="margin-top: 8px; font-size: 13px;">Race Date</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="date" id="raceDate" style="flex: 1;">
+                        <button id="loadRecordingDates" class="btn btn-outline btn-sm" style="white-space: nowrap; padding: 4px 8px; font-size: 11px;" title="Show dates with available recordings">Available dates</button>
+                    </div>
+                    <div class="help-text">Auto-detected from Vola file path. Override to select a different day's recordings.</div>
+                    <div id="availableDates" style="display: none; margin-top: 4px; padding: 6px; background: white; border-radius: 4px; font-size: 12px;"></div>
 
                     <label for="numAthletes" style="margin-top: 8px; font-size: 13px;">Number of Athletes</label>
                     <input type="number" id="numAthletes" min="0" max="100" value="5" style="width: 80px;">
@@ -1447,6 +1426,12 @@
                         <div class="help-text" style="margin-top: 2px;">
                             First: Bib <span id="volaFirstRacer">-</span> | Last: Bib <span id="volaLastRacer">-</span>
                         </div>
+                    </div>
+
+                    <button id="populateManifest" class="btn btn-outline btn-sm" style="margin-top: 10px; display: none;">
+                        Update Race Manifest
+                    </button>
+                    <div id="populateManifestResult" style="display: none; margin-top: 8px; padding: 8px; background: #ecfdf5; border: 1px solid #86efac; border-radius: 6px; font-size: 12px;">
                     </div>
                 </div>
             </div>
@@ -1582,6 +1567,26 @@
             </div>
         </div>
 
+        <!-- Output Destination -->
+        <div id="outputDestSection" class="card" style="display: none;">
+            <div class="card-title">Output Destination</div>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
+                <input type="checkbox" id="outputToStaging" checked style="width: 18px; height: 18px;">
+                <span style="font-size: 14px; font-weight: 600;">Save to race staging folder</span>
+            </label>
+            <div id="outputStagingDetails" style="padding: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 12px;">
+                <div id="outputStagingPath" style="font-family: monospace; color: #16a34a;">
+                    /Volumes/OWC_48/data/montages/...
+                </div>
+                <div id="outputStagingWarning" style="color: #dc2626; margin-top: 4px; display: none;">
+                    Section info missing — select Vola file and camera first
+                </div>
+            </div>
+            <div id="outputDefaultDetails" style="padding: 8px; background: #fef9c3; border: 1px solid #fde68a; border-radius: 6px; font-size: 12px; display: none;">
+                <span style="color: #92400e;">Output goes to: <code>edge/output/</code> (local, not staged for website)</span>
+            </div>
+        </div>
+
         <!-- Save Button -->
         <div id="saveSection" style="display: none;">
             <button id="saveConfig" class="btn btn-success">
@@ -1689,12 +1694,17 @@
             stitchVideoPaths: {},  // Auto-detected video paths for each camera
             stitchJobId: null,
             stitchPollInterval: null,
-            volaRace: '',  // Selected race (e.g., "U12 run 1")
+            volaRace: '',  // Deprecated - race determined by CSV filename
             volaCamera: '',  // Selected camera for Vola timing
-            volaView: '1',  // View number 1-5 for filename
-            startlistFile: '',  // Start list PDF file path (for racer names and teams)
             numAthletes: 5,  // Number of athletes to process (0 = all)
             raceDate: '',  // Date extracted from Vola file
+            // Section/staging info (from race_manifest.json)
+            sectionId: '',       // e.g., "Cam1" - website camera ID
+            sectionNum: 0,       // e.g., 1 - section number
+            raceSlug: '',        // e.g., "western-q-2026-02-22"
+            stagingDir: '',      // e.g., "/Volumes/OWC_48/data/montages/western-q-2026-02-22"
+            runNumber: '',       // e.g., "run1" - derived from CSV filename
+            manifestCameras: [], // Camera mapping from race_manifest.json
             cameras: [],  // Camera list with offset percentages
             selectedLogos: [],  // List of selected logo filenames in order
             availableLogos: [],  // All available logos
@@ -1764,6 +1774,12 @@
             postBuffer: document.getElementById('postBuffer'),
             saveSection: document.getElementById('saveSection'),
             saveConfig: document.getElementById('saveConfig'),
+            outputDestSection: document.getElementById('outputDestSection'),
+            outputToStaging: document.getElementById('outputToStaging'),
+            outputStagingDetails: document.getElementById('outputStagingDetails'),
+            outputStagingPath: document.getElementById('outputStagingPath'),
+            outputStagingWarning: document.getElementById('outputStagingWarning'),
+            outputDefaultDetails: document.getElementById('outputDefaultDetails'),
             status: document.getElementById('status'),
             calibrationBadge: document.getElementById('calibrationBadge'),
             calibrationBadgeInfo: document.getElementById('calibrationBadgeInfo'),
@@ -1788,20 +1804,26 @@
             // Vola elements
             volaSelect: document.getElementById('volaSelect'),
             volaFile: document.getElementById('volaFile'),
-            startlistFile: document.getElementById('startlistFile'),
-            volaRace: document.getElementById('volaRace'),
             volaCamera: document.getElementById('volaCamera'),
-            volaView: document.getElementById('volaView'),
             volaCameraOffsetInfo: document.getElementById('volaCameraOffsetInfo'),
+            volaSectionInfo: document.getElementById('volaSectionInfo'),
+            volaSectionLabel: document.getElementById('volaSectionLabel'),
+            volaSectionGates: document.getElementById('volaSectionGates'),
+            volaStagingPath: document.getElementById('volaStagingPath'),
             volaCameraOffsetPct: document.getElementById('volaCameraOffsetPct'),
             volaRacersInfo: document.getElementById('volaRacersInfo'),
             volaRacerCount: document.getElementById('volaRacerCount'),
             volaFirstRacer: document.getElementById('volaFirstRacer'),
             volaLastRacer: document.getElementById('volaLastRacer'),
             loadVolaData: document.getElementById('loadVolaData'),
+            populateManifest: document.getElementById('populateManifest'),
+            populateManifestResult: document.getElementById('populateManifestResult'),
             cameraOffsetInfo: document.getElementById('cameraOffsetInfo'),
             cameraOffsetPct: document.getElementById('cameraOffsetPct'),
             numAthletes: document.getElementById('numAthletes'),
+            raceDate: document.getElementById('raceDate'),
+            loadRecordingDates: document.getElementById('loadRecordingDates'),
+            availableDates: document.getElementById('availableDates'),
             volaVideoCount: document.getElementById('volaVideoCount'),
             volaTimeRange: document.getElementById('volaTimeRange'),
             // Mode selection
@@ -1818,9 +1840,7 @@
             freeSkiMode: document.getElementById('freeSkiMode'),
             // Stitch elements
             stitchVolaFile: document.getElementById('stitchVolaFile'),
-            stitchStartlistFile: document.getElementById('stitchStartlistFile'),
             stitchResultsFile: document.getElementById('stitchResultsFile'),
-            stitchRace: document.getElementById('stitchRace'),
             // Race info fields
             raceInfoEvent: document.getElementById('raceInfoEvent'),
             raceInfoDiscipline: document.getElementById('raceInfoDiscipline'),
@@ -1981,6 +2001,86 @@
             }
         }
 
+        async function updateSectionInfo() {
+            // Fetch camera→section mapping from race_manifest.json
+            const volaFile = elements.volaFile.value;
+            const cameraId = elements.volaCamera.value;
+
+            if (!volaFile || !cameraId) {
+                elements.volaSectionInfo.style.display = 'none';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/race-manifest/cameras?vola_file=${encodeURIComponent(volaFile)}`);
+                const data = await res.json();
+
+                state.manifestCameras = data.cameras || [];
+                state.raceSlug = data.race_slug || '';
+                state.stagingDir = data.staging_dir || '';
+
+                // Find which section this camera maps to
+                const match = state.manifestCameras.find(c => c.edge_camera === cameraId);
+
+                // Derive run number from CSV filename (e.g., "girls-run1.csv" → "run1")
+                const volaFilename = volaFile.split('/').pop();
+                const runMatch = volaFilename.match(/run(\d+)/i);
+                state.runNumber = runMatch ? `run${runMatch[1]}` : 'run1';
+
+                if (match) {
+                    state.sectionId = match.id;
+                    state.sectionNum = match.section_num;
+
+                    // Show section info
+                    elements.volaSectionLabel.textContent = `Section ${match.section_num} (${match.id})`;
+                    const gatesKey = state.runNumber === 'run2' ? 'gates_covered_run2' : 'gates_covered_run1';
+                    const gates = match[gatesKey] || [];
+                    elements.volaSectionGates.textContent = gates.length > 0
+                        ? `Gates ${gates[0]}-${gates[gates.length - 1]}`
+                        : 'No gate coverage for this run';
+                    elements.volaStagingPath.textContent =
+                        `Output: ${state.stagingDir}/${match.id}/${state.runNumber}/`;
+                    elements.volaSectionInfo.style.display = 'block';
+                } else {
+                    state.sectionId = '';
+                    state.sectionNum = 0;
+                    elements.volaSectionInfo.style.display = 'none';
+                }
+
+                // Show "Update Race Manifest" button when race is detected
+                elements.populateManifest.style.display = state.raceSlug ? 'inline-block' : 'none';
+                updateOutputDestDisplay();
+            } catch (e) {
+                console.error('Error fetching section info:', e);
+                elements.volaSectionInfo.style.display = 'none';
+                updateOutputDestDisplay();
+            }
+        }
+
+        function updateOutputDestDisplay() {
+            const useStaging = elements.outputToStaging.checked;
+            if (useStaging) {
+                elements.outputStagingDetails.style.display = 'block';
+                elements.outputDefaultDetails.style.display = 'none';
+                if (state.sectionId && state.stagingDir && state.runNumber) {
+                    elements.outputStagingPath.textContent =
+                        `${state.stagingDir}/${state.sectionId}/${state.runNumber}/`;
+                    elements.outputStagingWarning.style.display = 'none';
+                    elements.outputStagingDetails.style.borderColor = '#bbf7d0';
+                    elements.outputStagingDetails.style.background = '#f0fdf4';
+                } else {
+                    elements.outputStagingPath.textContent =
+                        '/Volumes/OWC_48/data/montages/<race>/<section>/<run>/';
+                    elements.outputStagingWarning.style.display = 'block';
+                    elements.outputStagingDetails.style.borderColor = '#fde68a';
+                    elements.outputStagingDetails.style.background = '#fef9c3';
+                }
+            } else {
+                elements.outputStagingDetails.style.display = 'none';
+                elements.outputDefaultDetails.style.display = 'block';
+            }
+        }
+
         async function loadVolaFiles() {
             try {
                 // Load Vola Excel files
@@ -1994,46 +2094,76 @@
                     ).join('');
                 }
 
-                // Load Start List PDF files
-                const resStartlist = await fetch('/api/vola/startlist-files');
-                const startlistFiles = await resStartlist.json();
-                elements.startlistFile.innerHTML = '<option value="">-- None (no names) --</option>';
-                if (startlistFiles.length > 0) {
-                    elements.startlistFile.innerHTML += startlistFiles.map(f =>
-                        `<option value="${f.path}">${f.name}</option>`
-                    ).join('');
-                }
+                // Auto-detect section info and race date for the first file
+                await updateSectionInfo();
+                autoDetectRaceDate();
             } catch (e) {
                 elements.volaFile.innerHTML = '<option value="">Failed to load files</option>';
             }
         }
 
+        function autoDetectRaceDate() {
+            // Extract date from Vola file path (e.g., "U12_U14_02-22-2026" -> "2026-02-22")
+            const filePath = elements.volaFile.value;
+            if (!filePath) return;
+            const match = filePath.match(/(\d{2})-(\d{2})-(\d{4})/);
+            if (match) {
+                const isoDate = `${match[3]}-${match[1]}-${match[2]}`;
+                elements.raceDate.value = isoDate;
+            }
+        }
+
+        async function loadAvailableDates() {
+            try {
+                elements.loadRecordingDates.innerHTML = '<span class="spinner"></span>';
+                elements.loadRecordingDates.disabled = true;
+                const res = await fetch('/api/recordings/dates');
+                const data = await res.json();
+                const dates = data.dates || [];
+                if (dates.length === 0) {
+                    elements.availableDates.textContent = 'No recording dates found';
+                } else {
+                    elements.availableDates.innerHTML = dates.map(d => {
+                        const label = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                        return `<a href="#" style="color: #2563eb; text-decoration: underline; margin-right: 10px;" onclick="event.preventDefault(); document.getElementById('raceDate').value='${d}';">${label}</a>`;
+                    }).join('');
+                }
+                elements.availableDates.style.display = 'block';
+            } catch (e) {
+                elements.availableDates.textContent = 'Failed to load dates';
+                elements.availableDates.style.display = 'block';
+            } finally {
+                elements.loadRecordingDates.innerHTML = 'Available dates';
+                elements.loadRecordingDates.disabled = false;
+            }
+        }
+
         async function loadVolaData() {
             const filePath = elements.volaFile.value;
-            const startlistFilePath = elements.startlistFile.value;
-            const race = elements.volaRace.value;
             const cameraId = elements.volaCamera.value;
             const numAthletes = parseInt(elements.numAthletes.value) || 0;
 
             if (!filePath) {
-                showStatus('Please select a Vola file', 'error');
+                showStatus('Please select a Vola timing file', 'error');
                 return;
             }
+
+            // Ensure section info is loaded before proceeding
+            await updateSectionInfo();
 
             elements.loadVolaData.innerHTML = '<span class="spinner"></span>Loading...';
             elements.loadVolaData.disabled = true;
 
             try {
-                // Use the new API that returns both racers and matching videos
+                // Use the API that returns both racers and matching videos
                 const res = await fetch('/api/recordings/videos-for-race', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         vola_file: filePath,
-                        startlist_file: startlistFilePath || null,  // Optional: PDF with racer names and teams
-                        race: race,
                         camera_id: cameraId,
                         num_athletes: numAthletes,
+                        race_date: elements.raceDate.value || null,
                     })
                 });
 
@@ -2046,7 +2176,7 @@
                 // Store data in state
                 state.volaRacers = data.racers;
                 state.volaVideos = data.videos;
-                state.volaRace = race;
+                state.volaRace = filePath;  // Use filename as race identifier
                 state.volaCamera = cameraId;
                 state.numAthletes = numAthletes;
                 state.raceDate = data.date;
@@ -2251,22 +2381,55 @@
             elements.volaCamera.addEventListener('change', () => {
                 state.volaCamera = elements.volaCamera.value;
                 updateCameraOffsetDisplay();
+                updateSectionInfo();
             });
 
-            // Vola view change
-            elements.volaView.addEventListener('change', () => {
-                state.volaView = elements.volaView.value;
+            // Output destination toggle
+            elements.outputToStaging.addEventListener('change', updateOutputDestDisplay);
+
+            // Vola file change - update section info and auto-detect date
+            elements.volaFile.addEventListener('change', () => {
+                updateSectionInfo();
+                autoDetectRaceDate();
             });
 
-            // Vola race change - reload data if we have a file selected
-            elements.volaRace.addEventListener('change', () => {
-                if (elements.volaFile.value && state.volaRacers.length > 0) {
-                    loadVolaData();
-                }
-            });
+            // Race date: "Available dates" button
+            elements.loadRecordingDates.addEventListener('click', loadAvailableDates);
 
             // Load Vola data button
             elements.loadVolaData.addEventListener('click', loadVolaData);
+
+            // Populate manifest button
+            elements.populateManifest.addEventListener('click', async () => {
+                if (!state.raceSlug) {
+                    showStatus('No race detected', 'error');
+                    return;
+                }
+                elements.populateManifest.innerHTML = '<span class="spinner"></span>Updating...';
+                elements.populateManifest.disabled = true;
+                try {
+                    const res = await fetch('/api/montages/populate-manifest', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ race_slug: state.raceSlug })
+                    });
+                    const data = await res.json();
+                    if (data.error) {
+                        showStatus(data.error, 'error');
+                    } else {
+                        elements.populateManifestResult.innerHTML =
+                            `Updated <strong>${data.updated_count}</strong> montage entries ` +
+                            `(cameras: ${data.cameras_found.join(', ')})`;
+                        elements.populateManifestResult.style.display = 'block';
+                        showStatus(`Manifest updated: ${data.updated_count} montages`, 'success');
+                    }
+                } catch (e) {
+                    showStatus('Failed to update manifest', 'error');
+                } finally {
+                    elements.populateManifest.innerHTML = 'Update Race Manifest';
+                    elements.populateManifest.disabled = false;
+                }
+            });
 
             // Video dropdown change - load video info
             elements.videoDropdown.addEventListener('change', () => {
@@ -2468,6 +2631,8 @@
                 elements.frameCard.style.display = 'block';
                 elements.configCard.style.display = 'block';
                 elements.saveSection.style.display = 'block';
+                elements.outputDestSection.style.display = 'block';
+                updateOutputDestDisplay();
 
                 // Setup drawing handlers
                 setupDrawingHandlers();
@@ -2835,10 +3000,55 @@
                         config.vola_videos = state.volaVideos;  // Videos to process
                         config.vola_race = state.volaRace;
                         config.vola_camera = state.volaCamera;
-                        config.vola_view = state.volaView;  // View number 1-5 for filename
                         config.num_athletes = state.numAthletes;
-                        // Use date from Vola data or parse from filename
-                        config.race_date = state.raceDate || new Date().toISOString().split('T')[0];
+                    }
+
+                    // Use date from Vola data or parse from filename
+                    config.race_date = state.raceDate || new Date().toISOString().split('T')[0];
+
+                    // Always refresh section info before saving
+                    if (elements.volaFile.value && elements.volaCamera.value) {
+                        await updateSectionInfo();
+                    }
+
+                    // Direct fallback: if section info still missing, fetch it inline
+                    if (!state.sectionId && elements.volaFile.value) {
+                        try {
+                            const camRes = await fetch(`/api/race-manifest/cameras?vola_file=${encodeURIComponent(elements.volaFile.value)}`);
+                            const camData = await camRes.json();
+                            const camId = elements.volaCamera.value || cameraId;
+                            const match = (camData.cameras || []).find(c => c.edge_camera === camId);
+                            if (match) {
+                                state.sectionId = match.id;
+                                state.raceSlug = camData.race_slug || '';
+                                state.stagingDir = camData.staging_dir || '';
+                                const volaFilename = elements.volaFile.value.split('/').pop();
+                                const runMatch = volaFilename.match(/run(\d+)/i);
+                                state.runNumber = runMatch ? `run${runMatch[1]}` : 'run1';
+                                console.log('Staging info resolved via fallback:', state.sectionId, state.raceSlug, state.runNumber);
+                            }
+                        } catch (e) {
+                            console.error('Failed to resolve staging info:', e);
+                        }
+                    }
+
+                    console.log('Staging check:', {
+                        outputToStaging: elements.outputToStaging.checked,
+                        sectionId: state.sectionId,
+                        raceSlug: state.raceSlug,
+                        stagingDir: state.stagingDir,
+                        runNumber: state.runNumber
+                    });
+
+                    // Section/staging info for batch processing (when checkbox is checked)
+                    if (elements.outputToStaging.checked && state.sectionId) {
+                        config.section_id = state.sectionId;       // e.g., "Cam1"
+                        config.race_slug = state.raceSlug;         // e.g., "western-q-2026-02-22"
+                        config.staging_dir = state.stagingDir;     // e.g., "/Volumes/OWC_48/data/montages/western-q-2026-02-22"
+                        config.run_number = state.runNumber;       // e.g., "run1"
+                    } else if (elements.outputToStaging.checked && !state.sectionId) {
+                        console.warn('⚠️ Output to staging checked but section info missing! Output will go to edge/output/');
+                        showStatus('Warning: Section info not found — output will go to edge/output/ instead of staging. Select a Vola file and camera first.', 'error');
                     }
                 }
 
@@ -3375,11 +3585,6 @@
                     ? '<option value="">No Vola files found</option>'
                     : files.map(f => `<option value="${f.path}">${f.name}</option>`).join('');
 
-                const resStartlist = await fetch('/api/vola/startlist-files');
-                const startlistFiles = await resStartlist.json();
-                elements.stitchStartlistFile.innerHTML = '<option value="">-- None (use bib numbers) --</option>' +
-                    startlistFiles.map(f => `<option value="${f.path}">${f.name}</option>`).join('');
-
                 const resResults = await fetch('/api/vola/results-files');
                 const resultsFiles = await resResults.json();
                 elements.stitchResultsFile.innerHTML = '<option value="">-- None --</option>' +
@@ -3539,12 +3744,10 @@
 
         async function loadStitchRacers() {
             const volaFile = elements.stitchVolaFile.value;
-            const race = elements.stitchRace.value;
-            const startlistFile = elements.stitchStartlistFile.value;
             const resultsFile = elements.stitchResultsFile.value;
 
             if (!volaFile) {
-                showStatus('Please select a Vola file', 'error');
+                showStatus('Please select a Vola timing file', 'error');
                 return;
             }
 
@@ -3555,8 +3758,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         vola_file: volaFile,
-                        race: race,
-                        startlist_file: startlistFile,
                         results_file: resultsFile
                     })
                 });
@@ -3711,7 +3912,9 @@
             }
 
             const cuts = getStitchCuts();
-            const raceName = elements.stitchRace.value.toLowerCase().replace(/\s+/g, '_');
+            // Derive race name from CSV filename (e.g., "girls-run1.csv" -> "girls-run1")
+            const volaFileName = elements.stitchVolaFile.value.split('/').pop().replace('.csv', '');
+            const raceName = volaFileName.toLowerCase().replace(/\s+/g, '_');
             const generateComparison = elements.stitchGenerateComparison.checked;
             const testCount = parseInt(elements.stitchTestCount.value) || 0;
 
@@ -3861,14 +4064,12 @@
         }
 
         function updateRaceInfoFromSelection() {
-            // Update age group and run fields based on selected race
-            const race = elements.stitchRace.value;
-            let ageGroup = 'U12';
+            // Update run field based on selected CSV filename
+            const volaFile = elements.stitchVolaFile.value || '';
+            const fileName = volaFile.split('/').pop().toLowerCase();
             let runNum = 'Run 1';
-            if (race.toLowerCase().includes('u14')) ageGroup = 'U14';
-            if (race.toLowerCase().includes('run 2')) runNum = 'Run 2';
+            if (fileName.includes('run2') || fileName.includes('run-2')) runNum = 'Run 2';
 
-            elements.raceInfoAgeGroup.value = ageGroup;
             elements.raceInfoRun.value = runNum;
         }
 
@@ -3885,8 +4086,8 @@
             elements.stitchSaveConfig.addEventListener('click', saveStitchConfig);
             elements.stitchStartProcess.addEventListener('click', startStitchProcess);
             elements.stitchStopProcess.addEventListener('click', stopStitchProcess);
-            // Update race info fields when race selection changes
-            elements.stitchRace.addEventListener('change', updateRaceInfoFromSelection);
+            // Update race info fields when vola file selection changes
+            elements.stitchVolaFile.addEventListener('change', updateRaceInfoFromSelection);
 
             // Processing location toggle
             elements.stitchProcessLocation.addEventListener('change', function() {
@@ -3907,7 +4108,9 @@
 
         // Generate command for server processing
         async function generateServerCommand() {
-            const race = elements.stitchRace.value;
+            // Derive race from CSV filename
+            const volaFileName = (elements.stitchVolaFile.value || '').split('/').pop().replace('.csv', '');
+            const race = volaFileName.toLowerCase().replace(/\s+/g, '_');
             const testCount = parseInt(elements.stitchTestCount.value) || 0;
             const generateComparison = elements.stitchGenerateComparison.checked;
             const preBuffer = parseFloat(elements.stitchPreBuffer.value) || 2.0;
@@ -4672,6 +4875,8 @@
                 elements.frameCard.style.display = 'block';
                 elements.configCard.style.display = 'block';
                 elements.saveSection.style.display = 'block';
+                elements.outputDestSection.style.display = 'block';
+                updateOutputDestDisplay();
 
                 // Setup drawing handlers and reset zones
                 setupDrawingHandlers();

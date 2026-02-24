@@ -101,6 +101,12 @@ class SkiFramesRunner:
         # Race info for overlay (same format as video stitcher)
         self.race_info: Dict = self.raw_config.get('race_info', {})
 
+        # Section/staging config for batch processing recorded videos
+        self.section_id: str = self.raw_config.get('section_id', '')     # e.g., "Cam1"
+        self.run_number: str = self.raw_config.get('run_number', '')     # e.g., "run1"
+        self.staging_dir: str = self.raw_config.get('staging_dir', '')   # e.g., "/Volumes/OWC_48/data/montages/western-q-2026-02-22"
+        self.race_slug: str = self.raw_config.get('race_slug', '')       # e.g., "western-q-2026-02-22"
+
         # Videos to process (from Vola API)
         self.vola_videos: List[Dict] = self.raw_config.get('vola_videos', [])
 
@@ -113,9 +119,32 @@ class SkiFramesRunner:
         # Set metrics path for live detection chart
         self.engine.metrics_path = os.path.join(self.session_dir, 'detection_metrics.json')
 
+        # If staging mode (batch processing), create staging output dir
+        if self.section_id and self.staging_dir and self.run_number:
+            self.staging_output_dir = os.path.join(self.staging_dir, self.section_id, self.run_number)
+            os.makedirs(self.staging_output_dir, exist_ok=True)
+            # Write metadata for populate-manifest to know gender context
+            gender = 'girls' if 'girl' in self.vola_race.lower() else 'boys' if 'boy' in self.vola_race.lower() else ''
+            meta = {
+                'vola_file': self.vola_race,
+                'gender': gender,
+                'section_id': self.section_id,
+                'run_number': self.run_number,
+                'race_slug': self.race_slug,
+            }
+            meta_path = os.path.join(self.staging_output_dir, '_meta.json')
+            with open(meta_path, 'w') as mf:
+                import json as _json
+                _json.dump(meta, mf, indent=2)
+        else:
+            self.staging_output_dir = None
+
         print(f"SkiFrames Runner initialized")
         print(f"  Session: {self.config.session_id}")
         print(f"  Output: {self.session_dir}")
+        if self.staging_output_dir:
+            print(f"  Staging: {self.staging_output_dir}")
+            print(f"  Section: {self.section_id}, Run: {self.run_number}")
         print(f"  Montage FPS list: {self.montage_fps_list}")
         if self.vola_racers:
             print(f"  Vola racers loaded: {len(self.vola_racers)} ({self.vola_race})")
@@ -337,21 +366,18 @@ class SkiFramesRunner:
         if run.start_time and self.vola_racers:
             racer = self._find_matching_racer_by_timestamp(run.start_time)
 
-        custom_filename = self._generate_filename(racer, run.run_number)
-
         if racer:
             print(f"  Matched to racer: Bib {racer.get('bib')} ({racer.get('team', 'no team')})")
 
         # Get run duration for overlay display
         run_duration = run.duration if run.end_time else self.raw_config.get('run_duration_seconds')
 
-        # Get folder path for Team/Run_View organization
-        output_folder = self._get_output_folder(racer)
+        # Compute elapsed time for overlay
+        elapsed_time = round(run.duration, 2) if run.end_time else None
 
         # Build race title for overlay (fallback if no race_info)
         race_title = ""
         if not self.race_info and self.vola_race:
-            # Extract age group from vola_race (e.g., "U12 run 1" -> "U12")
             age_group = ""
             if "U12" in self.vola_race.upper():
                 age_group = "U12"
@@ -364,34 +390,116 @@ class SkiFramesRunner:
             if age_group:
                 race_title = f"Western Division {age_group} Ranking - SL"
 
-        # Generate montages at each selected FPS value, merge into single run entry
+        # Staging mode: output to {staging_dir}/{CamX}/{runN}/ with bib-based filenames
+        # Include gender prefix to avoid collisions (boys/girls share bib numbers)
         merged_results = {}
-        for fps_val in self.montage_fps_list:
-            # Append FPS to filename to distinguish variants
-            fps_suffix = f"_{fps_val:.1f}fps"
-            fps_filename = f"{custom_filename}{fps_suffix}" if custom_filename else None
+        if self.staging_output_dir and racer:
+            bib = racer.get('bib', run.run_number)
+            gender_prefix = 'g' if 'girl' in self.vola_race.lower() else 'b' if 'boy' in self.vola_race.lower() else ''
+            staging_filename = f"{gender_prefix}{bib}" if gender_prefix else str(bib)
 
-            # Compute elapsed time for overlay
-            elapsed_time = round(run.duration, 2) if run.end_time else None
+            for fps_val in self.montage_fps_list:
+                fps_suffix = f"_{fps_val:.1f}fps"
+                fps_filename = f"{staging_filename}{fps_suffix}"
 
-            result = generate_montage(
-                frames=run.frames,
-                run_number=run.run_number,
-                timestamp=run.start_time,
-                output_dir=self.session_dir,
-                session_id=self.config.session_id,
-                start_zone=self.raw_config.get('start_zone'),
-                end_zone=self.raw_config.get('end_zone'),
-                crop_zone=self.raw_config.get('crop_zone'),
-                source_fps=self.source_fps,
-                montage_fps=fps_val,
-                custom_filename=fps_filename,  # Pass custom filename with FPS suffix
-                run_view_folder=output_folder,  # Pass folder path (Team/Run1_View1)
-                run_duration_sec=run_duration,  # Pass duration for overlay display
-                race_title=race_title,  # Pass race title for overlay (fallback)
-                race_info=self.race_info,  # Pass race info for overlay (preferred)
-                elapsed_time=elapsed_time,  # Pass elapsed time for overlay
-            )
+                result = generate_montage(
+                    frames=run.frames,
+                    run_number=run.run_number,
+                    timestamp=run.start_time,
+                    output_dir=self.staging_output_dir,
+                    session_id=self.config.session_id,
+                    start_zone=self.raw_config.get('start_zone'),
+                    end_zone=self.raw_config.get('end_zone'),
+                    crop_zone=self.raw_config.get('crop_zone'),
+                    source_fps=self.source_fps,
+                    montage_fps=fps_val,
+                    custom_filename=fps_filename,
+                    run_view_folder=None,  # Flat output, no subfolders
+                    run_duration_sec=run_duration,
+                    race_title=race_title,
+                    race_info=self.race_info,
+                    elapsed_time=elapsed_time,
+                )
+
+                if result:
+                    fps_key = f"{fps_val:.1f}fps"
+                    for variant_key, montage_result in result.results.items():
+                        merged_results[fps_key] = montage_result
+
+            # Save per-bib timing data for section time estimation
+            import json as _json2
+            timing_filename = f"{staging_filename}_timing.json"
+            timing_path = os.path.join(self.staging_output_dir, timing_filename)
+            timing_data = {
+                'bib': bib,
+                'gender': 'F' if gender_prefix == 'g' else 'M' if gender_prefix == 'b' else '',
+                'section_elapsed_sec': round(run.duration, 2) if run.end_time else None,
+                'start_trigger_time': run.start_time.isoformat() if run.start_time else None,
+                'end_trigger_time': run.end_time.isoformat() if run.end_time else None,
+            }
+            with open(timing_path, 'w') as tf:
+                _json2.dump(timing_data, tf, indent=2)
+
+            # Generate video clip in staging directory
+            try:
+                video_filename = f"{staging_filename}.mp4"
+                video_out_path = os.path.join(self.staging_output_dir, video_filename)
+
+                # Build crop region (same as montage)
+                vid_crop_region = self.raw_config.get('crop_zone')
+                if not vid_crop_region and self.raw_config.get('start_zone') and self.raw_config.get('end_zone'):
+                    try:
+                        from montage import CropRegion
+                        frame_h, frame_w = run.frames[0].shape[:2]
+                        cr = CropRegion.from_zones(
+                            self.raw_config['start_zone'],
+                            self.raw_config['end_zone'],
+                            frame_w, frame_h
+                        )
+                        vid_crop_region = {'x': cr.x, 'y': cr.y, 'w': cr.w, 'h': cr.h}
+                    except Exception:
+                        pass
+
+                staging_video_path = generate_video_clip(
+                    frames=run.frames,
+                    output_path=video_out_path,
+                    source_fps=self.source_fps,
+                    crop_region=vid_crop_region,
+                )
+                if staging_video_path:
+                    size_kb = os.path.getsize(staging_video_path) / 1024
+                    print(f"  Video clip: {video_filename} ({size_kb:.0f} KB)")
+            except Exception as e:
+                print(f"  Video clip skipped: {e}")
+
+            print(f"  Staged: {self.staging_output_dir}/{staging_filename}*.jpg")
+        else:
+            # Normal mode: output to session dir with name/bib filenames
+            custom_filename = self._generate_filename(racer, run.run_number)
+            output_folder = self._get_output_folder(racer)
+
+            for fps_val in self.montage_fps_list:
+                fps_suffix = f"_{fps_val:.1f}fps"
+                fps_filename = f"{custom_filename}{fps_suffix}" if custom_filename else None
+
+                result = generate_montage(
+                    frames=run.frames,
+                    run_number=run.run_number,
+                    timestamp=run.start_time,
+                    output_dir=self.session_dir,
+                    session_id=self.config.session_id,
+                    start_zone=self.raw_config.get('start_zone'),
+                    end_zone=self.raw_config.get('end_zone'),
+                    crop_zone=self.raw_config.get('crop_zone'),
+                    source_fps=self.source_fps,
+                    montage_fps=fps_val,
+                    custom_filename=fps_filename,
+                    run_view_folder=output_folder,
+                    run_duration_sec=run_duration,
+                    race_title=race_title,
+                    race_info=self.race_info,
+                    elapsed_time=elapsed_time,
+                )
 
             if result:
                 # Use FPS value as variant key (e.g., "4.0fps")

@@ -7,10 +7,12 @@
 let manifest = null;
 let terrainMeta = null;
 let leafletMap = null;
-let activeView = 'map3d';
+let activeView = 'results';
 let activeCategory = 'U12_Girls';
 let activeRun = 'run1';
 let filterTeam = '';
+let sortColumn = '';     // '', 'rank', 'time', or 'sectionTime_Cam1', etc.
+let sortDirection = '';  // '', 'asc', 'desc'
 
 // Three.js (loaded via import map)
 let THREE, OrbitControls;
@@ -53,11 +55,21 @@ async function init() {
 
     try {
         const [mResp, tResp] = await Promise.all([
-            fetch('race_manifest.json'),
+            fetch('race_manifest.json?v=' + Date.now()),
             fetch('terrain_meta.json?v2'),
         ]);
         manifest = await mResp.json();
         terrainMeta = await tResp.json();
+
+        // When served locally (localhost, 127.0.0.1, or file://), use local montage server
+        const host = window.location.hostname;
+        const isLocal = host === 'localhost' || host === '127.0.0.1' || window.location.protocol === 'file:';
+        if (isLocal) {
+            const raceSlug = manifest.media_base_url.split('/').pop();
+            manifest.media_base_url = `http://localhost:5000/montages/${raceSlug}`;
+            console.log('[race] Local mode — media_base_url overridden to:', manifest.media_base_url);
+        }
+
         console.log('[race] manifest loaded:', manifest.categories.length, 'categories');
         console.log('[race] terrain:', terrainMeta.width + 'x' + terrainMeta.height, 'at', terrainMeta.resolution_m + 'm resolution');
     } catch (e) {
@@ -69,6 +81,7 @@ async function init() {
     setupViewTabs();
     setupCategoryTabs();
     setupLightbox();
+    setupVideoLightbox();
     setupTeamFilter();
     setupSearch();
     renderResults();
@@ -91,7 +104,18 @@ function setupViewTabs() {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(view + '-view').classList.add('active');
             activeView = view;
-            if (view === 'map3d' && renderer) onResize3D();
+            if (view === 'map3d') {
+                if (renderer) {
+                    onResize3D();
+                } else {
+                    // Deferred init: 3D container was hidden at page load so init was skipped
+                    init3D().catch(e => {
+                        console.error('[race] 3D init failed:', e);
+                        document.getElementById('three-container').innerHTML =
+                            '<div style="padding:40px;color:#ef4444;">3D view error: ' + e.message + '</div>';
+                    });
+                }
+            }
             if (view === 'map2d') {
                 if (!leafletMap) initLeaflet();
                 else setTimeout(() => leafletMap.invalidateSize(), 100);
@@ -111,6 +135,7 @@ function setupCategoryTabs() {
             document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             activeCategory = tab.dataset.cat;
+            sortColumn = ''; sortDirection = '';
             renderResults();
         });
     });
@@ -2080,6 +2105,9 @@ function toggleMeasurements2D() {
         if (showMeasurements) l.addTo(leafletMap);
         else leafletMap.removeLayer(l);
     });
+    // Toggle measurement legend visibility
+    const legendEl = document.getElementById('legend-measurements-2d');
+    if (legendEl) legendEl.style.display = showMeasurements ? 'block' : 'none';
 }
 
 
@@ -2136,25 +2164,65 @@ function getActiveSections() {
     return sections;
 }
 
+/**
+ * Get section elapsed time for an athlete/camera/run.
+ * Returns number (seconds) or null.
+ */
+function getSectionTime(athlete, camId, runKey) {
+    if (!athlete.montages || !athlete.montages[camId] || !athlete.montages[camId][runKey]) return null;
+    return athlete.montages[camId][runKey].section_time || null;
+}
+
+window.handleSort = function handleSort(column) {
+    if (sortColumn === column) {
+        // Cycle: asc → desc → off
+        if (sortDirection === 'asc') sortDirection = 'desc';
+        else { sortColumn = ''; sortDirection = ''; }
+    } else {
+        sortColumn = column;
+        sortDirection = 'asc';
+    }
+    renderResults();
+}
+
 function renderResults() {
     const cat = manifest.categories.find(c => c.id === activeCategory);
     if (!cat) return;
 
     const tbody = document.getElementById('results-body');
-    const thead = document.querySelector('#results-table thead tr');
+    const thead = document.getElementById('results-thead');
 
     // Get sections active for this run
     const activeSections = getActiveSections();
 
-    // Update table header dynamically
-    thead.innerHTML = `
-        <th class="col-rank">Run Rank</th>
-        <th class="col-bib">Bib</th>
-        <th class="col-name">Name</th>
-        <th class="col-club">Club</th>
-        <th class="col-time">Time</th>
-        <th class="col-sections">Sections</th>
-    `;
+    // Build table header with two rows: group labels + column headers
+    const sectionColCount = activeSections.length * 2; // time + montage btn per section
+    let headerHtml = '<tr>';
+    // Group: Official Results (rank + time = 2 cols)
+    headerHtml += `<th class="th-group th-group-official" colspan="2">Official Results</th>`;
+    // Identity (bib + name + club = 3 cols)
+    headerHtml += `<th class="th-group" colspan="3"></th>`;
+    // Group: Unofficial section times (1 time col + 1 montage col per section)
+    if (activeSections.length > 0) {
+        headerHtml += `<th class="th-group th-group-unofficial" colspan="${sectionColCount}">Unofficial Camera Estimated Section Times</th>`;
+    }
+    headerHtml += '</tr><tr>';
+    // Column headers row
+    const rankSortCls = sortColumn === 'rank' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+    const timeSortCls = sortColumn === 'time' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+    headerHtml += `<th class="col-rank sortable ${rankSortCls}" onclick="handleSort('rank')">Rank <span class="sort-arrow">${sortColumn === 'rank' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
+    headerHtml += `<th class="col-time sortable ${timeSortCls}" onclick="handleSort('time')">Time <span class="sort-arrow">${sortColumn === 'time' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
+    headerHtml += `<th class="col-bib">Bib</th>`;
+    headerHtml += `<th class="col-name">Name</th>`;
+    headerHtml += `<th class="col-club">Club</th>`;
+    activeSections.forEach(({ cam, sectionIdx }) => {
+        const colKey = 'sectionTime_' + cam.id;
+        const stSortCls = sortColumn === colKey ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+        headerHtml += `<th class="col-section-time sortable ${stSortCls}" onclick="handleSort('${colKey}')">S${sectionIdx} Time <span class="sort-arrow">${sortColumn === colKey ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
+        headerHtml += `<th class="col-montages">S${sectionIdx}</th>`;
+    });
+    headerHtml += '</tr>';
+    thead.innerHTML = headerHtml;
 
     // Filter athletes: exclude DNS for this run
     const allAthletes = cat.athletes.filter(a => {
@@ -2171,8 +2239,29 @@ function renderResults() {
         athletes = athletes.filter(a => a.club === filterTeam);
     }
 
-    // Sort: ranked first (by rank), then DNF/DSQ
+    // Sort
     athletes.sort((a, b) => {
+        // Custom sort by column
+        if (sortColumn && sortDirection) {
+            let va, vb;
+            if (sortColumn === 'rank') {
+                va = ranks[a.bib] || 9999;
+                vb = ranks[b.bib] || 9999;
+            } else if (sortColumn === 'time') {
+                const ta = getRunTime(a), tb = getRunTime(b);
+                va = (ta.status === 'finished' && ta.time != null) ? ta.time : 9999;
+                vb = (tb.status === 'finished' && tb.time != null) ? tb.time : 9999;
+            } else if (sortColumn.startsWith('sectionTime_')) {
+                const camId = sortColumn.replace('sectionTime_', '');
+                va = getSectionTime(a, camId, activeRun) || 9999;
+                vb = getSectionTime(b, camId, activeRun) || 9999;
+            }
+            if (va !== undefined) {
+                const cmp = va - vb;
+                return sortDirection === 'desc' ? -cmp : cmp;
+            }
+        }
+        // Default: ranked first (by rank), then DNF/DSQ
         const ra = ranks[a.bib], rb = ranks[b.bib];
         if (ra && rb) return ra - rb;
         if (ra) return -1;
@@ -2188,18 +2277,33 @@ function athleteRow(a, cat, ranks, activeSections) {
     const { time, status } = getRunTime(a);
 
     let html = `<tr data-bib="${a.bib}">`;
+    // Official results group
     html += `<td class="col-rank"><span class="rank-val">${rank || ''}</span></td>`;
+    html += `<td class="col-time">${formatTimeCell(time, status)}</td>`;
+    // Identity group
     html += `<td class="col-bib">${a.bib}</td>`;
     html += `<td class="col-name">${a.first} ${a.last}</td>`;
     html += `<td class="col-club">${a.club}</td>`;
-    html += `<td class="col-time">${formatTimeCell(time, status)}</td>`;
-    html += '<td class="col-sections">';
+    // Section times + montage buttons
     activeSections.forEach(({ cam, sectionIdx }) => {
-        const montageKey = activeRun; // montages keyed by run
+        const montageKey = activeRun;
+        const sectionTime = getSectionTime(a, cam.id, montageKey);
         const hasMontage = a.montages && a.montages[cam.id] && a.montages[cam.id][montageKey];
-        html += `<button class="section-btn ${hasMontage ? 'active' : 'inactive'}" ${hasMontage ? `onclick="window._openMontage('${cam.id}',${a.bib},'${cat.id}')"` : ''}>S${sectionIdx}</button>`;
+
+        // Section time cell
+        if (sectionTime != null) {
+            html += `<td class="col-section-time"><span class="section-time-val">${sectionTime.toFixed(1)}</span></td>`;
+        } else {
+            html += `<td class="col-section-time"><span class="section-time-na">&mdash;</span></td>`;
+        }
+        // Montage + Video buttons cell
+        const hasVideo = hasMontage && a.montages[cam.id][montageKey].video;
+        html += '<td class="col-montages">';
+        html += `<button class="section-btn ${hasMontage ? 'active' : 'inactive'}" ${hasMontage ? `onclick="window._openMontage('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Photo montage"><span style="font-size:14px">${hasMontage ? '\uD83D\uDDBC' : ''}</span></button>`;
+        html += `<button class="section-btn-video ${hasVideo ? 'active' : 'inactive'}" ${hasVideo ? `onclick="window._openVideo('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Video clip">${hasVideo ? '\u25B6' : ''}</button>`;
+        html += '</td>';
     });
-    html += '</td></tr>';
+    html += '</tr>';
     return html;
 }
 
@@ -2262,6 +2366,136 @@ function showLightbox() {
 }
 
 function closeLB() { document.getElementById('lightbox').classList.add('hidden'); }
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// VIDEO LIGHTBOX
+// ══════════════════════════════════════════════════════════════════════════
+
+let vlbList = [];
+let vlbIdx = 0;
+let vlbSpeed = 1;
+
+window._openVideo = function (camId, bib, catId) {
+    const cat = manifest.categories.find(c => c.id === catId);
+    if (!cat) return;
+    const athlete = cat.athletes.find(a => a.bib === bib);
+    if (!athlete || !athlete.montages || !athlete.montages[camId]) return;
+
+    const runKey = activeRun;
+    vlbList = cat.athletes
+        .filter(a => a.montages && a.montages[camId] && a.montages[camId][runKey] && a.montages[camId][runKey].video)
+        .map(a => ({ athlete: a, camId, catId, runKey }));
+    vlbIdx = vlbList.findIndex(item => item.athlete.bib === bib);
+    if (vlbIdx < 0) vlbIdx = 0;
+    showVideoLightbox();
+};
+
+function setupVideoLightbox() {
+    const vlb = document.getElementById('video-lightbox');
+    if (!vlb) return;
+
+    vlb.querySelector('.vlb-backdrop').addEventListener('click', closeVLB);
+    vlb.querySelector('.vlb-close').addEventListener('click', closeVLB);
+    vlb.querySelector('.vlb-prev').addEventListener('click', () => { if (vlbIdx > 0) { vlbIdx--; showVideoLightbox(); } });
+    vlb.querySelector('.vlb-next').addEventListener('click', () => { if (vlbIdx < vlbList.length - 1) { vlbIdx++; showVideoLightbox(); } });
+
+    // Play/Pause button
+    const playBtn = document.getElementById('vlb-play-btn');
+    const video = document.getElementById('vlb-video');
+
+    playBtn.addEventListener('click', () => {
+        if (video.paused) {
+            video.play();
+        } else {
+            video.pause();
+        }
+    });
+
+    video.addEventListener('play', () => { playBtn.innerHTML = '&#10074;&#10074;'; });
+    video.addEventListener('pause', () => { playBtn.innerHTML = '&#9654;'; });
+    video.addEventListener('ended', () => {
+        playBtn.innerHTML = '&#9654;';
+        // Loop: restart from beginning
+        video.currentTime = 0;
+    });
+
+    // Time update → scrubber + time display
+    video.addEventListener('timeupdate', () => {
+        if (video.duration && !isNaN(video.duration)) {
+            const pct = (video.currentTime / video.duration) * 1000;
+            document.getElementById('vlb-scrubber').value = pct;
+            document.getElementById('vlb-time').textContent =
+                `${video.currentTime.toFixed(2)}s / ${video.duration.toFixed(2)}s`;
+        }
+    });
+
+    // Scrubber seek
+    const scrubber = document.getElementById('vlb-scrubber');
+    scrubber.addEventListener('input', () => {
+        if (video.duration && !isNaN(video.duration)) {
+            video.currentTime = (scrubber.value / 1000) * video.duration;
+        }
+    });
+
+    // Speed buttons
+    vlb.querySelectorAll('.vlb-speed').forEach(btn => {
+        btn.addEventListener('click', () => {
+            vlbSpeed = parseFloat(btn.dataset.speed);
+            video.playbackRate = vlbSpeed;
+            vlb.querySelectorAll('.vlb-speed').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', e => {
+        if (vlb.classList.contains('hidden')) return;
+        if (e.key === 'Escape') closeVLB();
+        if (e.key === 'ArrowLeft' && vlbIdx > 0) { vlbIdx--; showVideoLightbox(); }
+        if (e.key === 'ArrowRight' && vlbIdx < vlbList.length - 1) { vlbIdx++; showVideoLightbox(); }
+        if (e.key === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+    });
+}
+
+function showVideoLightbox() {
+    const vlb = document.getElementById('video-lightbox');
+    const item = vlbList[vlbIdx];
+    if (!item) return;
+    const a = item.athlete;
+    const runKey = item.runKey || activeRun;
+    const montage = a.montages[item.camId][runKey];
+    if (!montage || !montage.video) return;
+
+    const videoUrl = manifest.media_base_url + '/' + montage.video;
+    const sectionIdx = manifest.cameras.findIndex(c => c.id === item.camId);
+    const runLabel = runKey === 'run1' ? 'Run 1' : 'Run 2';
+    const sectionLabel = 'Section ' + (sectionIdx + 1);
+
+    vlb.classList.remove('hidden');
+
+    const video = document.getElementById('vlb-video');
+    video.src = videoUrl;
+    video.playbackRate = vlbSpeed;
+    video.load();
+    video.play().catch(() => {}); // Autoplay (may fail on mobile without interaction)
+
+    document.getElementById('vlb-name').textContent = `${a.first} ${a.last} (#${a.bib})`;
+    document.getElementById('vlb-details').textContent = `${runLabel} | ${sectionLabel} | Video`;
+    document.getElementById('vlb-time').textContent = '0.00s / 0.00s';
+    document.getElementById('vlb-scrubber').value = 0;
+
+    vlb.querySelector('.vlb-prev').style.display = vlbIdx > 0 ? '' : 'none';
+    vlb.querySelector('.vlb-next').style.display = vlbIdx < vlbList.length - 1 ? '' : 'none';
+}
+
+function closeVLB() {
+    const vlb = document.getElementById('video-lightbox');
+    const video = document.getElementById('vlb-video');
+    video.pause();
+    video.src = '';
+    vlb.classList.add('hidden');
+}
 
 
 // ── Boot ─────────────────────────────────────────────────────────────────
