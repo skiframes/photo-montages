@@ -84,6 +84,7 @@ async function init() {
     setupVideoLightbox();
     setupTeamFilter();
     setupSearch();
+    setupDocsScrollSpy();
     renderResults();
     console.log('[race] UI setup complete');
 
@@ -296,6 +297,41 @@ function setupSearch() {
             resultsDiv.classList.add('hidden');
             input.blur();
         }
+    });
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// DOCUMENTATION SCROLL-SPY
+// ══════════════════════════════════════════════════════════════════════════
+
+function setupDocsScrollSpy() {
+    const links = document.querySelectorAll('.docs-nav-link');
+    const articles = document.querySelectorAll('.docs-article');
+    const content = document.querySelector('.docs-content');
+    if (!content || articles.length === 0) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                links.forEach(l => l.classList.remove('active'));
+                const link = document.querySelector(`.docs-nav-link[href="#${entry.target.id}"]`);
+                if (link) link.classList.add('active');
+            }
+        });
+    }, { root: content, rootMargin: '-10% 0px -80% 0px', threshold: 0 });
+
+    articles.forEach(a => observer.observe(a));
+
+    // Sidebar click: smooth scroll to article
+    links.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const target = document.getElementById(link.getAttribute('href').slice(1));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
     });
 }
 
@@ -696,6 +732,114 @@ function animateFlatten(flatten) {
     }
 
     flattenAnim = requestAnimationFrame(step);
+}
+
+/**
+ * Focus the 3D camera on a specific course section.
+ * Switches to the 3D map tab, then animates camera to look at the
+ * center of the section's covered gates from a good viewing angle.
+ * @param {string} camId - Camera ID, e.g. 'Cam1', 'Cam2', 'Cam3'
+ */
+let sectionFocusAnim = null;
+window.focusOnSection = function focusOnSection(camId) {
+    // Switch to 3D map tab
+    const map3dTab = document.querySelector('#view-tabs .tab[data-view="map3d"]');
+    if (map3dTab) map3dTab.click();
+
+    // Wait for 3D to be ready then animate
+    const doFocus = () => {
+        if (!camera3d || !controls || !manifest || !manifest.course || !terrainMeta) {
+            console.warn('[race] 3D not ready for section focus');
+            return;
+        }
+
+        // If currently flattened, un-flatten first
+        if (isFlattened) {
+            isFlattened = false;
+            animateFlatten(false);
+        }
+
+        const cam = manifest.cameras.find(c => c.id === camId);
+        if (!cam) { console.warn('[race] Camera not found:', camId); return; }
+
+        const coverage = getCamCoverage(cam);
+        if (coverage.length === 0) return;
+
+        const course = manifest.course[activeRun] || manifest.course.run1;
+        const gates = course.gates || [];
+        const coveredGates = gates.filter(g => coverage.includes(g.number));
+        if (coveredGates.length === 0) return;
+
+        // Compute center of covered gates in 3D
+        const positions = coveredGates.map(g => geoTo3D(g.lat, g.lon, g.dem_elev || g.elev));
+        let cx = 0, cy = 0, cz = 0;
+        positions.forEach(p => { cx += p.x; cy += p.y; cz += p.z; });
+        cx /= positions.length;
+        cy /= positions.length;
+        cz /= positions.length;
+
+        // Target = center of covered gates (no shift)
+        const targetPoint = new THREE.Vector3(cx, cy, cz);
+
+        // Compute viewing angle: offset from center, elevated, looking at gates
+        // Use camera physical position if available for viewing direction hint
+        let viewOffsetX = 40, viewOffsetZ = -60;
+        if (cam.position && cam.position.lat) {
+            const camPos3d = geoTo3D(cam.position.lat, cam.position.lon,
+                cam.position.dem_elev || cam.position.elev || terrainMeta.elev_min + 50);
+            // Direction from gate center toward camera, but at a reasonable distance
+            const dx = camPos3d.x - cx;
+            const dz = camPos3d.z - cz;
+            const dist = Math.sqrt(dx * dx + dz * dz) || 1;
+            // Normalize and scale to a good viewing distance
+            viewOffsetX = (dx / dist) * 80;
+            viewOffsetZ = (dz / dist) * 80;
+        }
+
+        // Position camera at moderate height — lower = less tilt = more uphill (START) visible
+        const viewPos = new THREE.Vector3(cx + viewOffsetX, cy + 25, cz + viewOffsetZ);
+
+        // Animate camera
+        if (sectionFocusAnim) cancelAnimationFrame(sectionFocusAnim);
+        const duration = 800;
+        const startTime = performance.now();
+        const fromPos = camera3d.position.clone();
+        const fromTarget = controls.target.clone();
+
+        function step(now) {
+            const t = Math.min((now - startTime) / duration, 1);
+            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+            camera3d.position.lerpVectors(fromPos, viewPos, ease);
+            controls.target.lerpVectors(fromTarget, targetPoint, ease);
+            controls.update();
+
+            if (t < 1) {
+                sectionFocusAnim = requestAnimationFrame(step);
+            } else {
+                sectionFocusAnim = null;
+            }
+        }
+        sectionFocusAnim = requestAnimationFrame(step);
+    };
+
+    // If 3D not yet initialized, poll until ready (init3D is async)
+    if (!renderer || !camera3d) {
+        let retries = 0;
+        const poll = () => {
+            if (renderer && camera3d && controls) {
+                doFocus();
+            } else if (retries < 20) {
+                retries++;
+                setTimeout(poll, 200);
+            } else {
+                console.warn('[race] 3D did not initialize in time for section focus');
+            }
+        };
+        setTimeout(poll, 300);
+    } else {
+        doFocus();
+    }
 }
 
 function getTerrainElevAt(x, z) {
@@ -2195,19 +2339,22 @@ function renderResults() {
     // Get sections active for this run
     const activeSections = getActiveSections();
 
-    // Build table header with two rows: group labels + column headers
-    const sectionColCount = activeSections.length * 2; // time + montage btn per section
+    // Build table header with three rows: group labels, section labels, column headers
+    const sectionColCount = activeSections.length * 3; // time + PM + V per section
     let headerHtml = '<tr>';
-    // Group: Official Results (rank + time = 2 cols)
-    headerHtml += `<th class="th-group th-group-official" colspan="2">Official Results</th>`;
-    // Identity (bib + name + club = 3 cols)
-    headerHtml += `<th class="th-group" colspan="3"></th>`;
-    // Group: Unofficial section times (1 time col + 1 montage col per section)
+    // Row 1: Top-level group headers
+    headerHtml += `<th class="th-group th-group-official" colspan="2" rowspan="2">Official Results</th>`;
+    headerHtml += `<th class="th-group" colspan="3" rowspan="2"></th>`;
     if (activeSections.length > 0) {
-        headerHtml += `<th class="th-group th-group-unofficial" colspan="${sectionColCount}">Unofficial Camera Estimated Section Times</th>`;
+        headerHtml += `<th class="th-group th-group-unofficial" colspan="${sectionColCount}" style="text-align:center;">Unofficial Camera Estimated Section Times</th>`;
     }
     headerHtml += '</tr><tr>';
-    // Column headers row
+    // Row 2: Per-section sub-headers (clickable → focuses 3D map on that section)
+    activeSections.forEach(({ cam, sectionIdx }) => {
+        headerHtml += `<th class="th-section-group th-section-clickable" colspan="3" onclick="focusOnSection('${cam.id}')" title="Click to view Section ${sectionIdx} in 3D map">Section ${sectionIdx}</th>`;
+    });
+    headerHtml += '</tr><tr>';
+    // Row 3: Column headers
     const rankSortCls = sortColumn === 'rank' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
     const timeSortCls = sortColumn === 'time' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
     headerHtml += `<th class="col-rank sortable ${rankSortCls}" onclick="handleSort('rank')">Rank <span class="sort-arrow">${sortColumn === 'rank' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
@@ -2218,8 +2365,9 @@ function renderResults() {
     activeSections.forEach(({ cam, sectionIdx }) => {
         const colKey = 'sectionTime_' + cam.id;
         const stSortCls = sortColumn === colKey ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
-        headerHtml += `<th class="col-section-time sortable ${stSortCls}" onclick="handleSort('${colKey}')">S${sectionIdx} Time <span class="sort-arrow">${sortColumn === colKey ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
-        headerHtml += `<th class="col-montages">S${sectionIdx}</th>`;
+        headerHtml += `<th class="col-section-time sortable ${stSortCls}" onclick="handleSort('${colKey}')">Time <span class="sort-arrow">${sortColumn === colKey ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
+        headerHtml += `<th class="col-pm">PM</th>`;
+        headerHtml += `<th class="col-video">V</th>`;
     });
     headerHtml += '</tr>';
     thead.innerHTML = headerHtml;
@@ -2296,12 +2444,15 @@ function athleteRow(a, cat, ranks, activeSections) {
         } else {
             html += `<td class="col-section-time"><span class="section-time-na">&mdash;</span></td>`;
         }
-        // Montage + Video buttons cell
+        // PM button cell
+        html += `<td class="col-pm">`;
+        html += `<button class="section-btn ${hasMontage ? 'active' : 'inactive'}" ${hasMontage ? `onclick="window._openMontage('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Photo montage">${hasMontage ? 'PM' : ''}</button>`;
+        html += `</td>`;
+        // Video button cell
         const hasVideo = hasMontage && a.montages[cam.id][montageKey].video;
-        html += '<td class="col-montages">';
-        html += `<button class="section-btn ${hasMontage ? 'active' : 'inactive'}" ${hasMontage ? `onclick="window._openMontage('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Photo montage"><span style="font-size:14px">${hasMontage ? '\uD83D\uDDBC' : ''}</span></button>`;
-        html += `<button class="section-btn-video ${hasVideo ? 'active' : 'inactive'}" ${hasVideo ? `onclick="window._openVideo('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Video clip">${hasVideo ? '\u25B6' : ''}</button>`;
-        html += '</td>';
+        html += `<td class="col-video">`;
+        html += `<button class="section-btn-video ${hasVideo ? 'active' : 'inactive'}" ${hasVideo ? `onclick="window._openVideo('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Video clip">${hasVideo ? 'V' : ''}</button>`;
+        html += `</td>`;
     });
     html += '</tr>';
     return html;
@@ -2314,6 +2465,7 @@ function athleteRow(a, cat, ranks, activeSections) {
 
 let lbList = [];
 let lbIdx = 0;
+let lbSelectedFps = null;  // Currently selected FPS (null = default/middle)
 
 window._openMontage = function (camId, bib, catId) {
     const cat = manifest.categories.find(c => c.id === catId);
@@ -2352,10 +2504,20 @@ function showLightbox() {
     const runKey = item.runKey || activeRun;
     const montage = a.montages[item.camId][runKey];
     if (!montage) return;
-    const thumbUrl = manifest.media_base_url + '/' + montage.thumb;
+
     const sectionIdx = manifest.cameras.findIndex(c => c.id === item.camId);
     const runLabel = runKey === 'run1' ? 'Run 1' : 'Run 2';
     const sectionLabel = 'Section ' + (sectionIdx + 1);
+
+    // Determine which image to show (selected FPS or default)
+    let thumbUrl = manifest.media_base_url + '/' + montage.thumb;
+    const variants = montage.fps_variants || [];
+    if (lbSelectedFps !== null && variants.length > 0) {
+        const match = variants.find(v => v.fps === lbSelectedFps);
+        if (match) {
+            thumbUrl = manifest.media_base_url + '/' + match.thumb;
+        }
+    }
 
     lb.classList.remove('hidden');
     document.getElementById('lb-img').src = thumbUrl;
@@ -2363,6 +2525,29 @@ function showLightbox() {
     document.getElementById('lb-details').textContent = `${runLabel} | ${sectionLabel}`;
     lb.querySelector('.lb-prev').style.display = lbIdx > 0 ? '' : 'none';
     lb.querySelector('.lb-next').style.display = lbIdx < lbList.length - 1 ? '' : 'none';
+
+    // FPS selector buttons
+    const fpsSel = document.getElementById('lb-fps-selector');
+    if (variants.length > 1) {
+        // Determine which fps is currently active
+        const activeFps = lbSelectedFps !== null ? lbSelectedFps
+            : variants[Math.floor(variants.length / 2)].fps;  // default = middle
+        fpsSel.innerHTML = variants.map(v => {
+            const isActive = v.fps === activeFps;
+            return `<button class="lb-fps-btn${isActive ? ' active' : ''}" data-fps="${v.fps}">${v.fps} img/s</button>`;
+        }).join('');
+        fpsSel.style.display = 'flex';
+
+        // Click handler for fps buttons
+        fpsSel.querySelectorAll('.lb-fps-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                lbSelectedFps = parseFloat(btn.dataset.fps);
+                showLightbox();  // Re-render with new fps
+            });
+        });
+    } else {
+        fpsSel.style.display = 'none';
+    }
 }
 
 function closeLB() { document.getElementById('lightbox').classList.add('hidden'); }
@@ -2397,6 +2582,8 @@ function setupVideoLightbox() {
 
     vlb.querySelector('.vlb-backdrop').addEventListener('click', closeVLB);
     vlb.querySelector('.vlb-close').addEventListener('click', closeVLB);
+    // Prevent clicks on content/controls from bubbling to backdrop and closing the lightbox
+    vlb.querySelector('.vlb-content').addEventListener('click', e => e.stopPropagation());
     vlb.querySelector('.vlb-prev').addEventListener('click', () => { if (vlbIdx > 0) { vlbIdx--; showVideoLightbox(); } });
     vlb.querySelector('.vlb-next').addEventListener('click', () => { if (vlbIdx < vlbList.length - 1) { vlbIdx++; showVideoLightbox(); } });
 
@@ -2404,15 +2591,46 @@ function setupVideoLightbox() {
     const playBtn = document.getElementById('vlb-play-btn');
     const video = document.getElementById('vlb-video');
 
-    playBtn.addEventListener('click', () => {
+    // Canvas overlay to show frozen frame when paused (prevents black screen)
+    const canvas = document.createElement('canvas');
+    canvas.id = 'vlb-canvas-overlay';
+    canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;border-radius:var(--radius);pointer-events:none;display:none;';
+    video.parentElement.style.position = 'relative';
+    video.parentElement.appendChild(canvas);
+
+    function captureFrameToCanvas() {
+        try {
+            if (!video.videoWidth || !video.videoHeight) return;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            canvas.style.display = 'block';
+        } catch (e) { /* cross-origin or not ready — ignore */ }
+    }
+
+    function hideCanvasOverlay() {
+        canvas.style.display = 'none';
+    }
+
+    function pauseAndShowFrame() {
+        video.pause();
+        captureFrameToCanvas();
+    }
+
+    function togglePlay() {
         if (video.paused) {
+            hideCanvasOverlay();
             video.play();
         } else {
-            video.pause();
+            pauseAndShowFrame();
         }
-    });
+    }
+    playBtn.addEventListener('click', togglePlay);
+    // Click video itself to toggle play/pause
+    video.addEventListener('click', togglePlay);
 
-    video.addEventListener('play', () => { playBtn.innerHTML = '&#10074;&#10074;'; });
+    video.addEventListener('play', () => { playBtn.innerHTML = '&#10074;&#10074;'; hideCanvasOverlay(); });
     video.addEventListener('pause', () => { playBtn.innerHTML = '&#9654;'; });
     video.addEventListener('ended', () => {
         playBtn.innerHTML = '&#9654;';
@@ -2430,13 +2648,46 @@ function setupVideoLightbox() {
         }
     });
 
-    // Scrubber seek
+    // Scrubber seek — pause on scrub
     const scrubber = document.getElementById('vlb-scrubber');
     scrubber.addEventListener('input', () => {
         if (video.duration && !isNaN(video.duration)) {
+            video.pause();
             video.currentTime = (scrubber.value / 1000) * video.duration;
         }
     });
+    // After scrub seek completes, capture frame so it doesn't go black
+    scrubber.addEventListener('change', () => {
+        if (video.paused) captureFrameToCanvas();
+    });
+
+    // Frame-by-frame stepping (1/30s ≈ 0.033s per frame)
+    const FRAME_DURATION = 1 / 30;
+
+    // Update time display after any seek (including frame steps)
+    video.addEventListener('seeked', () => {
+        if (video.duration && !isNaN(video.duration)) {
+            const pct = (video.currentTime / video.duration) * 1000;
+            document.getElementById('vlb-scrubber').value = pct;
+            document.getElementById('vlb-time').textContent =
+                `${video.currentTime.toFixed(3)}s / ${video.duration.toFixed(2)}s`;
+        }
+    });
+
+    function stepFrame(direction) {
+        if (!video.duration || isNaN(video.duration)) return;
+        video.pause();
+        const newTime = Math.max(0, Math.min(video.currentTime + (direction * FRAME_DURATION), video.duration));
+        video.currentTime = newTime;
+        // Capture frame to canvas overlay after seek completes
+        video.addEventListener('seeked', function onSeeked() {
+            video.removeEventListener('seeked', onSeeked);
+            captureFrameToCanvas();
+        });
+    }
+
+    document.getElementById('vlb-frame-back').addEventListener('click', (e) => { e.stopPropagation(); stepFrame(-1); });
+    document.getElementById('vlb-frame-fwd').addEventListener('click', (e) => { e.stopPropagation(); stepFrame(1); });
 
     // Speed buttons
     vlb.querySelectorAll('.vlb-speed').forEach(btn => {
@@ -2454,7 +2705,10 @@ function setupVideoLightbox() {
         if (e.key === 'Escape') closeVLB();
         if (e.key === 'ArrowLeft' && vlbIdx > 0) { vlbIdx--; showVideoLightbox(); }
         if (e.key === 'ArrowRight' && vlbIdx < vlbList.length - 1) { vlbIdx++; showVideoLightbox(); }
-        if (e.key === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+        if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+        // Frame stepping: , (comma) = back one frame, . (period) = forward one frame
+        if (e.key === ',') { e.preventDefault(); stepFrame(-1); }
+        if (e.key === '.') { e.preventDefault(); stepFrame(1); }
     });
 }
 
@@ -2474,11 +2728,20 @@ function showVideoLightbox() {
 
     vlb.classList.remove('hidden');
 
+    // Hide canvas overlay from previous video
+    const overlay = document.getElementById('vlb-canvas-overlay');
+    if (overlay) overlay.style.display = 'none';
+
     const video = document.getElementById('vlb-video');
     video.src = videoUrl;
     video.playbackRate = vlbSpeed;
     video.load();
-    video.play().catch(() => {}); // Autoplay (may fail on mobile without interaction)
+    // Show first frame paused, then auto-play
+    video.addEventListener('loadeddata', function onLoaded() {
+        video.removeEventListener('loadeddata', onLoaded);
+        video.currentTime = 0;
+        video.play().catch(() => {}); // Autoplay (may fail on mobile without interaction)
+    });
 
     document.getElementById('vlb-name').textContent = `${a.first} ${a.last} (#${a.bib})`;
     document.getElementById('vlb-details').textContent = `${runLabel} | ${sectionLabel} | Video`;
@@ -2493,7 +2756,11 @@ function closeVLB() {
     const vlb = document.getElementById('video-lightbox');
     const video = document.getElementById('vlb-video');
     video.pause();
-    video.src = '';
+    video.removeAttribute('src');
+    video.load(); // Release video resources
+    // Hide canvas overlay
+    const overlay = document.getElementById('vlb-canvas-overlay');
+    if (overlay) overlay.style.display = 'none';
     vlb.classList.add('hidden');
 }
 

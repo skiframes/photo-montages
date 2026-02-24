@@ -40,6 +40,7 @@
         <button class="tab active" data-view="results">Results</button>
         <button class="tab" data-view="map3d">3D Course</button>
         <button class="tab" data-view="map2d">2D Map</button>
+        <button class="tab" data-view="docs">Docs</button>
     </nav>
 
     <!-- 3D View -->
@@ -130,6 +131,826 @@
         </div>
     </div>
 
+    <!-- Documentation View -->
+    <div id="docs-view" class="view">
+        <div class="docs-layout">
+            <nav class="docs-sidebar">
+                <div class="docs-sidebar-header">Documentation</div>
+                <ul class="docs-nav">
+                    <li class="docs-nav-section">Getting Started</li>
+                    <li><a href="#doc-what-is" class="docs-nav-link active">What is Skiframes?</a></li>
+                    <li><a href="#doc-using-gallery" class="docs-nav-link">Using the Gallery</a></li>
+                    <li><a href="#doc-understanding" class="docs-nav-link">Understanding Results</a></li>
+
+                    <li class="docs-nav-section">For Coaches</li>
+                    <li><a href="#doc-camera-setup" class="docs-nav-link">Camera Setup</a></li>
+                    <li><a href="#doc-calibration" class="docs-nav-link">Calibration UI</a></li>
+                    <li><a href="#doc-processing" class="docs-nav-link">Processing Runs</a></li>
+                    <li><a href="#doc-tuning" class="docs-nav-link">Tuning Detection</a></li>
+
+                    <li class="docs-nav-section">Technical Reference</li>
+                    <li><a href="#doc-architecture" class="docs-nav-link">System Architecture</a></li>
+                    <li><a href="#doc-detection" class="docs-nav-link">Detection Engine</a></li>
+                    <li><a href="#doc-montage" class="docs-nav-link">Montage Generation</a></li>
+                    <li><a href="#doc-manifest" class="docs-nav-link">Race Manifest Format</a></li>
+                    <li><a href="#doc-terrain" class="docs-nav-link">3D Terrain Pipeline</a></li>
+                    <li><a href="#doc-api" class="docs-nav-link">API Reference</a></li>
+                </ul>
+            </nav>
+            <main class="docs-content">
+
+                <!-- ===== GETTING STARTED ===== -->
+
+                <article id="doc-what-is" class="docs-article">
+                    <h2>What is Skiframes?</h2>
+                    <p>Skiframes is an open-source video analytics platform for alpine ski racing. It automatically generates <strong>stop-motion photo montages</strong> from race video, showing an athlete's full run through a course section in a single image.</p>
+                    <p>The technique is inspired by <strong>Ron LeMaster's</strong> ski photography from <em>Ultimate Skiing</em>, where multiple exposures of a skier are composited onto a single background to reveal body position, line, and timing through a gate sequence.</p>
+
+                    <h3>How It Works</h3>
+                    <p>Cameras positioned along the race course record video at 30 frames per second. Software detects each skier entering and leaving the camera's field of view, extracts the relevant frames, and composites them into a single montage image. The result shows the skier's progression through 4-8 gates in one picture.</p>
+
+                    <div class="docs-diagram">
+<pre class="docs-code">Camera on course          Software detects run          Photo montage generated
+       |                         |                              |
+  [30fps video] ---> [Frame differencing] ---> [Stop-motion composite]
+       |                         |                              |
+  Records all day     Triggers on motion         One image per athlete
+                      in trigger zones           per camera section</pre>
+                    </div>
+
+                    <h3>This Race</h3>
+                    <p>This gallery covers the <strong>NHARA Western Division Qualifier Giant Slalom</strong> held on February 22, 2026, at Proctor Ski Hill (Burden Trail) in Andover, NH. Three cameras covered different sections of the course:</p>
+                    <table class="docs-table">
+                        <thead>
+                            <tr><th>Section</th><th>Camera</th><th>Gates Covered</th><th>Position</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Section 1</td><td>Cam 1 (R2)</td><td>Gates 8-9</td><td>Looking uphill</td></tr>
+                            <tr><td>Section 2</td><td>Cam 2 (R1)</td><td>Gates 12-18</td><td>Mid-course tripod</td></tr>
+                            <tr><td>Section 3</td><td>Cam 3 (R3)</td><td>Gates 19-20</td><td>Near finish</td></tr>
+                        </tbody>
+                    </table>
+                    <p>Four age/gender categories competed: U12 Girls, U12 Boys, U14 Girls, and U14 Boys, with two runs each.</p>
+                </article>
+
+                <article id="doc-using-gallery" class="docs-article">
+                    <h2>Using the Gallery</h2>
+                    <p>The gallery has four main views, accessible via tabs at the top of the page:</p>
+                    <ul>
+                        <li><strong>Results</strong> &mdash; Race results table with photo montages and video clips</li>
+                        <li><strong>3D Course</strong> &mdash; Interactive 3D terrain visualization with gate positions</li>
+                        <li><strong>2D Map</strong> &mdash; Satellite map with course overlay</li>
+                        <li><strong>Docs</strong> &mdash; This documentation</li>
+                    </ul>
+
+                    <h3>Results Tab</h3>
+                    <p>The results table shows official race times alongside photo montages and video clips for each athlete.</p>
+                    <ul>
+                        <li><strong>Category tabs</strong> &mdash; Switch between U12 Girls, U12 Boys, U14 Girls, U14 Boys</li>
+                        <li><strong>Run tabs</strong> &mdash; Toggle between Run 1 and Run 2</li>
+                        <li><strong>Team filter</strong> &mdash; Filter athletes by club/team</li>
+                        <li><strong>Sorting</strong> &mdash; Click any column header to sort ascending/descending</li>
+                        <li><strong>Search</strong> &mdash; Type a name or bib number in the search bar to find an athlete</li>
+                    </ul>
+
+                    <h3>Table Columns</h3>
+                    <p>The table is divided into two groups:</p>
+                    <ol>
+                        <li><strong>Official Results</strong> &mdash; Rank and time from the Vola timing system</li>
+                        <li><strong>Camera Sections</strong> &mdash; For each camera section (1, 2, 3):
+                            <ul>
+                                <li><strong>Time</strong> &mdash; Estimated time through that section (unofficial, see disclaimer)</li>
+                                <li><strong>PM</strong> &mdash; Photo Montage button (click to open lightbox)</li>
+                                <li><strong>V</strong> &mdash; Video clip button (click to play)</li>
+                            </ul>
+                        </li>
+                    </ol>
+                    <p>Green-highlighted PM and V buttons indicate available content. Gray buttons mean no montage/video is available for that athlete in that section.</p>
+
+                    <h3>Photo Montage Lightbox</h3>
+                    <p>Click a PM button to open the photo montage viewer:</p>
+                    <ul>
+                        <li><strong>Navigate</strong> &mdash; Use &lsaquo; / &rsaquo; arrows or keyboard left/right to browse athletes</li>
+                        <li><strong>FPS selector</strong> &mdash; Choose between 5 frame rates (5.0 to 7.0 images/second). Higher rates show more frames, revealing finer motion detail. Lower rates show fewer, cleaner positions.</li>
+                        <li><strong>Close</strong> &mdash; Click &times; or press Escape</li>
+                    </ul>
+
+                    <h3>Video Lightbox</h3>
+                    <p>Click a V button to watch the video clip:</p>
+                    <ul>
+                        <li><strong>Speed controls</strong> &mdash; 0.1x, 0.25x, 0.5x, and 1x playback speeds</li>
+                        <li><strong>Scrubber</strong> &mdash; Drag the timeline to seek to any point</li>
+                        <li><strong>Navigate</strong> &mdash; Browse other athletes' videos with arrow buttons</li>
+                    </ul>
+                </article>
+
+                <article id="doc-understanding" class="docs-article">
+                    <h2>Understanding Results</h2>
+
+                    <h3>Official vs. Unofficial Times</h3>
+                    <p>The <strong>Rank</strong> and <strong>Time</strong> columns show official results from the Vola electronic timing system (wired timing wands at start and finish). These are the authoritative race results.</p>
+                    <p>The <strong>Section times</strong> (under each camera section) are <em>unofficial estimates</em> derived from video analysis. They show how long the athlete was visible in each camera's field of view. Accuracy is approximately &plusmn;0.08 seconds.</p>
+                    <p>Section times are useful as a coaching tool to compare athletes' speed through different parts of the course, but they should not be used for any official purpose.</p>
+
+                    <h3>FPS Variants Explained</h3>
+                    <p>Each photo montage is generated at multiple frame rates:</p>
+                    <table class="docs-table">
+                        <thead>
+                            <tr><th>Rate</th><th>Frames Used</th><th>Best For</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>5.0 img/s</td><td>Fewer</td><td>Cleaner individual body positions, less overlap</td></tr>
+                            <tr><td>6.0 img/s</td><td>Medium (default)</td><td>Good balance of detail and clarity</td></tr>
+                            <tr><td>7.0 img/s</td><td>More</td><td>Smoother motion trail, more continuous flow</td></tr>
+                        </tbody>
+                    </table>
+                    <p>The default is 6.0 img/s. Use the FPS buttons in the lightbox to experiment and find the best visualization for each athlete.</p>
+
+                    <h3>3D Course View</h3>
+                    <p>The 3D terrain visualization shows the actual course on a 1-meter resolution digital elevation model. Features include:</p>
+                    <ul>
+                        <li><strong>Gate markers</strong> &mdash; Blue and red spheres at GPS-measured gate positions</li>
+                        <li><strong>Section shading</strong> &mdash; Colored overlays showing each camera's coverage area</li>
+                        <li><strong>Camera positions</strong> &mdash; Toggle the "Cameras" checkbox to see where cameras were placed</li>
+                        <li><strong>Flatten</strong> &mdash; Toggle between 3D terrain and a flat top-down view</li>
+                        <li><strong>Section header click</strong> &mdash; Click "Section 1/2/3" in the results table to zoom the 3D view to that section</li>
+                    </ul>
+                    <p>Controls: drag to rotate, scroll to zoom, right-drag to pan, arrow keys to pan, +/&minus; to zoom.</p>
+
+                    <h3>2D Map View</h3>
+                    <p>The 2D satellite map shows the course from above using Leaflet. Toggle between satellite imagery and topographic contour lines. Enable "Measurements" to see gate-to-gate distances, lateral offsets, and elevation drops.</p>
+                </article>
+
+                <!-- ===== FOR COACHES ===== -->
+
+                <article id="doc-camera-setup" class="docs-article">
+                    <h2>Camera Setup</h2>
+
+                    <h3>Hardware</h3>
+                    <p>The system uses three <strong>Reolink RLC-823S2</strong> cameras (2K resolution, 30fps, 5Mbps RTSP streams). Each camera covers a different section of the race course.</p>
+                    <p>Cameras connect to the edge compute device via ethernet or WiFi. The edge device connects to the internet via a <strong>5G uplink</strong> (Teltonika RUTM50 router) for remote access and S3 uploads.</p>
+
+                    <h3>Camera Placement</h3>
+                    <p>Position cameras to capture 2-8 gates each. Key considerations:</p>
+                    <ul>
+                        <li><strong>Field of view</strong> &mdash; ~55&deg; horizontal. Position far enough to capture the full gate sequence.</li>
+                        <li><strong>Angle</strong> &mdash; Looking uphill or across the slope. Avoid looking directly downhill (skiers approach head-on with little visible body movement).</li>
+                        <li><strong>Stability</strong> &mdash; Use heavy-duty tripods. Wind and vibration cause misaligned composites.</li>
+                        <li><strong>Overlap</strong> &mdash; Slight gate overlap between cameras is fine; gaps mean missed coverage.</li>
+                    </ul>
+
+                    <details>
+                        <summary>Camera-to-Section mapping for this race</summary>
+                        <div>
+                            <p>The mapping between physical cameras (R1, R2, R3) and website sections (Cam1, Cam2, Cam3) varies per race based on camera placement:</p>
+<pre class="docs-code"><span class="comment">// race_manifest.json cameras section</span>
+<span class="key">"cameras"</span>: [
+  {<span class="key">"id"</span>: <span class="string">"Cam1"</span>, <span class="key">"edge_camera"</span>: <span class="string">"R2"</span>, <span class="key">"gates_covered_run1"</span>: [<span class="number">8</span>, <span class="number">9</span>]},
+  {<span class="key">"id"</span>: <span class="string">"Cam2"</span>, <span class="key">"edge_camera"</span>: <span class="string">"R1"</span>, <span class="key">"gates_covered_run1"</span>: [<span class="number">12</span>-<span class="number">18</span>]},
+  {<span class="key">"id"</span>: <span class="string">"Cam3"</span>, <span class="key">"edge_camera"</span>: <span class="string">"R3"</span>, <span class="key">"gates_covered_run1"</span>: [<span class="number">19</span>, <span class="number">20</span>]}
+]</pre>
+                        </div>
+                    </details>
+
+                    <h3>Edge Compute Devices</h3>
+                    <table class="docs-table">
+                        <thead>
+                            <tr><th>Device</th><th>Specs</th><th>Cameras</th><th>Use Case</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Seeed J40</td><td>Jetson Orin NX</td><td>1</td><td>Prototype, single camera</td></tr>
+                            <tr><td>Minisforum MS-01</td><td>i9-13900H, 14 cores</td><td>3</td><td>Production, multi-camera</td></tr>
+                        </tbody>
+                    </table>
+                </article>
+
+                <article id="doc-calibration" class="docs-article">
+                    <h2>Calibration UI</h2>
+                    <p>The calibration interface is a <strong>mobile-first web app</strong> served by the Flask server on the edge device. Coaches access it from their phone while on the mountain.</p>
+
+                    <h3>Workflow</h3>
+                    <ol>
+                        <li><strong>Select camera</strong> &mdash; Choose from R1, R2, R3, or Axis in the dropdown</li>
+                        <li><strong>Select input</strong> &mdash; Live RTSP stream or recorded video file</li>
+                        <li><strong>Grab a frame</strong> &mdash; Capture a representative frame from the video</li>
+                        <li><strong>Draw START zone</strong> &mdash; Rectangle near the top of frame where skiers enter</li>
+                        <li><strong>Draw END zone</strong> &mdash; Rectangle near the bottom where skiers exit</li>
+                        <li><strong>Configure session</strong> &mdash; Set type (race/training/test), group (U10-Masters), end time</li>
+                        <li><strong>Save &amp; start</strong> &mdash; Saves config JSON and begins detection</li>
+                    </ol>
+
+                    <h3>Trigger Zone Concept</h3>
+                    <p>The gates being filmed are <strong>between</strong> the START and END zones. When a skier enters the START zone, the system begins tracking. When they exit the END zone, the run is complete and a montage is generated.</p>
+                    <div class="docs-diagram">
+<pre class="docs-code">  ┌─────────────────────────────┐
+  │  ┌──────── START zone ───┐  │  &larr; Skier enters here
+  │  └───────────────────────┘  │
+  │                             │
+  │     Gate 8  (blue)          │
+  │                             │
+  │     Gate 9  (red)           │  &larr; Gates are BETWEEN zones
+  │                             │
+  │     Gate 10 (blue)          │
+  │                             │
+  │  ┌──────── END zone ─────┐  │  &larr; Skier exits here
+  │  └───────────────────────┘  │
+  └─────────────────────────────┘
+         Camera frame view</pre>
+                    </div>
+
+                    <details>
+                        <summary>Session configuration JSON format</summary>
+                        <div>
+<pre class="docs-code">{
+  <span class="key">"session_id"</span>: <span class="string">"2026-02-22_0900_u12_race_R2"</span>,
+  <span class="key">"session_type"</span>: <span class="string">"race"</span>,
+  <span class="key">"group"</span>: <span class="string">"U12"</span>,
+  <span class="key">"camera_id"</span>: <span class="string">"R2"</span>,
+  <span class="key">"camera_url"</span>: <span class="string">"rtsp://admin:pass@192.168.1.102/stream"</span>,
+  <span class="key">"start_zone"</span>: {<span class="key">"x"</span>: <span class="number">400</span>, <span class="key">"y"</span>: <span class="number">100</span>, <span class="key">"w"</span>: <span class="number">200</span>, <span class="key">"h"</span>: <span class="number">80</span>},
+  <span class="key">"end_zone"</span>: {<span class="key">"x"</span>: <span class="number">350</span>, <span class="key">"y"</span>: <span class="number">900</span>, <span class="key">"w"</span>: <span class="number">250</span>, <span class="key">"h"</span>: <span class="number">80</span>},
+  <span class="key">"detection_threshold"</span>: <span class="number">25</span>,
+  <span class="key">"min_pixel_change_pct"</span>: <span class="number">5.0</span>,
+  <span class="key">"min_brightness"</span>: <span class="number">100</span>,
+  <span class="key">"pre_buffer_seconds"</span>: <span class="number">2</span>,
+  <span class="key">"post_buffer_seconds"</span>: <span class="number">2</span>,
+  <span class="key">"session_end_time"</span>: <span class="string">"2026-02-22T10:30:00-05:00"</span>
+}</pre>
+                        </div>
+                    </details>
+
+                    <h3>For Recorded Video (Batch Mode)</h3>
+                    <p>When processing already-recorded video files instead of live streams:</p>
+                    <ol>
+                        <li>Load a <strong>Vola CSV</strong> timing file (contains athlete start times and bib numbers)</li>
+                        <li>Select the camera and its corresponding section</li>
+                        <li>Draw trigger zones on a frame from the video</li>
+                        <li>The system processes each video file, matching detected runs to athletes by timestamp</li>
+                    </ol>
+                </article>
+
+                <article id="doc-processing" class="docs-article">
+                    <h2>Processing Runs</h2>
+
+                    <h3>Processing Modes</h3>
+                    <table class="docs-table">
+                        <thead>
+                            <tr><th>Mode</th><th>Input</th><th>Speed</th><th>Use Case</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Live RTSP</td><td>Camera stream</td><td>Real-time</td><td>Race day, immediate montages</td></tr>
+                            <tr><td>Video batch</td><td>Recorded .mp4 files</td><td>~3x real-time</td><td>Post-race processing, re-processing</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Vola Timing Integration</h3>
+                    <p>Vola CSV files contain the official race timing data: athlete names, bib numbers, and start times. When loaded during batch processing, the system matches each detected run to an athlete by comparing the run's timestamp against the Vola start times (with a camera-specific offset for how long it takes the skier to reach that section).</p>
+
+                    <h3>Staging Directory</h3>
+                    <p>Processed montages are organized in a staging directory before being uploaded to S3:</p>
+<pre class="docs-code">/tmp/montages/{race-slug}/
+  Cam1/
+    run1/
+      g4_5.0fps.jpg         <span class="comment"># Girl bib 4, 5.0 frames/sec</span>
+      g4_5.0fps_thumb.jpg   <span class="comment"># Thumbnail version</span>
+      g4_6.0fps.jpg         <span class="comment"># Same athlete, different FPS</span>
+      g4.mp4                <span class="comment"># Video clip of the run</span>
+      g4_timing.json        <span class="comment"># Section elapsed time</span>
+      ...
+  Cam2/
+    run1/
+      ...
+    run2/
+      ...</pre>
+
+                    <h3>Populating the Manifest</h3>
+                    <p>After processing, the <strong>Populate Manifest</strong> step scans the staging directory and updates <code>race_manifest.json</code> with paths to each athlete's montage images, video clips, and section times. This is what connects the processed files to the web gallery.</p>
+
+                    <details>
+                        <summary>End-to-end batch processing workflow</summary>
+                        <div>
+                            <ol>
+                                <li>Export video files from camera SD cards</li>
+                                <li>Open calibration UI, load Vola CSV, select camera</li>
+                                <li>Draw trigger zones on a representative frame</li>
+                                <li>Click "Save &amp; Process" &mdash; runs detection + montage generation</li>
+                                <li>Wait for all runs to be processed (progress shown in UI)</li>
+                                <li>Click "Populate Manifest" &mdash; scans staging, updates race_manifest.json</li>
+                                <li>Refresh gallery page to see montages appear</li>
+                                <li>Repeat for each camera/section</li>
+                                <li>Upload staging directory to S3: <code>aws s3 sync /tmp/montages/ s3://bucket/races/</code></li>
+                            </ol>
+                        </div>
+                    </details>
+                </article>
+
+                <article id="doc-tuning" class="docs-article">
+                    <h2>Tuning Detection</h2>
+                    <p>Detection sensitivity can be adjusted in the calibration UI. Changes take effect immediately (hot-reload every 2 seconds) without restarting detection.</p>
+
+                    <h3>Parameters</h3>
+                    <table class="docs-table">
+                        <thead>
+                            <tr><th>Parameter</th><th>Default</th><th>Range</th><th>Effect</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>detection_threshold</code></td>
+                                <td>25</td>
+                                <td>0-255</td>
+                                <td>Minimum pixel difference to count as changed. Higher = less sensitive. Increase if shadows or snow spray cause false triggers.</td>
+                            </tr>
+                            <tr>
+                                <td><code>min_pixel_change_pct</code></td>
+                                <td>5.0%</td>
+                                <td>0-100%</td>
+                                <td>Minimum percentage of zone pixels that must change. Higher = requires more movement. Increase for noisy/windy conditions.</td>
+                            </tr>
+                            <tr>
+                                <td><code>min_brightness</code></td>
+                                <td>100</td>
+                                <td>0-255</td>
+                                <td>Changed pixels must be at least this bright. Filters shadows (dark) while keeping skiers (bright against snow). Key for sunny days.</td>
+                            </tr>
+                            <tr>
+                                <td><code>cooldown_seconds</code></td>
+                                <td>3</td>
+                                <td>0-30</td>
+                                <td>Minimum time between consecutive runs. Prevents double-triggers from same skier.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Troubleshooting</h3>
+                    <ul>
+                        <li><strong>Too many false positives</strong> &mdash; Increase <code>detection_threshold</code> to 35-45, increase <code>min_brightness</code> to 120-150</li>
+                        <li><strong>Missing runs</strong> &mdash; Decrease <code>detection_threshold</code> to 15-20, decrease <code>min_pixel_change_pct</code> to 3%</li>
+                        <li><strong>Shadow triggers</strong> &mdash; Increase <code>min_brightness</code> to 130+ (shadows are darker than skiers)</li>
+                        <li><strong>Wind/snow triggers</strong> &mdash; Increase <code>min_pixel_change_pct</code> to 8-10%</li>
+                        <li><strong>Double-counting same skier</strong> &mdash; Increase <code>cooldown_seconds</code> to 5-8</li>
+                    </ul>
+
+                    <details>
+                        <summary>How detection parameters interact</summary>
+                        <div>
+                            <p>For each video frame, the detection engine:</p>
+                            <ol>
+                                <li>Converts frame to grayscale</li>
+                                <li>Computes absolute difference with previous frame: <code>diff = |frame_n - frame_n-1|</code></li>
+                                <li>Crops to the trigger zone region</li>
+                                <li>Thresholds: pixels where <code>diff > detection_threshold</code> are "changed"</li>
+                                <li>Brightness filter: only keeps changed pixels where <code>brightness > min_brightness</code></li>
+                                <li>Counts remaining changed pixels as percentage of zone area</li>
+                                <li>If <code>percentage > min_pixel_change_pct</code>, the zone is triggered</li>
+                            </ol>
+                            <p>The brightness filter is the key innovation for ski racing: snow is bright (200+), skiers are moderately bright (120-200), but shadows are dark (30-80). By requiring changed pixels to be bright, shadows are filtered out while skiers pass through.</p>
+                        </div>
+                    </details>
+                </article>
+
+                <!-- ===== TECHNICAL REFERENCE ===== -->
+
+                <article id="doc-architecture" class="docs-article">
+                    <h2>System Architecture</h2>
+                    <p>The system has two main components: an <strong>edge device</strong> on the mountain that processes video, and <strong>AWS infrastructure</strong> that hosts the web gallery.</p>
+
+                    <div class="docs-diagram">
+<pre class="docs-code">
+  EDGE DEVICE (on mountain)              AWS (skiframes.com)
+  ┌──────────────────────────┐           ┌─────────────────────────┐
+  │                          │           │                         │
+  │  Calibration UI (Flask)  │           │  S3 bucket              │
+  │         |                │   5G      │    + CloudFront CDN     │
+  │  Detection Engine        │ ------&gt;   │                         │
+  │         |                │  upload   │  race_manifest.json     │
+  │  Montage Generator       │           │  montage images         │
+  │         |                │           │  video clips            │
+  │  Staging Directory       │           │                         │
+  │                          │           │  Static web gallery     │
+  └──────────────────────────┘           └─────────────────────────┘
+                                                   |
+                                           ┌───────┴───────┐
+                                           |               |
+                                        Coaches         Athletes
+                                        (phone)        & Parents
+                                                       (any device)</pre>
+                    </div>
+
+                    <h3>Edge Components</h3>
+                    <table class="docs-table">
+                        <thead>
+                            <tr><th>Component</th><th>File</th><th>Purpose</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Flask Server</td><td><code>app.py</code></td><td>Web server, API endpoints, UI serving</td></tr>
+                            <tr><td>Detection Engine</td><td><code>detection.py</code></td><td>Frame differencing, motion detection in trigger zones</td></tr>
+                            <tr><td>Montage Generator</td><td><code>montage.py</code></td><td>Stop-motion composite image generation</td></tr>
+                            <tr><td>Runner</td><td><code>runner.py</code></td><td>Orchestrator: detection &rarr; montage &rarr; staging</td></tr>
+                            <tr><td>Stream Manager</td><td><code>stream_manager.py</code></td><td>Shared RTSP connections across sessions</td></tr>
+                            <tr><td>Manifest Builder</td><td><code>build_race_manifest.py</code></td><td>Builds race_manifest.json from Vola results</td></tr>
+                        </tbody>
+                    </table>
+
+                    <details>
+                        <summary>Complete data flow diagram</summary>
+                        <div>
+<pre class="docs-code">
+RTSP Stream / Video File
+        |
+        v
+  ┌─────────────────┐
+  | DetectionEngine  |  (detection.py)
+  | - FrameBuffer    |  ring buffer for pre-trigger frames
+  | - Zone monitor   |  frame diff in START / END rectangles
+  | - Run tracker    |  state machine: idle -&gt; tracking -&gt; complete
+  └────────┬────────┘
+           |  Run object (frames[], start_time, elapsed)
+           v
+  ┌─────────────────┐
+  | MontageGenerator |  (montage.py)
+  | - Frame select   |  subsample to target FPS
+  | - Crop region    |  bounding box from zones + padding
+  | - Bilateral filt |  edge-preserving denoise
+  | - Pixel-wise min |  composite: keep darkest pixels
+  | - Overlay        |  timestamps, logos
+  └────────┬────────┘
+           |  MontageResult (thumb + fullres paths)
+           v
+  ┌─────────────────┐
+  | Runner           |  (runner.py)
+  | - Vola match     |  timestamp -&gt; athlete name/bib
+  | - File naming    |  g{bib}_{fps}fps.jpg
+  | - Staging write  |  /tmp/montages/{race}/{cam}/{run}/
+  └────────┬────────┘
+           |
+           v
+  ┌─────────────────┐
+  | populate-manifest|  (app.py endpoint)
+  | - Scan staging   |  find all jpg/mp4/timing files
+  | - Match to bibs  |  gender-aware bib lookup
+  | - Write manifest |  race_manifest.json updated
+  └────────┬────────┘
+           |
+           v
+  ┌─────────────────┐
+  | Web Gallery      |  (race.js)
+  | - Results table  |  section times, PM/V buttons
+  | - Lightbox       |  montage viewer + FPS selector
+  | - 3D/2D maps     |  terrain + course overlay
+  └─────────────────┘</pre>
+                        </div>
+                    </details>
+                </article>
+
+                <article id="doc-detection" class="docs-article">
+                    <h2>Detection Engine</h2>
+                    <p>The detection engine (<code>detection.py</code>) monitors video frames for skier motion using frame differencing in configurable trigger zones.</p>
+
+                    <h3>Core Algorithm</h3>
+                    <ol>
+                        <li>Convert each frame to grayscale</li>
+                        <li>Compute absolute pixel difference with previous frame</li>
+                        <li>Crop difference image to the trigger zone rectangle</li>
+                        <li>Apply threshold: pixels with diff &gt; <code>detection_threshold</code> are "changed"</li>
+                        <li>Apply brightness filter: keep only changed pixels brighter than <code>min_brightness</code></li>
+                        <li>Count changed pixels as percentage of zone area</li>
+                        <li>If percentage exceeds <code>min_pixel_change_pct</code>, zone is triggered</li>
+                    </ol>
+
+                    <h3>State Machine</h3>
+                    <div class="docs-diagram">
+<pre class="docs-code">
+  IDLE  ---(START zone triggered)---&gt;  TRACKING
+    ^                                      |
+    |                                      |
+    +----(cooldown expires)----  COMPLETE &lt;-+--- (END zone triggered)
+                                    |           (or timeout)
+                                    v
+                              Generate montage</pre>
+                    </div>
+
+                    <h3>Key Classes</h3>
+                    <ul>
+                        <li><code>Zone(x, y, w, h)</code> &mdash; Rectangle defining a trigger area on the frame</li>
+                        <li><code>FrameBuffer</code> &mdash; Ring buffer (deque) holding the last N seconds of frames for pre-trigger capture</li>
+                        <li><code>DetectionConfig</code> &mdash; All parameters loaded from JSON, supports hot-reload (polled every 2 seconds)</li>
+                        <li><code>DetectionEngine</code> &mdash; Main class with <code>process_frame()</code>, <code>run_on_video()</code>, <code>run_on_rtsp()</code></li>
+                        <li><code>Run</code> &mdash; Data class holding run_number, timestamps, and captured frames</li>
+                    </ul>
+
+                    <details>
+                        <summary>FrameBuffer and pre-trigger capture</summary>
+                        <div>
+                            <p>The FrameBuffer continuously stores the most recent frames (default: 2 seconds worth). When the START zone triggers, the buffered frames are included in the run, capturing the skier's approach before the trigger fired. This ensures no part of the run is missed due to detection latency.</p>
+<pre class="docs-code"><span class="comment"># Simplified frame buffer logic</span>
+buffer = deque(maxlen=fps * pre_buffer_seconds)
+
+<span class="key">def</span> process_frame(frame):
+    buffer.append(frame)
+    <span class="key">if</span> detect_motion_in_zone(frame, start_zone):
+        <span class="comment"># Include buffered frames from BEFORE the trigger</span>
+        run_frames = list(buffer) + [frame]
+        start_tracking(run_frames)</pre>
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Stream Manager for shared connections</summary>
+                        <div>
+                            <p>When multiple detection sessions run on the same camera (e.g., different coaches monitoring different zones), the Stream Manager (<code>stream_manager.py</code>) maintains a single RTSP connection and distributes frames to all registered sessions. This avoids duplicate decode overhead.</p>
+                            <p>Each session gets its own copy of each frame to prevent race conditions, and maintains independent detection state (zones, thresholds, run tracking).</p>
+                        </div>
+                    </details>
+                </article>
+
+                <article id="doc-montage" class="docs-article">
+                    <h2>Montage Generation</h2>
+                    <p>The montage generator (<code>montage.py</code>) creates stop-motion photo composites from the frames captured during a run.</p>
+
+                    <h3>Pixel-Wise Minimum Algorithm</h3>
+                    <p>The core technique is remarkably simple: for each pixel position, take the <strong>darkest value</strong> across all frames. Since the snow background is bright (white) and the skier is darker, the skier's silhouette from every frame is preserved while the snow background remains clean.</p>
+
+                    <div class="docs-diagram">
+<pre class="docs-code">
+  Frame 1        Frame 2        Frame 3        Composite
+  ┌────────┐    ┌────────┐    ┌────────┐    ┌────────────┐
+  │  ○     │    │    ○   │    │      ○ │    │  ○  ○   ○  │
+  │  |     │    │    |   │    │      | │    │  |  |   |  │
+  │ / \    │    │   / \  │    │    / \ │ =&gt; │ / \/ \ / \ │
+  │ snow   │    │ snow   │    │ snow   │    │ snow        │
+  └────────┘    └────────┘    └────────┘    └────────────┘
+
+  np.minimum(frame1, frame2, frame3, ...)
+  Keeps darkest pixel at each position</pre>
+                    </div>
+
+                    <h3>Processing Pipeline</h3>
+                    <ol>
+                        <li><strong>Frame selection</strong> &mdash; Subsample captured frames to target FPS (e.g., 30fps capture &rarr; 6fps montage = every 5th frame)</li>
+                        <li><strong>Crop</strong> &mdash; Compute bounding box from START/END zones with asymmetric padding (30% left, 50% right, 10% vertical) to capture the full ski path</li>
+                        <li><strong>Bilateral filter</strong> &mdash; Edge-preserving noise reduction (<code>cv2.bilateralFilter(f, 5, 50, 50)</code>) applied to each frame before compositing. Reduces noise by ~50% while preserving edge sharpness.</li>
+                        <li><strong>Composite</strong> &mdash; Iterative pixel-wise minimum: <code>result = np.minimum(result, next_frame)</code></li>
+                        <li><strong>Output</strong> &mdash; Generate thumbnail (~800px, JPEG 85%) and full-resolution (native crop, JPEG 95%)</li>
+                    </ol>
+
+                    <details>
+                        <summary>Why bilateral filter instead of Gaussian blur?</summary>
+                        <div>
+                            <p>Gaussian blur smooths everything equally, including edges. Bilateral filtering smooths flat areas (reducing sensor noise in the snow) while preserving sharp edges (keeping the skier's outline crisp). Quality comparison:</p>
+                            <table class="docs-table">
+                                <thead><tr><th>Metric</th><th>Raw Minimum</th><th>With Bilateral Filter</th></tr></thead>
+                                <tbody>
+                                    <tr><td>Noise level</td><td>22</td><td>13 (41% reduction)</td></tr>
+                                    <tr><td>Edge sharpness</td><td>3017</td><td>2873 (5% reduction)</td></tr>
+                                </tbody>
+                            </table>
+                            <p>The trade-off is worthwhile: nearly half the noise removed with minimal sharpness loss.</p>
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>FPS variant generation</summary>
+                        <div>
+                            <p>Each run generates montages at 5 different frame rates (5.0, 5.5, 6.0, 6.5, 7.0 images per second). This is done by subsampling the captured frames differently:</p>
+<pre class="docs-code"><span class="comment"># 30fps video, 2.5-second run = 75 frames captured</span>
+<span class="comment"># At 5.0 img/s: use every 6th frame = 12 frames in composite</span>
+<span class="comment"># At 7.0 img/s: use every ~4th frame = 17 frames in composite</span>
+
+<span class="key">def</span> select_frames_by_fps(frames, source_fps, target_fps):
+    interval = source_fps / target_fps
+    indices = [int(i * interval) for i in range(int(len(frames) / interval))]
+    <span class="key">return</span> [frames[i] for i in indices if i &lt; len(frames)]</pre>
+                            <p>More frames = smoother motion trail but more overlap between positions. Fewer frames = cleaner individual positions but less continuous flow. The default (6.0 img/s) is a good middle ground.</p>
+                        </div>
+                    </details>
+                </article>
+
+                <article id="doc-manifest" class="docs-article">
+                    <h2>Race Manifest Format</h2>
+                    <p>The <code>race_manifest.json</code> file is the central data structure connecting the web gallery to race results, course data, and processed montages.</p>
+
+                    <h3>Top-Level Structure</h3>
+<pre class="docs-code">{
+  <span class="key">"event"</span>: { <span class="comment">/* race name, date, venue, discipline */</span> },
+  <span class="key">"media_base_url"</span>: <span class="string">"https://media.skiframes.com/races/western-q-2026-02-22"</span>,
+  <span class="key">"cameras"</span>: [ <span class="comment">/* camera positions, gate coverage */</span> ],
+  <span class="key">"course"</span>: {
+    <span class="key">"run1"</span>: { <span class="key">"gates"</span>: [...], <span class="key">"start"</span>: {...}, <span class="key">"finish_left"</span>: {...} },
+    <span class="key">"run2"</span>: { <span class="comment">/* same structure */</span> }
+  },
+  <span class="key">"categories"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="string">"U12_Girls"</span>,
+      <span class="key">"athletes"</span>: [ <span class="comment">/* array of athlete objects */</span> ]
+    }
+  ]
+}</pre>
+
+                    <h3>Athlete Object</h3>
+<pre class="docs-code">{
+  <span class="key">"bib"</span>: <span class="number">4</span>,
+  <span class="key">"first"</span>: <span class="string">"Bryce"</span>,
+  <span class="key">"last"</span>: <span class="string">"Phelps"</span>,
+  <span class="key">"club"</span>: <span class="string">"Sunapee"</span>,
+  <span class="key">"rank"</span>: <span class="number">11</span>,
+  <span class="key">"run1_time"</span>: <span class="number">41.4</span>,
+  <span class="key">"run2_time"</span>: <span class="number">42.04</span>,
+  <span class="key">"total"</span>: <span class="string">"1:23.44"</span>,
+  <span class="key">"run1_start_tod"</span>: <span class="string">"09:09:05.79"</span>,  <span class="comment">// time of day</span>
+  <span class="key">"run1_start_sec"</span>: <span class="number">32945.79</span>,      <span class="comment">// seconds since midnight</span>
+  <span class="key">"montages"</span>: {
+    <span class="key">"Cam1"</span>: {
+      <span class="key">"run1"</span>: {
+        <span class="key">"thumb"</span>: <span class="string">"Cam1/run1/g4_6.0fps_thumb.jpg"</span>,
+        <span class="key">"full"</span>: <span class="string">"Cam1/run1/g4_6.0fps.jpg"</span>,
+        <span class="key">"video"</span>: <span class="string">"Cam1/run1/g4.mp4"</span>,
+        <span class="key">"section_time"</span>: <span class="number">2.56</span>,
+        <span class="key">"fps_variants"</span>: [
+          {<span class="key">"fps"</span>: <span class="number">5.0</span>, <span class="key">"thumb"</span>: <span class="string">"..."</span>, <span class="key">"full"</span>: <span class="string">"..."</span>},
+          {<span class="key">"fps"</span>: <span class="number">5.5</span>, <span class="key">"thumb"</span>: <span class="string">"..."</span>, <span class="key">"full"</span>: <span class="string">"..."</span>},
+          <span class="comment">// ... 5 variants total</span>
+        ]
+      }
+    }
+  }
+}</pre>
+
+                    <h3>Gate Object</h3>
+<pre class="docs-code">{
+  <span class="key">"number"</span>: <span class="number">8</span>,
+  <span class="key">"color"</span>: <span class="string">"blue"</span>,   <span class="comment">// alternating blue/red</span>
+  <span class="key">"label"</span>: <span class="string">"b8"</span>,
+  <span class="key">"lat"</span>: <span class="number">43.4267</span>,
+  <span class="key">"lon"</span>: <span class="number">-71.8289</span>,
+  <span class="key">"elev"</span>: <span class="number">287.3</span>,       <span class="comment">// meters, measured</span>
+  <span class="key">"dem_elev"</span>: <span class="number">288.1</span>,   <span class="comment">// DEM reference elevation</span>
+  <span class="key">"accuracy"</span>: <span class="number">0.5</span>     <span class="comment">// GPS accuracy in meters</span>
+}</pre>
+
+                    <details>
+                        <summary>Camera object details</summary>
+                        <div>
+<pre class="docs-code">{
+  <span class="key">"id"</span>: <span class="string">"Cam1"</span>,
+  <span class="key">"edge_camera"</span>: <span class="string">"R2"</span>,           <span class="comment">// physical camera ID</span>
+  <span class="key">"position"</span>: {
+    <span class="key">"lat"</span>: <span class="number">43.4268</span>, <span class="key">"lon"</span>: <span class="number">-71.8285</span>, <span class="key">"elev"</span>: <span class="number">290.5</span>
+  },
+  <span class="key">"fov_h_deg"</span>: <span class="number">55</span>,
+  <span class="key">"gates_covered_run1"</span>: [<span class="number">8</span>, <span class="number">9</span>],
+  <span class="key">"gates_covered_run2"</span>: [<span class="number">8</span>, <span class="number">9</span>],
+  <span class="key">"has_run1"</span>: <span class="number">true</span>,
+  <span class="key">"has_run2"</span>: <span class="number">false</span>,
+  <span class="key">"note"</span>: <span class="string">"Looking uphill at gates 8-9"</span>
+}</pre>
+                        </div>
+                    </details>
+                </article>
+
+                <article id="doc-terrain" class="docs-article">
+                    <h2>3D Terrain Pipeline</h2>
+                    <p>The 3D course visualization renders the actual race terrain using a digital elevation model and satellite imagery in Three.js.</p>
+
+                    <h3>Data Sources</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Data</th><th>Source</th><th>Resolution</th><th>File</th></tr></thead>
+                        <tbody>
+                            <tr><td>Elevation</td><td>USGS 1m DEM (LiDAR)</td><td>1 meter/pixel</td><td><code>terrain_heightmap.bin</code></td></tr>
+                            <tr><td>Satellite imagery</td><td>Esri World Imagery</td><td>~0.3m/pixel (zoom 19)</td><td><code>terrain_texture.png</code></td></tr>
+                            <tr><td>Terrain metadata</td><td>Extracted from DEM</td><td>&mdash;</td><td><code>terrain_meta.json</code></td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Rendering Pipeline</h3>
+                    <ol>
+                        <li><strong>Load heightmap</strong> &mdash; Binary file of 16-bit elevation values, 800&times;800 pixels</li>
+                        <li><strong>Create geometry</strong> &mdash; Three.js <code>PlaneGeometry</code> with vertices displaced by elevation values</li>
+                        <li><strong>Apply texture</strong> &mdash; Satellite or hillshade image mapped onto the terrain surface</li>
+                        <li><strong>Add course overlay</strong> &mdash; Gate spheres at GPS positions, projected onto terrain surface</li>
+                        <li><strong>Add section shading</strong> &mdash; Colored polygon meshes for each camera's coverage area</li>
+                        <li><strong>Lighting</strong> &mdash; Ambient (0.55) + directional sun (0.85) + fill light (0.3)</li>
+                    </ol>
+
+                    <details>
+                        <summary>GPS to 3D coordinate mapping</summary>
+                        <div>
+                            <p>GPS coordinates (latitude, longitude, elevation) are converted to Three.js world coordinates using the terrain metadata:</p>
+<pre class="docs-code"><span class="key">function</span> gpsTo3D(lat, lon, elev) {
+  <span class="comment">// Normalize to terrain grid position (0..width, 0..height)</span>
+  <span class="key">const</span> x = (lon - bounds.west) / (bounds.east - bounds.west) * terrainWidth;
+  <span class="key">const</span> z = (lat - bounds.north) / (bounds.south - bounds.north) * terrainHeight;
+
+  <span class="comment">// Elevation scaled by terrain metadata</span>
+  <span class="key">const</span> y = (elev - elevMin) * elevScale;
+
+  <span class="key">return</span> { x, y, z };
+}</pre>
+                            <p>The terrain covers approximately 800&times;800 meters centered on the race course, with elevation ranging from ~184m to ~330m above sea level.</p>
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Terrain extraction process</summary>
+                        <div>
+                            <p>The <code>extract_terrain.py</code> script processes a USGS GeoTIFF into web-ready formats:</p>
+                            <ol>
+                                <li>Download 1m DEM tile from USGS National Map</li>
+                                <li>Crop to area of interest (race course + buffer)</li>
+                                <li>Sample elevation at 2m intervals (reducing 800m extent to 400 samples)</li>
+                                <li>Quantize to 16-bit unsigned integers</li>
+                                <li>Write binary heightmap + metadata JSON</li>
+                                <li>Generate hillshade texture using sun angle computation</li>
+                                <li>Fetch satellite tiles from Esri and composite into a single texture</li>
+                            </ol>
+                        </div>
+                    </details>
+                </article>
+
+                <article id="doc-api" class="docs-article">
+                    <h2>API Reference</h2>
+                    <p>The Flask server (<code>app.py</code>) exposes REST API endpoints for all edge device operations. Base URL: <code>http://&lt;edge-device&gt;:5000</code></p>
+
+                    <h3>Camera &amp; Frame Operations</h3>
+                    <table class="docs-table docs-api-table">
+                        <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>POST</code></td><td><code>/api/frame/grab</code></td><td>Grab a frame from RTSP stream or video file</td></tr>
+                            <tr><td><code>GET</code></td><td><code>/api/frame/&lt;frame_id&gt;</code></td><td>Retrieve a cached calibration frame</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Configuration</h3>
+                    <table class="docs-table docs-api-table">
+                        <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>POST</code></td><td><code>/api/config/save</code></td><td>Save detection config (zones, thresholds, session metadata)</td></tr>
+                            <tr><td><code>GET</code></td><td><code>/api/config/active</code></td><td>Get currently running session config</td></tr>
+                            <tr><td><code>GET</code></td><td><code>/api/config/&lt;session_id&gt;</code></td><td>Retrieve a saved config by session ID</td></tr>
+                            <tr><td><code>POST</code></td><td><code>/api/config/stop/&lt;session_id&gt;</code></td><td>Stop a running detection session</td></tr>
+                            <tr><td><code>POST</code></td><td><code>/api/config/update_live/&lt;session_id&gt;</code></td><td>Hot-update threshold/brightness on running session</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Processing</h3>
+                    <table class="docs-table docs-api-table">
+                        <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>POST</code></td><td><code>/api/process/video</code></td><td>Start video file processing (runs as subprocess)</td></tr>
+                            <tr><td><code>POST</code></td><td><code>/api/process/rtsp</code></td><td>Start live RTSP stream monitoring</td></tr>
+                            <tr><td><code>GET</code></td><td><code>/api/process/status/&lt;job_id&gt;</code></td><td>Check processing job status and progress</td></tr>
+                            <tr><td><code>POST</code></td><td><code>/api/process/stop/&lt;job_id&gt;</code></td><td>Stop a running processing job</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Montages &amp; Manifest</h3>
+                    <table class="docs-table docs-api-table">
+                        <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>GET</code></td><td><code>/api/montages/latest</code></td><td>List most recently generated montages</td></tr>
+                            <tr><td><code>POST</code></td><td><code>/api/montages/populate-manifest</code></td><td>Scan staging dir, update race_manifest.json</td></tr>
+                            <tr><td><code>GET</code></td><td><code>/montages/&lt;path&gt;</code></td><td>Serve montage images/videos from staging dir</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Vola Timing Integration</h3>
+                    <table class="docs-table docs-api-table">
+                        <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>GET</code></td><td><code>/api/vola/files</code></td><td>List available Vola timing CSV files</td></tr>
+                            <tr><td><code>POST</code></td><td><code>/api/vola/parse</code></td><td>Parse CSV for athlete start times and bib numbers</td></tr>
+                            <tr><td><code>POST</code></td><td><code>/api/vola/racers-for-video</code></td><td>Filter racers by video timespan</td></tr>
+                        </tbody>
+                    </table>
+
+                    <details>
+                        <summary>Example: Populate manifest API call</summary>
+                        <div>
+<pre class="docs-code"><span class="comment"># POST /api/montages/populate-manifest</span>
+<span class="comment"># Content-Type: application/json</span>
+
+<span class="comment"># Request body:</span>
+{<span class="key">"race_slug"</span>: <span class="string">"western-q-2026-02-22"</span>}
+
+<span class="comment"># Response:</span>
+{
+  <span class="key">"success"</span>: <span class="number">true</span>,
+  <span class="key">"updated_count"</span>: <span class="number">29</span>,
+  <span class="key">"cameras_found"</span>: [<span class="string">"Cam1"</span>],
+  <span class="key">"manifest_path"</span>: <span class="string">"/path/to/race_manifest.json"</span>
+}</pre>
+                        </div>
+                    </details>
+                </article>
+
+                <div class="docs-footer">
+                    <p>Skiframes is open source. Source code at <a href="https://github.com/skiframes" target="_blank" rel="noopener">github.com/skiframes</a></p>
+                    <p>Built for NHARA alpine racing at Ragged Mountain, NH.</p>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
     <!-- Lightbox -->
     <div id="lightbox" class="hidden">
         <div class="lb-backdrop"></div>
@@ -143,6 +964,7 @@
             <div class="lb-info">
                 <span id="lb-name"></span>
                 <span id="lb-details"></span>
+                <div id="lb-fps-selector" class="lb-fps-selector" style="display:none;"></div>
             </div>
         </div>
     </div>
@@ -155,10 +977,12 @@
             <button class="vlb-prev">&lsaquo;</button>
             <button class="vlb-next">&rsaquo;</button>
             <div class="vlb-video-wrap">
-                <video id="vlb-video" playsinline></video>
+                <video id="vlb-video" playsinline preload="auto"></video>
             </div>
             <div class="vlb-controls">
                 <button class="vlb-play-btn" id="vlb-play-btn">&#9654;</button>
+                <button class="vlb-frame-btn" id="vlb-frame-back" title="Previous frame (,)">&#9664;&#9664;</button>
+                <button class="vlb-frame-btn" id="vlb-frame-fwd" title="Next frame (.)">&#9654;&#9654;</button>
                 <div class="vlb-speed-btns">
                     <button class="vlb-speed" data-speed="0.1">0.1x</button>
                     <button class="vlb-speed" data-speed="0.25">0.25x</button>
@@ -173,6 +997,14 @@
             <div class="vlb-info">
                 <span id="vlb-name"></span>
                 <span id="vlb-details"></span>
+            </div>
+            <div class="vlb-keys">
+                <span><kbd>Space</kbd> Play/Pause</span>
+                <span><kbd>,</kbd> Prev frame</span>
+                <span><kbd>.</kbd> Next frame</span>
+                <span><kbd>&larr;</kbd> Prev athlete</span>
+                <span><kbd>&rarr;</kbd> Next athlete</span>
+                <span><kbd>Esc</kbd> Close</span>
             </div>
         </div>
     </div>
