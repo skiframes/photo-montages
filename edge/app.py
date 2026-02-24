@@ -990,6 +990,246 @@ def video_info():
         return jsonify({'error': str(e)}), 500
 
 
+# ============================================================================
+# SLOPE CALIBRATION ENDPOINTS
+# ============================================================================
+
+# Track active pose analysis jobs
+pose_analysis_jobs = {}
+pose_analysis_jobs_lock = threading.Lock()
+
+# Import pose analyzer (optional - may not be installed)
+try:
+    from pose_analyzer import PoseAnalyzer, HAS_MEDIAPIPE
+except ImportError:
+    HAS_MEDIAPIPE = False
+    PoseAnalyzer = None
+
+
+@app.route('/api/calibration/slope', methods=['POST'])
+def save_slope_calibration():
+    """
+    Save slope calibration for a camera.
+
+    Request body:
+    {
+        "camera_id": "R1",
+        "slope_line": {
+            "x1": 100, "y1": 50,
+            "x2": 200, "y2": 150,
+            "angle_deg": 26.5
+        }
+    }
+    """
+    data = request.get_json() or {}
+    camera_id = data.get('camera_id')
+    slope_line = data.get('slope_line')
+
+    if not camera_id:
+        return jsonify({'error': 'camera_id is required'}), 400
+    if not slope_line:
+        return jsonify({'error': 'slope_line is required'}), 400
+
+    # Validate slope_line structure
+    required_fields = ['x1', 'y1', 'x2', 'y2', 'angle_deg']
+    for field in required_fields:
+        if field not in slope_line:
+            return jsonify({'error': f'slope_line missing {field}'}), 400
+
+    # Save to config file
+    config_path = CALIBRATION_CONFIG_DIR / f'{camera_id}_slope.json'
+    config = {
+        'camera_id': camera_id,
+        'slope_line': slope_line,
+        'created_at': datetime.now().isoformat()
+    }
+
+    try:
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'camera_id': camera_id,
+            'slope_angle_deg': slope_line['angle_deg'],
+            'config_path': str(config_path)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/calibration/slope/<camera_id>')
+def get_slope_calibration(camera_id):
+    """Get saved slope calibration for a camera."""
+    config_path = CALIBRATION_CONFIG_DIR / f'{camera_id}_slope.json'
+
+    if not config_path.exists():
+        return jsonify({'error': 'No slope calibration found', 'camera_id': camera_id}), 404
+
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# POSE ANALYSIS ENDPOINTS
+# ============================================================================
+
+@app.route('/api/analyze/pose', methods=['POST'])
+def start_pose_analysis():
+    """
+    Start pose analysis on a video clip.
+
+    Request body:
+    {
+        "video_path": "/path/to/video.mp4",
+        "run_id": "run_001_093023",  // optional, defaults to filename
+        "camera_id": "R1",           // optional, for slope lookup
+        "slope_angle_deg": 25.0,     // optional, overrides camera slope
+        "sample_rate": 3             // optional, analyze every Nth frame
+    }
+    """
+    if not HAS_MEDIAPIPE:
+        return jsonify({'error': 'mediapipe not installed. Run: pip install mediapipe'}), 500
+
+    data = request.get_json() or {}
+    video_path = data.get('video_path')
+    run_id = data.get('run_id')
+    camera_id = data.get('camera_id')
+    slope_angle = data.get('slope_angle_deg')
+    sample_rate = data.get('sample_rate', 3)
+
+    if not video_path:
+        return jsonify({'error': 'video_path is required'}), 400
+    if not Path(video_path).exists():
+        return jsonify({'error': f'Video not found: {video_path}'}), 404
+
+    # Look up slope angle from camera calibration if not provided
+    if slope_angle is None and camera_id:
+        slope_config_path = CALIBRATION_CONFIG_DIR / f'{camera_id}_slope.json'
+        if slope_config_path.exists():
+            try:
+                with open(slope_config_path, 'r') as f:
+                    slope_config = json.load(f)
+                slope_angle = slope_config.get('slope_line', {}).get('angle_deg', 0.0)
+            except Exception:
+                slope_angle = 0.0
+        else:
+            slope_angle = 0.0
+    elif slope_angle is None:
+        slope_angle = 0.0
+
+    # Generate job ID
+    job_id = str(uuid.uuid4())[:12]
+
+    # Start analysis in background thread
+    def run_analysis():
+        try:
+            with pose_analysis_jobs_lock:
+                pose_analysis_jobs[job_id] = {
+                    'status': 'running',
+                    'progress': 0,
+                    'video_path': video_path,
+                    'run_id': run_id,
+                    'started_at': datetime.now().isoformat()
+                }
+
+            analyzer = PoseAnalyzer(slope_angle_deg=slope_angle)
+
+            def progress_callback(current, total):
+                with pose_analysis_jobs_lock:
+                    if job_id in pose_analysis_jobs:
+                        pose_analysis_jobs[job_id]['progress'] = round(current / total * 100, 1)
+                        pose_analysis_jobs[job_id]['current_frame'] = current
+                        pose_analysis_jobs[job_id]['total_frames'] = total
+
+            result = analyzer.analyze_video(
+                video_path,
+                sample_rate=sample_rate,
+                run_id=run_id,
+                progress_callback=progress_callback
+            )
+
+            # Convert result to dict
+            result_dict = analyzer.to_dict(result)
+
+            # Save results to file (alongside video)
+            video_dir = Path(video_path).parent
+            results_path = video_dir / f'{result.run_id}_pose_analysis.json'
+            with open(results_path, 'w') as f:
+                json.dump(result_dict, f, indent=2)
+
+            with pose_analysis_jobs_lock:
+                pose_analysis_jobs[job_id] = {
+                    'status': 'completed',
+                    'progress': 100,
+                    'video_path': video_path,
+                    'run_id': result.run_id,
+                    'results_path': str(results_path),
+                    'summary': result_dict['summary'],
+                    'completed_at': datetime.now().isoformat()
+                }
+
+        except Exception as e:
+            with pose_analysis_jobs_lock:
+                pose_analysis_jobs[job_id] = {
+                    'status': 'error',
+                    'error': str(e),
+                    'video_path': video_path
+                }
+
+    thread = threading.Thread(target=run_analysis, daemon=True)
+    thread.start()
+
+    return jsonify({
+        'job_id': job_id,
+        'status': 'started',
+        'video_path': video_path,
+        'slope_angle_deg': slope_angle
+    })
+
+
+@app.route('/api/analyze/status/<job_id>')
+def get_pose_analysis_status(job_id):
+    """Get status of a pose analysis job."""
+    with pose_analysis_jobs_lock:
+        if job_id not in pose_analysis_jobs:
+            return jsonify({'error': 'Job not found', 'job_id': job_id}), 404
+        return jsonify({'job_id': job_id, **pose_analysis_jobs[job_id]})
+
+
+@app.route('/api/analyze/results/<run_id>')
+def get_pose_analysis_results(run_id):
+    """
+    Get cached pose analysis results for a run.
+
+    Searches for {run_id}_pose_analysis.json in common directories.
+    """
+    # Search paths (add more as needed)
+    search_paths = [
+        DATA_BASE_DIR / 'recordings',
+        DATA_BASE_DIR / 'clips',
+        Path('/tmp/skiframes'),
+    ]
+
+    for base_path in search_paths:
+        if not base_path.exists():
+            continue
+
+        # Search recursively for the results file
+        for results_path in base_path.glob(f'**/{run_id}_pose_analysis.json'):
+            try:
+                with open(results_path, 'r') as f:
+                    return jsonify(json.load(f))
+            except Exception as e:
+                return jsonify({'error': f'Failed to read results: {e}'}), 500
+
+    return jsonify({'error': f'No results found for run_id: {run_id}'}), 404
+
+
 @app.route('/api/config/save', methods=['POST'])
 def save_config():
     """Save session configuration with trigger zones."""

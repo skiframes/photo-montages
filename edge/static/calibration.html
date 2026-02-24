@@ -303,6 +303,46 @@
             background: rgba(59, 130, 246, 0.3);
         }
 
+        .zone-btn.slope {
+            border-color: #f97316;
+            color: #f97316;
+        }
+
+        .zone-btn.slope.active, .zone-btn.slope:active {
+            background: #f97316;
+            color: white;
+        }
+
+        /* Slope line overlay - rendered as SVG */
+        .slope-line-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .slope-line {
+            stroke: #f97316;
+            stroke-width: 3;
+            stroke-dasharray: 8 4;
+        }
+
+        .slope-endpoint {
+            fill: #f97316;
+            stroke: white;
+            stroke-width: 2;
+        }
+
+        .slope-angle-label {
+            fill: white;
+            font-size: 12px;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+
         /* End Mode Toggle */
         .end-mode-toggle {
             display: flex;
@@ -1467,6 +1507,7 @@
                 <button class="zone-btn start" id="drawStart">Draw START Zone</button>
                 <button class="zone-btn end" id="drawEnd">Draw END Zone</button>
                 <button class="zone-btn crop" id="drawCrop">Draw CROP Area</button>
+                <button class="zone-btn slope" id="drawSlope">Draw SLOPE Line</button>
             </div>
 
             <!-- End Mode Toggle -->
@@ -1668,7 +1709,8 @@
             startZone: null,
             endZone: null,
             cropZone: null,
-            drawingMode: null, // 'start', 'end', or 'crop'
+            slopeLine: null, // {x1, y1, x2, y2, angle_deg} - slope reference line for pose analysis
+            drawingMode: null, // 'start', 'end', 'crop', or 'slope'
             isDrawing: false,
             drawStart: { x: 0, y: 0 },
             zoom: 1,
@@ -1756,6 +1798,7 @@
             drawStart: document.getElementById('drawStart'),
             drawEnd: document.getElementById('drawEnd'),
             drawCrop: document.getElementById('drawCrop'),
+            drawSlope: document.getElementById('drawSlope'),
             drawingIndicator: document.getElementById('drawingIndicator'),
             configCard: document.getElementById('configCard'),
             sessionType: document.getElementById('sessionType'),
@@ -2375,6 +2418,8 @@
                     state.cameraOffsetPct = camera.offset_pct || 0;
                 }
                 updateCameraOffsetDisplay();
+                // Load any existing slope calibration for this camera
+                loadSlopeCalibration(state.cameraId);
             });
 
             // Vola camera change
@@ -2448,6 +2493,7 @@
             elements.drawStart.addEventListener('click', () => toggleDrawMode('start'));
             elements.drawEnd.addEventListener('click', () => toggleDrawMode('end'));
             elements.drawCrop.addEventListener('click', () => toggleDrawMode('crop'));
+            elements.drawSlope.addEventListener('click', () => toggleDrawMode('slope'));
 
             // End mode toggle (buttons)
             elements.endModeZone.addEventListener('click', () => setEndMode('zone'));
@@ -2671,6 +2717,7 @@
                 elements.drawStart.classList.remove('active');
                 elements.drawEnd.classList.remove('active');
                 elements.drawCrop.classList.remove('active');
+                elements.drawSlope.classList.remove('active');
                 elements.drawingIndicator.classList.remove('visible');
                 elements.frameContainer.classList.remove('drawing-active');
             } else {
@@ -2678,7 +2725,15 @@
                 elements.drawStart.classList.toggle('active', mode === 'start');
                 elements.drawEnd.classList.toggle('active', mode === 'end');
                 elements.drawCrop.classList.toggle('active', mode === 'crop');
-                const label = mode === 'crop' ? 'CROP area' : `${(mode || '').toUpperCase()} zone`;
+                elements.drawSlope.classList.toggle('active', mode === 'slope');
+                let label;
+                if (mode === 'crop') {
+                    label = 'CROP area';
+                } else if (mode === 'slope') {
+                    label = 'SLOPE line (drag along fall line direction)';
+                } else {
+                    label = `${(mode || '').toUpperCase()} zone`;
+                }
                 elements.drawingIndicator.textContent = `Tap and drag to draw ${label}`;
                 elements.drawingIndicator.classList.add('visible');
                 elements.frameContainer.classList.add('drawing-active');
@@ -2766,19 +2821,37 @@
             const coords = getEventCoords(e);
             if (!coords) return;
 
-            const zone = {
-                x: Math.min(state.drawStart.x, coords.x),
-                y: Math.min(state.drawStart.y, coords.y),
-                w: Math.abs(coords.x - state.drawStart.x),
-                h: Math.abs(coords.y - state.drawStart.y)
-            };
+            if (state.drawingMode === 'slope') {
+                // Slope is a line, not a rectangle
+                const dx = coords.x - state.drawStart.x;
+                const dy = coords.y - state.drawStart.y;
+                // Calculate angle from horizontal (positive = downward right)
+                // In image coords, y increases downward
+                const angleRad = Math.atan2(dy, dx);
+                const angleDeg = angleRad * (180 / Math.PI);
+                state.slopeLine = {
+                    x1: state.drawStart.x,
+                    y1: state.drawStart.y,
+                    x2: coords.x,
+                    y2: coords.y,
+                    angle_deg: Math.round(angleDeg * 10) / 10
+                };
+            } else {
+                // Rectangle zones (start, end, crop)
+                const zone = {
+                    x: Math.min(state.drawStart.x, coords.x),
+                    y: Math.min(state.drawStart.y, coords.y),
+                    w: Math.abs(coords.x - state.drawStart.x),
+                    h: Math.abs(coords.y - state.drawStart.y)
+                };
 
-            if (state.drawingMode === 'start') {
-                state.startZone = zone;
-            } else if (state.drawingMode === 'end') {
-                state.endZone = zone;
-            } else if (state.drawingMode === 'crop') {
-                state.cropZone = zone;
+                if (state.drawingMode === 'start') {
+                    state.startZone = zone;
+                } else if (state.drawingMode === 'end') {
+                    state.endZone = zone;
+                } else if (state.drawingMode === 'crop') {
+                    state.cropZone = zone;
+                }
             }
 
             renderZones();
@@ -2794,7 +2867,7 @@
 
             state.isDrawing = false;
 
-            // Auto-advance to next zone (but not from crop)
+            // Auto-advance to next zone (but not from crop or slope)
             // Only auto-advance to END zone if in zone mode (not duration mode)
             if (state.drawingMode === 'start' && state.startZone && !state.endZone && state.endMode === 'zone') {
                 toggleDrawMode('end');
@@ -2802,6 +2875,12 @@
                 toggleDrawMode(null);
             } else if (state.drawingMode === 'crop') {
                 toggleDrawMode(null);
+            } else if (state.drawingMode === 'slope') {
+                toggleDrawMode(null);
+                // Save slope calibration to server
+                if (state.slopeLine && state.cameraId) {
+                    saveSlopeCalibration();
+                }
             } else if (state.drawingMode === 'start' && state.startZone && state.endMode === 'duration') {
                 // In duration mode, just clear drawing mode after START zone
                 toggleDrawMode(null);
@@ -2813,6 +2892,7 @@
         function renderZones() {
             // Remove existing overlays
             document.querySelectorAll('.zone-overlay').forEach(el => el.remove());
+            document.querySelectorAll('.slope-line-container').forEach(el => el.remove());
 
             const img = document.getElementById('frameImage');
             if (!img) return;
@@ -2838,6 +2918,11 @@
                 const overlay = createZoneOverlay(state.cropZone, 'crop', 'CROP', scaleX, scaleY);
                 elements.frameContainer.appendChild(overlay);
             }
+
+            if (state.slopeLine) {
+                const slopeOverlay = createSlopeLineOverlay(state.slopeLine, scaleX, scaleY);
+                elements.frameContainer.appendChild(slopeOverlay);
+            }
         }
 
         function createZoneOverlay(zone, type, label, scaleX, scaleY) {
@@ -2854,6 +2939,114 @@
             overlay.appendChild(labelEl);
 
             return overlay;
+        }
+
+        function createSlopeLineOverlay(line, scaleX, scaleY) {
+            // Create SVG container for the slope line
+            const container = document.createElement('div');
+            container.className = 'slope-line-container';
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.style.width = '100%';
+            svg.style.height = '100%';
+            svg.style.position = 'absolute';
+            svg.style.top = '0';
+            svg.style.left = '0';
+
+            // Scale coordinates
+            const x1 = line.x1 * scaleX;
+            const y1 = line.y1 * scaleY;
+            const x2 = line.x2 * scaleX;
+            const y2 = line.y2 * scaleY;
+
+            // Draw the line
+            const lineEl = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            lineEl.setAttribute('x1', x1);
+            lineEl.setAttribute('y1', y1);
+            lineEl.setAttribute('x2', x2);
+            lineEl.setAttribute('y2', y2);
+            lineEl.setAttribute('class', 'slope-line');
+            svg.appendChild(lineEl);
+
+            // Draw endpoint circles
+            const circle1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle1.setAttribute('cx', x1);
+            circle1.setAttribute('cy', y1);
+            circle1.setAttribute('r', 6);
+            circle1.setAttribute('class', 'slope-endpoint');
+            svg.appendChild(circle1);
+
+            const circle2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle2.setAttribute('cx', x2);
+            circle2.setAttribute('cy', y2);
+            circle2.setAttribute('r', 6);
+            circle2.setAttribute('class', 'slope-endpoint');
+            svg.appendChild(circle2);
+
+            // Add angle label at midpoint
+            const midX = (x1 + x2) / 2;
+            const midY = (y1 + y2) / 2;
+
+            // Background rect for label
+            const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            labelBg.setAttribute('x', midX + 5);
+            labelBg.setAttribute('y', midY - 15);
+            labelBg.setAttribute('width', 70);
+            labelBg.setAttribute('height', 20);
+            labelBg.setAttribute('rx', 4);
+            labelBg.setAttribute('fill', 'rgba(249, 115, 22, 0.9)');
+            svg.appendChild(labelBg);
+
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', midX + 10);
+            text.setAttribute('y', midY);
+            text.setAttribute('class', 'slope-angle-label');
+            text.textContent = `SLOPE ${line.angle_deg}°`;
+            svg.appendChild(text);
+
+            container.appendChild(svg);
+            return container;
+        }
+
+        async function saveSlopeCalibration() {
+            if (!state.slopeLine || !state.cameraId) return;
+
+            try {
+                const payload = {
+                    camera_id: state.cameraId,
+                    slope_line: state.slopeLine
+                };
+
+                const res = await fetch('/api/calibration/slope', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    showStatus(`Failed to save slope: ${data.error}`, 'error');
+                } else {
+                    showStatus(`Slope calibration saved: ${state.slopeLine.angle_deg}°`, 'success');
+                }
+            } catch (err) {
+                showStatus(`Error saving slope: ${err.message}`, 'error');
+            }
+        }
+
+        async function loadSlopeCalibration(cameraId) {
+            try {
+                const res = await fetch(`/api/calibration/slope/${cameraId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.slope_line) {
+                        state.slopeLine = data.slope_line;
+                        renderZones();
+                    }
+                }
+            } catch (err) {
+                console.log('No existing slope calibration for', cameraId);
+            }
         }
 
         function applyTransform() {
