@@ -4004,19 +4004,26 @@ def ai_analyze():
 
     def run_analysis():
         try:
-            from pose_analyzer_yolo import YOLOPoseAnalyzer, FrameHistory
+            from pose_analyzer_yolo import YOLOPoseAnalyzer
 
             # Get total frames first
             cap = cv2.VideoCapture(str(video_path))
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS) or 25
+            frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             ai_jobs[job_id]['total_frames'] = total_frames
 
             analyzer = YOLOPoseAnalyzer(slope_angle_deg=0.0, model_size='l')
-            history = FrameHistory(max_frames=total_frames)
+
+            # Output annotated video alongside original: g10.mp4 → g10_ai.mp4
+            ai_video_name = video_path.stem + '_ai.mp4'
+            ai_video_path = video_path.parent / ai_video_name
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out_video = cv2.VideoWriter(str(ai_video_path), fourcc, fps, (frame_w, frame_h))
 
             frame_idx = 0
-            sample_rate = max(1, int(fps / 10))  # ~10 fps analysis rate
+            poses_detected = 0
 
             while True:
                 ret, frame = cap.read()
@@ -4027,37 +4034,31 @@ def ai_analyze():
                 ai_jobs[job_id]['analyzed_frames'] = frame_idx
                 ai_jobs[job_id]['progress'] = int(frame_idx / max(total_frames, 1) * 100)
 
-                if frame_idx % sample_rate != 0:
-                    continue
+                # Analyze every frame for smooth annotated video
+                keypoints, metrics, left_ski, right_ski = analyzer.analyze_frame(frame)
 
-                _, metrics, _, _ = analyzer.analyze_frame(frame)
-                if metrics:
-                    history.add(metrics)
+                if keypoints is not None:
+                    poses_detected += 1
+                    annotated = analyzer.draw_overlay(frame, keypoints, metrics, left_ski, right_ski)
+                    out_video.write(annotated)
+                else:
+                    # No pose detected — write original frame
+                    out_video.write(frame)
 
             cap.release()
+            out_video.release()
 
-            # Compile summary results
-            results = {}
-            if len(history.knee_angle_left) > 0:
-                results = {
-                    'frames_analyzed': len(history.knee_angle_left),
-                    'total_frames': total_frames,
-                    'avg_knee_angle_left': round(float(np.mean(history.knee_angle_left)), 1),
-                    'avg_knee_angle_right': round(float(np.mean(history.knee_angle_right)), 1),
-                    'avg_edge_angle_left': round(float(np.mean(history.edge_angle_left)), 1),
-                    'avg_edge_angle_right': round(float(np.mean(history.edge_angle_right)), 1),
-                    'avg_body_angulation': round(float(np.mean(history.body_angulation)), 1),
-                    'avg_body_inclination': round(float(np.mean(history.body_inclination)), 1),
-                    'avg_shoulder_alignment': round(float(np.mean(history.shoulder_alignment)), 0),
-                    'avg_hip_alignment': round(float(np.mean(history.hip_alignment)), 0),
-                    'avg_edge_symmetry': round(float(np.mean(history.edge_symmetry)), 0),
-                    'avg_fore_aft_left': round(float(np.mean(history.fore_aft_left)), 1),
-                    'avg_fore_aft_right': round(float(np.mean(history.fore_aft_right)), 1),
-                }
+            # Build relative path for serving via /montages/ route
+            # e.g. Cam1/run1/g10_ai.mp4
+            rel_path = str(ai_video_path.relative_to(MONTAGES_DIR / race_slug))
 
             ai_jobs[job_id]['status'] = 'complete'
             ai_jobs[job_id]['progress'] = 100
-            ai_jobs[job_id]['results'] = results
+            ai_jobs[job_id]['results'] = {
+                'ai_video': rel_path,
+                'frames_analyzed': poses_detected,
+                'total_frames': total_frames,
+            }
 
         except Exception as e:
             import traceback
@@ -4077,7 +4078,15 @@ def ai_status(job_id):
     job = ai_jobs.get(job_id)
     if not job:
         return jsonify({'error': 'Job not found'}), 404
-    return jsonify(job)
+    # Return only fields needed by the frontend
+    return jsonify({
+        'status': job['status'],
+        'progress': job['progress'],
+        'total_frames': job['total_frames'],
+        'analyzed_frames': job['analyzed_frames'],
+        'results': job['results'],
+        'error': job['error'],
+    })
 
 
 @app.route('/api/analyze/pose', methods=['POST'])

@@ -236,15 +236,16 @@ class YOLOPoseAnalyzer:
         while hip_to_slope > 90: hip_to_slope -= 180
         while hip_to_slope < -90: hip_to_slope += 180
 
-        # Body angulation
+        # Body angulation (0° = aligned, positive = separation between torso and legs)
         shoulder_mid = midpoint(left_shoulder[:2], right_shoulder[:2])
         hip_mid = midpoint(left_hip[:2], right_hip[:2])
         knee_mid = midpoint(left_knee[:2], right_knee[:2]) if left_knee and right_knee else None
 
         if knee_mid:
-            body_angulation = angle_at_joint(shoulder_mid, hip_mid, knee_mid)
+            raw_angulation = angle_at_joint(shoulder_mid, hip_mid, knee_mid)
+            body_angulation = 180.0 - raw_angulation  # Convert: 180° raw = 0° aligned
         else:
-            body_angulation = 180.0
+            body_angulation = 0.0
 
         # Body inclination
         ankle_mid = midpoint(left_ankle[:2], right_ankle[:2]) if left_ankle and right_ankle else None
@@ -264,25 +265,19 @@ class YOLOPoseAnalyzer:
         if right_hip and right_knee and right_ankle:
             knee_angle_right = angle_at_joint(right_hip[:2], right_knee[:2], right_ankle[:2])
 
-        # Edge angles - use detected ski angle if available, otherwise fall back to leg angle
+        # Edge angles - tibia (knee→ankle) angle relative to slope line
+        # Slope line is perpendicular to fall line
         edge_angle_left = 0.0
         edge_angle_right = 0.0
 
-        if left_ski and 'angle' in left_ski:
-            # Use actual ski angle from detection
-            edge_angle_left = left_ski['angle'] - self.slope_angle_deg
-        elif left_knee and left_ankle:
-            # Fallback to leg angle
-            leg_angle_left = angle_from_vertical(left_knee[:2], left_ankle[:2])
-            edge_angle_left = leg_angle_left - self.slope_angle_deg
+        if left_knee and left_ankle:
+            # Tibia angle from knee to ankle, relative to slope line (perpendicular to fall line)
+            tibia_angle_left = angle_from_vertical(left_knee[:2], left_ankle[:2])
+            edge_angle_left = tibia_angle_left - self.slope_angle_deg
 
-        if right_ski and 'angle' in right_ski:
-            # Use actual ski angle from detection
-            edge_angle_right = right_ski['angle'] - self.slope_angle_deg
-        elif right_knee and right_ankle:
-            # Fallback to leg angle
-            leg_angle_right = angle_from_vertical(right_knee[:2], right_ankle[:2])
-            edge_angle_right = leg_angle_right - self.slope_angle_deg
+        if right_knee and right_ankle:
+            tibia_angle_right = angle_from_vertical(right_knee[:2], right_ankle[:2])
+            edge_angle_right = tibia_angle_right - self.slope_angle_deg
 
         # Edge symmetry as percentage (100% = perfect)
         max_edge = max(abs(edge_angle_left), abs(edge_angle_right), 1)
@@ -447,6 +442,71 @@ class YOLOPoseAnalyzer:
 
         return output
 
+    def _draw_slope_line(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
+        """Draw slope line (dotted) perpendicular to fall line - the snow surface reference."""
+        output = frame.copy()
+
+        def get_pt(idx):
+            kp = keypoints[idx]
+            if kp[2] > 0.3:
+                return (int(kp[0]), int(kp[1]))
+            return None
+
+        la = get_pt(Keypoints.LEFT_ANKLE)
+        ra = get_pt(Keypoints.RIGHT_ANKLE)
+
+        if la and ra:
+            # Start point: below ankle midpoint (on snow)
+            ankle_mid = ((la[0] + ra[0])//2, (la[1] + ra[1])//2)
+            snow_offset = int(40 * scale)  # Below ankle
+            center_pt = (ankle_mid[0], ankle_mid[1] + snow_offset)
+
+            # Slope line is perpendicular to fall line (horizontal on the slope surface)
+            # Fall line angle is slope_angle_deg from vertical, so slope line is at slope_angle_deg from horizontal
+            slope_line_angle_rad = math.radians(self.slope_angle_deg)
+            line_len = int(200 * scale)
+
+            # Extend in both directions
+            dx = int(line_len * math.cos(slope_line_angle_rad))
+            dy = int(line_len * math.sin(slope_line_angle_rad))
+            pt1 = (center_pt[0] - dx, center_pt[1] - dy)
+            pt2 = (center_pt[0] + dx, center_pt[1] + dy)
+
+            # Draw dotted line
+            thickness = max(2, int(3 * scale))
+            dash_len = int(15 * scale)
+            gap_len = int(10 * scale)
+
+            # Calculate line length and draw dashes
+            total_dx = pt2[0] - pt1[0]
+            total_dy = pt2[1] - pt1[1]
+            total_len = math.sqrt(total_dx**2 + total_dy**2)
+            if total_len > 0:
+                ux, uy = total_dx / total_len, total_dy / total_len
+                pos = 0
+                drawing = True
+                while pos < total_len:
+                    if drawing:
+                        seg_len = min(dash_len, total_len - pos)
+                        x1 = int(pt1[0] + ux * pos)
+                        y1 = int(pt1[1] + uy * pos)
+                        x2 = int(pt1[0] + ux * (pos + seg_len))
+                        y2 = int(pt1[1] + uy * (pos + seg_len))
+                        cv2.line(output, (x1, y1), (x2, y2), (255, 255, 255), thickness, cv2.LINE_AA)
+                        pos += dash_len
+                    else:
+                        pos += gap_len
+                    drawing = not drawing
+
+            # Label "SLOPE" at right end
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            label = "SLOPE"
+            label_pos = (pt2[0] + int(10 * scale), pt2[1])
+            cv2.putText(output, label, label_pos, font, 0.5 * scale, (255, 255, 255),
+                       max(1, int(2 * scale)), cv2.LINE_AA)
+
+        return output
+
     def _draw_fall_line(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
         """Draw fall line arrow starting from snow level between skis."""
         output = frame.copy()
@@ -466,7 +526,7 @@ class YOLOPoseAnalyzer:
             snow_offset = int(40 * scale)  # Below ankle
             start_pt = (ankle_mid[0], ankle_mid[1] + snow_offset)
 
-            # Fall line direction
+            # Fall line direction (perpendicular to slope line, pointing downhill)
             line_len = int(150 * scale)
             angle_rad = math.radians(90 + self.slope_angle_deg)
             dx = int(line_len * math.cos(angle_rad))
@@ -528,7 +588,7 @@ class YOLOPoseAnalyzer:
         # Draw different metrics
         draw_line(self.history.edge_symmetry, (0, 255, 0), 0, 100)  # Green - symmetry
         draw_line(self.history.inclination, (255, 180, 100), -45, 45)  # Orange - inclination
-        draw_line(self.history.angulation, (0, 255, 255), 90, 180)  # Yellow - angulation
+        draw_line(self.history.angulation, (0, 255, 255), 0, 45)  # Yellow - angulation (0=aligned)
 
         # Legend
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -628,6 +688,9 @@ class YOLOPoseAnalyzer:
 
         # Draw ski rectangles
         output = self._draw_ski_rectangles(output, keypoints, scale, left_ski, right_ski)
+
+        # Draw slope line (dotted, perpendicular to fall line)
+        output = self._draw_slope_line(output, keypoints, scale)
 
         # Draw fall line from snow level
         output = self._draw_fall_line(output, keypoints, scale)
