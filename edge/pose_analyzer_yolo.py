@@ -608,6 +608,37 @@ class YOLOPoseAnalyzer:
         # Compatibility aliases
         self.sam3_predictor = self.sam_model  # Legacy alias
 
+        # Gate info for display (set via set_gate_info())
+        self.current_gate = None
+
+    def set_gate_info(self, gate_id: int = None, color: str = None,
+                      prev_gate_id: int = None, prev_gate_color: str = None,
+                      dist_from_prev: float = None, offset_lr: float = None,
+                      drop: float = None, gps_accuracy: float = None):
+        """
+        Set current gate info for display in top-right corner.
+
+        Args:
+            gate_id: Gate number (e.g., 9)
+            color: Gate color ("red" or "blue")
+            prev_gate_id: Previous gate number (e.g., 8)
+            prev_gate_color: Previous gate color ("red" or "blue")
+            dist_from_prev: Distance from previous gate (meters)
+            offset_lr: Left/right offset (negative=left, positive=right, meters)
+            drop: Vertical drop from previous gate (meters)
+            gps_accuracy: GPS measurement accuracy (meters)
+        """
+        self.current_gate = {
+            'id': gate_id,
+            'color': color,
+            'prev_id': prev_gate_id,
+            'prev_color': prev_gate_color,
+            'dist_from_prev': dist_from_prev,
+            'offset_lr': offset_lr,
+            'drop': drop,
+            'gps_accuracy': gps_accuracy,
+        }
+
     def get_keypoint(self, keypoints: np.ndarray, idx: int) -> Optional[Tuple[float, float, float]]:
         if keypoints is None or idx >= len(keypoints):
             return None
@@ -1107,65 +1138,27 @@ class YOLOPoseAnalyzer:
     def _draw_ski_rectangles(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
                               left_ski: Optional[dict] = None, right_ski: Optional[dict] = None,
                               metrics: Optional[PoseMetrics] = None) -> np.ndarray:
-        """Draw ski detections with ski base lines. Metrics shown only above right ski with comparison."""
+        """Draw ski detections with ski base lines (no labels - info shown in top-right box)."""
         output = frame.copy()
         thickness = max(2, int(3 * scale))
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6 * scale
-        text_thickness = max(1, int(2 * scale))
 
-        # Draw left ski (no label - just visualization)
+        # Draw left ski
         if left_ski:
             x1, y1, x2, y2 = left_ski['box']
-            # Draw bounding box (orange, thin)
             cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), (0, 165, 255), 2)
-            # Draw ski base line (black, thick)
             if left_ski.get('ski_line'):
                 pt1, pt2 = left_ski['ski_line']
                 cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
                 cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
 
-        # Draw right ski with comparison metrics above
+        # Draw right ski
         if right_ski:
             x1, y1, x2, y2 = right_ski['box']
-            # Draw bounding box (blue, thin)
             cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), (255, 150, 50), 2)
-            # Draw ski base line (black, thick)
             if right_ski.get('ski_line'):
                 pt1, pt2 = right_ski['ski_line']
                 cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
                 cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
-
-            # Draw metrics above right ski - comparison to left ski + slope
-            if metrics:
-                edge_l = abs(metrics.edge_angle_left)
-                edge_r = abs(metrics.edge_angle_right)
-
-                # Build multi-line label above right ski
-                lines = []
-
-                # Line 1: Slope gradient
-                lines.append(f"Slope: {abs(self.pitch_deg):.0f}")
-
-                # Line 2: Edge angles comparison (L vs R)
-                lines.append(f"Edge: L{edge_l:.0f} R{edge_r:.0f}")
-
-                # Line 3: Fore/Aft comparison if available
-                if metrics.fore_aft_left is not None and metrics.fore_aft_right is not None:
-                    fa_l = 90 + metrics.fore_aft_left
-                    fa_r = 90 + metrics.fore_aft_right
-                    lines.append(f"F/A: L{fa_l:.0f} R{fa_r:.0f}")
-
-                # Draw lines above the right ski box
-                line_height = int(25 * scale)
-                base_y = int(y1) - int(15 * scale)
-
-                for i, line in enumerate(reversed(lines)):
-                    label_y = base_y - i * line_height
-                    label_pos = (int(x1), label_y)
-                    # Black outline for visibility
-                    cv2.putText(output, line, label_pos, font, font_scale, (0, 0, 0), text_thickness + 2, cv2.LINE_AA)
-                    cv2.putText(output, line, label_pos, font, font_scale, (255, 255, 255), text_thickness, cv2.LINE_AA)
 
         return output
 
@@ -1406,6 +1399,102 @@ class YOLOPoseAnalyzer:
 
         return output
 
+    def _draw_gate_info_box(self, frame: np.ndarray, scale: float) -> np.ndarray:
+        """
+        Draw gate info box in top-right corner.
+
+        Displays:
+        - Gate number and color
+        - Distance from previous gate (↕)
+        - Left/right offset (← or →)
+        - Vertical drop (▼)
+        - GPS accuracy (±)
+        - Slope gradient
+        """
+        if not self.current_gate:
+            return frame
+
+        output = frame.copy()
+        h, w = frame.shape[:2]
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.6 * scale
+        text_thickness = max(1, int(2 * scale))
+        line_height = int(28 * scale)
+        margin = int(10 * scale)
+        padding = int(8 * scale)
+
+        gate = self.current_gate
+        lines = []
+
+        # Gate number and color
+        if gate.get('id') is not None:
+            color_text = f" ({gate['color']})" if gate.get('color') else ""
+            lines.append((f"Gate {gate['id']}{color_text}", (255, 255, 255)))
+
+        # Previous gate reference
+        if gate.get('prev_id') is not None:
+            prev_color_text = f" ({gate['prev_color']})" if gate.get('prev_color') else ""
+            lines.append((f"From Gate {gate['prev_id']}{prev_color_text}:", (180, 180, 180)))
+
+        # Distance from previous gate
+        if gate.get('dist_from_prev') is not None:
+            lines.append((f"Dist: {gate['dist_from_prev']:.1f}m", (200, 200, 200)))
+
+        # Left/right offset
+        if gate.get('offset_lr') is not None:
+            offset = gate['offset_lr']
+            if offset < 0:
+                lines.append((f"Offset: {abs(offset):.1f}m L", (200, 200, 200)))
+            else:
+                lines.append((f"Offset: {offset:.1f}m R", (200, 200, 200)))
+
+        # Vertical drop
+        if gate.get('drop') is not None:
+            lines.append((f"Drop: {gate['drop']:.1f}m", (200, 200, 200)))
+
+        # GPS accuracy
+        if gate.get('gps_accuracy') is not None:
+            lines.append((f"GPS: +/-{gate['gps_accuracy']:.2f}m", (180, 180, 180)))
+
+        # Slope gradient
+        lines.append((f"Slope: {abs(self.pitch_deg):.0f} deg", (0, 200, 255)))
+
+        if not lines:
+            return frame
+
+        # Calculate box dimensions
+        max_text_width = 0
+        for text, _ in lines:
+            (tw, _), _ = cv2.getTextSize(text, font, font_scale, text_thickness)
+            max_text_width = max(max_text_width, tw)
+
+        box_width = max_text_width + 2 * padding
+        box_height = len(lines) * line_height + padding
+
+        # Box position (top-right corner)
+        box_x = w - box_width - margin
+        box_y = margin
+
+        # Draw semi-transparent background
+        overlay = output.copy()
+        cv2.rectangle(overlay, (box_x, box_y), (box_x + box_width, box_y + box_height),
+                     (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.7, output, 0.3, 0, output)
+
+        # Draw border
+        cv2.rectangle(output, (box_x, box_y), (box_x + box_width, box_y + box_height),
+                     (100, 100, 100), 1)
+
+        # Draw text lines
+        y = box_y + padding + int(16 * scale)
+        for text, color in lines:
+            cv2.putText(output, text, (box_x + padding, y), font, font_scale,
+                       color, text_thickness, cv2.LINE_AA)
+            y += line_height
+
+        return output
+
     def draw_overlay(self, frame: np.ndarray, keypoints: np.ndarray,
                      metrics: Optional[PoseMetrics] = None,
                      left_ski: Optional[dict] = None,
@@ -1463,6 +1552,9 @@ class YOLOPoseAnalyzer:
         # Draw metrics graph
         graph_height = int(80 * scale)
         output = self._draw_metrics_graph(output, scale, graph_height)
+
+        # Draw gate info box in top-right corner
+        output = self._draw_gate_info_box(output, scale)
 
         # Draw metrics panel at BOTTOM (two lines)
         if metrics:
