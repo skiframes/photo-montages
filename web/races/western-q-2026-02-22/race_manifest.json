@@ -1614,7 +1614,10 @@
                       "thumb": "Cam1/run1/thumbnails/g7_d001_7.0fps_thumb.jpg",
                       "full": "Cam1/run1/fullres/g7_d001_7.0fps.jpg"
                     }
-                  ]
+                  ],
+                  "section_time": 2.56,
+                  "trigger_time": "09:11:01",
+                  "video": "Cam1/run1/g7_d001.mp4"
                 }
               ]
             },
@@ -1896,7 +1899,10 @@
                       "thumb": "Cam1/run1/thumbnails/g18_d001_7.0fps_thumb.jpg",
                       "full": "Cam1/run1/fullres/g18_d001_7.0fps.jpg"
                     }
-                  ]
+                  ],
+                  "section_time": 2.56,
+                  "trigger_time": "09:16:04",
+                  "video": "Cam1/run1/g18_d001.mp4"
                 }
               ]
             }
@@ -2103,7 +2109,10 @@
                       "thumb": "Cam1/run1/thumbnails/g27_d001_7.0fps_thumb.jpg",
                       "full": "Cam1/run1/fullres/g27_d001_7.0fps.jpg"
                     }
-                  ]
+                  ],
+                  "section_time": 2.4,
+                  "trigger_time": "09:19:36",
+                  "video": "Cam1/run1/g27_d001.mp4"
                 }
               ]
             },
@@ -3627,7 +3636,10 @@
                       "thumb": "Cam1/run1/thumbnails/g87_d001_7.0fps_thumb.jpg",
                       "full": "Cam1/run1/fullres/g87_d001_7.0fps.jpg"
                     }
-                  ]
+                  ],
+                  "section_time": 2.88,
+                  "trigger_time": "09:27:15",
+                  "video": "Cam1/run1/g87_d001.mp4"
                 }
               ]
             }
@@ -5656,6 +5668,8 @@
                       "full": "Cam1/run1/fullres/f3_d001_7.0fps.jpg"
                     }
                   ],
+                  "section_time": 2.56,
+                  "trigger_time": "09:05:40",
                   "video": "Cam1/run1/f3_d001.mp4"
                 }
               ]
@@ -5702,6 +5716,8 @@
                       "full": "Cam1/run1/fullres/f4_d001_7.0fps.jpg"
                     }
                   ],
+                  "section_time": 2.88,
+                  "trigger_time": "09:06:40",
                   "video": "Cam1/run1/f4_d001.mp4"
                 }
               ]

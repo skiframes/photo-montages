@@ -143,12 +143,15 @@
             <nav class="docs-sidebar">
                 <div class="docs-sidebar-header">Documentation</div>
                 <ul class="docs-nav">
-                    <li class="docs-nav-section">Getting Started</li>
-                    <li><a href="#doc-what-is" class="docs-nav-link active">What is Skiframes?</a></li>
+                    <li class="docs-nav-section">For Athletes</li>
+                    <li><a href="#doc-athletes" class="docs-nav-link active">Your Race Photos &amp; Videos</a></li>
+
+                    <li class="docs-nav-section">For Coaches / Parents</li>
+                    <li><a href="#doc-what-is" class="docs-nav-link">What is Skiframes?</a></li>
                     <li><a href="#doc-using-gallery" class="docs-nav-link">Using the Gallery</a></li>
                     <li><a href="#doc-understanding" class="docs-nav-link">Understanding Results</a></li>
 
-                    <li class="docs-nav-section">For Coaches</li>
+                    <li class="docs-nav-section">For Video Coaches</li>
                     <li><a href="#doc-camera-setup" class="docs-nav-link">Camera Setup</a></li>
                     <li><a href="#doc-calibration" class="docs-nav-link">Calibration UI</a></li>
                     <li><a href="#doc-processing" class="docs-nav-link">Processing Runs</a></li>
@@ -165,9 +168,50 @@
             </nav>
             <main class="docs-content">
 
-                <!-- ===== GETTING STARTED ===== -->
+                <!-- ===== FOR ATHLETES ===== -->
+
+                <article id="doc-athletes" class="docs-article">
+                    <h2>Your Race Photos &amp; Videos</h2>
+                    <p>Hey racer! This website has cool photos and videos from your race. Here's how to find yours:</p>
+
+                    <h3>Finding Your Stuff</h3>
+                    <ol>
+                        <li><strong>Click "Results"</strong> at the top of the page</li>
+                        <li><strong>Pick your age group</strong> (like U12 Girls or U14 Boys)</li>
+                        <li><strong>Find your name</strong> in the list, or type it in the search box</li>
+                        <li><strong>Click the green buttons</strong> next to your name:
+                            <ul>
+                                <li><strong>PM</strong> = Photo Montage (a cool picture showing your whole run!)</li>
+                                <li><strong>V</strong> = Video clip of you skiing</li>
+                            </ul>
+                        </li>
+                    </ol>
+
+                    <h3>What's a Photo Montage?</h3>
+                    <p>It's like a magic picture that shows YOU at every gate &mdash; all in one image! You can see your whole run from start to finish. It's great for seeing your body position and how you moved through the gates.</p>
+
+                    <h3>Why Don't I Have All Sections?</h3>
+                    <p>Sometimes a section might be missing for you. Don't worry &mdash; it's not your fault! Here's why it happens:</p>
+                    <ul>
+                        <li>A coach or course worker was near the camera helping another racer</li>
+                        <li>Someone was fixing a gate while you skied by</li>
+                        <li>The camera saw too many people moving at once and got confused</li>
+                    </ul>
+                    <p>The cameras are pretty smart, but sometimes they can't tell you apart from the helpers on the course!</p>
+
+                    <h3>Download Your Photos</h3>
+                    <p>Want to save your photo or video? Click the <strong>Download</strong> button when viewing it. You can share it with your friends and family!</p>
+
+                    <h3>What About the Times?</h3>
+                    <p>The "Time*" numbers next to each section are <em>estimates</em> &mdash; they're close but not official like the times from the timing wands. Use them to compare with your teammates, but remember the finish time is what really counts!</p>
+                </article>
+
+                <!-- ===== FOR COACHES / PARENTS ===== -->
 
                 <article id="doc-what-is" class="docs-article">
+                    <h2>Overview for Adults</h2>
+                    <p>This section provides a comprehensive overview of Skiframes for coaches, parents, and other adults interested in understanding how the system works.</p>
+
                     <h2>What is Skiframes?</h2>
                     <p>Skiframes is an open-source video analytics platform for alpine ski racing. It automatically generates <strong>stop-motion photo montages</strong> from race video, showing an athlete's full run through a course section in a single image.</p>
                     <p>The technique is inspired by <strong>Ron LeMaster's</strong> ski photography from <em>Ultimate Skiing</em>, where multiple exposures of a skier are composited onto a single background to reveal body position, line, and timing through a gate sequence.</p>
@@ -285,9 +329,13 @@
 
                     <h3>2D Course View</h3>
                     <p>The 2D satellite map shows the course from above using Leaflet. Toggle between satellite imagery and topographic contour lines. Enable "Measurements" to see gate-to-gate distances, lateral offsets, and elevation drops.</p>
+
+                    <h3>Missing Sections</h3>
+                    <p>Some athletes may have missing sections (no photo montage or video available). This typically happens when course crew were working nearby &mdash; maintaining the course, resetting gates, or assisting racers &mdash; which created overlapping motion in the camera's trigger zones.</p>
+                    <p>When multiple people are moving in the camera's field of view simultaneously, it becomes impossible to cleanly isolate the skier's run for the composite image. This is a limitation of automated detection and not a reflection of the athlete's performance.</p>
                 </article>
 
-                <!-- ===== FOR COACHES ===== -->
+                <!-- ===== FOR VIDEO COACHES ===== -->
 
                 <article id="doc-camera-setup" class="docs-article">
                     <h2>Camera Setup</h2>
@@ -1034,9 +1082,8 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
 
     <!-- Disclaimer Footer -->
     <footer id="disclaimer">
-        <p>Some athletes may have missing sections because course crew were working nearby &mdash; maintaining the course, or assisting racers &mdash; which created overlapping motion in the camera&rsquo;s trigger zones, making it impossible to cleanly isolate the skier&rsquo;s run in the photo montage or video.</p>
         <p>Official results are available at: <a href="https://www.nhalpine.org/2026-results" target="_blank" rel="noopener">nhalpine.org/2026-results</a></p>
-        <p><strong>Disclaimer:</strong> Intermediate section times are unofficial estimates derived from camera analysis, not from official timing equipment. They are provided as a coaching aid only and should not be used for any official purpose. Accuracy is &plusmn;0.08s</p>
+        <p><strong>*Section Times Disclaimer:</strong> Intermediate section times are unofficial estimates derived from camera analysis, not from official timing equipment. They are provided as a coaching aid only and should not be used for any official purpose. Accuracy is &plusmn;0.08s</p>
     </footer>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

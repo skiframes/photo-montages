@@ -2458,17 +2458,12 @@ function renderResults() {
     // Get sections active for this run
     const activeSections = getActiveSections();
 
-    // Build table header with three rows: group labels, section labels, column headers
+    // Build table header with two rows: section labels, column headers
     const sectionColCount = activeSections.length * 4; // time + PM + V + AI per section
     let headerHtml = '<tr>';
-    // Row 1: Top-level group headers
-    headerHtml += `<th class="th-group th-group-official" colspan="2" rowspan="2">Official Results</th>`;
-    headerHtml += `<th class="th-group" colspan="3" rowspan="2"></th>`;
-    if (activeSections.length > 0) {
-        headerHtml += `<th class="th-group th-group-unofficial" colspan="${sectionColCount}" style="text-align:center;">Unofficial Camera Estimated Section Times</th>`;
-    }
-    headerHtml += '</tr><tr>';
-    // Row 2: Per-section sub-headers (clickable → focuses 3D map on that section)
+    // Row 1: Empty group headers + Per-section sub-headers (clickable → focuses 3D map on that section)
+    headerHtml += `<th class="th-group" colspan="2" rowspan="1"></th>`;
+    headerHtml += `<th class="th-group" colspan="3" rowspan="1"></th>`;
     activeSections.forEach(({ cam, sectionIdx }) => {
         headerHtml += `<th class="th-section-group th-section-clickable" colspan="4" onclick="focusOnSection('${cam.id}')" title="Click to view Section ${sectionIdx} in 3D map">Section ${sectionIdx}</th>`;
     });
@@ -2482,10 +2477,11 @@ function renderResults() {
     headerHtml += `<th class="col-bib sortable ${bibSortCls}" onclick="handleSort('bib')">Bib <span class="sort-arrow">${sortColumn === 'bib' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
     headerHtml += `<th class="col-name">Name</th>`;
     headerHtml += `<th class="col-club">Club</th>`;
+    const sectionTimeDisclaimer = 'Unofficial estimate from camera analysis, not official timing. For coaching use only. Accuracy ±0.08s';
     activeSections.forEach(({ cam, sectionIdx }) => {
         const colKey = 'sectionTime_' + cam.id;
         const stSortCls = sortColumn === colKey ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
-        headerHtml += `<th class="col-section-time sortable ${stSortCls}" onclick="handleSort('${colKey}')">Time <span class="sort-arrow">${sortColumn === colKey ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
+        headerHtml += `<th class="col-section-time sortable ${stSortCls}" onclick="handleSort('${colKey}')" title="${sectionTimeDisclaimer}"><a href="#disclaimer" class="section-time-link">Time*</a> <span class="sort-arrow">${sortColumn === colKey ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
         headerHtml += `<th class="col-pm">PM</th>`;
         headerHtml += `<th class="col-video">V</th>`;
         headerHtml += `<th class="col-ai">AI</th>`;
@@ -2592,9 +2588,10 @@ function athleteRow(a, cat, ranks, activeSections, isForerunner) {
         const hasMontage = Array.isArray(dets) && dets.length > 0;
         const detCount = hasMontage ? dets.length : 0;
 
-        // Section time cell
+        // Section time cell (with disclaimer tooltip)
+        const stDisclaimer = 'Unofficial estimate from camera analysis, not official timing. For coaching use only.';
         if (sectionTime != null) {
-            html += `<td class="col-section-time"><span class="section-time-val">${sectionTime.toFixed(1)}</span></td>`;
+            html += `<td class="col-section-time" title="${stDisclaimer}"><span class="section-time-val">${sectionTime.toFixed(1)}</span></td>`;
         } else {
             html += `<td class="col-section-time"><span class="section-time-na">&mdash;</span></td>`;
         }
