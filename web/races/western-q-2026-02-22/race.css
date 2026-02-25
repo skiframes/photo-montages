@@ -553,6 +553,15 @@ body {
 .lb-fps-btn:hover { background: rgba(255,255,255,0.25); }
 .lb-fps-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 
+/* ── Detection Nav + Delete ─────────────────────────────────────────── */
+.det-nav { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px; }
+.det-nav-btn { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.det-nav-btn:hover:not([disabled]) { background: rgba(255,255,255,0.3); }
+.det-nav-btn[disabled] { opacity: 0.3; cursor: default; }
+.det-nav-label { color: #94a3b8; font-size: 13px; font-weight: 600; min-width: 40px; text-align: center; }
+.lb-delete-btn { background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.5); color: #ef4444; padding: 4px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; margin-top: 10px; transition: all 0.15s; }
+.lb-delete-btn:hover { background: rgba(239,68,68,0.4); border-color: #ef4444; }
+
 /* ── Video Lightbox ──────────────────────────────────────────────────── */
 #video-lightbox { position: fixed; inset: 0; z-index: 2100; display: flex; align-items: center; justify-content: center; }
 #video-lightbox.hidden { display: none; }
@@ -636,6 +645,23 @@ body {
 .section-btn-video.active { background: var(--primary); color: #fff; }
 .section-btn-video.active:hover { opacity: 0.85; }
 .section-btn-video.inactive { background: #f1f5f9; color: #cbd5e1; cursor: default; }
+
+/* AI button in results table */
+.section-btn-ai {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 3px 6px; border-radius: 4px;
+    font-size: 11px; font-weight: 600; border: none; cursor: pointer;
+    min-width: 32px; transition: all 0.2s;
+}
+.section-btn-ai.active { background: #8b5cf6; color: #fff; }
+.section-btn-ai.active:hover { background: #7c3aed; }
+.section-btn-ai.inactive { background: #f1f5f9; color: #cbd5e1; cursor: default; }
+.section-btn-ai.running { background: #f59e0b; color: #fff; cursor: wait; animation: ai-pulse 1.5s ease-in-out infinite; }
+.section-btn-ai.complete { background: #10b981; color: #fff; }
+.section-btn-ai.complete:hover { background: #059669; }
+.section-btn-ai.error { background: #ef4444; color: #fff; }
+@keyframes ai-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+.col-ai { text-align: center; width: 40px; }
 
 /* ── Disclaimer Footer ────────────────────────────────────────────────── */
 #disclaimer {

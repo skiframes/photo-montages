@@ -120,6 +120,11 @@ class SkiFramesRunner:
         # Track which racers have been matched (prevent duplicate matches)
         self.matched_racer_indices: set = set()
 
+        # Track detection count per base filename key for multi-detection support
+        # Key: (gender_prefix, bib) for matched runs, ('unmatched', ts) for unmatched
+        # Value: count of detections for that key
+        self.detection_counter: Dict[tuple, int] = {}
+
         # If staging mode (batch processing), redirect ALL output to staging dir
         # so everything is in one location (important for 4T server batch processing)
         if self.section_id and self.staging_dir and self.run_number:
@@ -423,15 +428,22 @@ class SkiFramesRunner:
                 else:
                     gender_prefix = ''
                 staging_filename = f"{gender_prefix}{bib}" if gender_prefix else str(bib)
+                det_key = (gender_prefix, bib)
             else:
                 # Unmatched run — use timestamp-based filename so it's still generated
                 ts = run.start_time.strftime('%H%M%S') if run.start_time else f"{run.run_number:03d}"
                 staging_filename = f"unmatched_{ts}"
+                det_key = ('unmatched', ts)
                 print(f"  ⚠️  Generating montage for unmatched run (filename: {staging_filename})")
+
+            # Track multiple detections per key (same bib can trigger multiple times)
+            self.detection_counter[det_key] = self.detection_counter.get(det_key, 0) + 1
+            det_count = self.detection_counter[det_key]
+            det_id = f"d{det_count:03d}"
 
             for fps_val in self.montage_fps_list:
                 fps_suffix = f"_{fps_val:.1f}fps"
-                fps_filename = f"{staging_filename}{fps_suffix}"
+                fps_filename = f"{staging_filename}_{det_id}{fps_suffix}"
 
                 result = generate_montage(
                     frames=run.frames,
@@ -460,10 +472,11 @@ class SkiFramesRunner:
 
             # Save per-bib timing data for section time estimation
             import json as _json2
-            timing_filename = f"{staging_filename}_timing.json"
+            timing_filename = f"{staging_filename}_{det_id}_timing.json"
             timing_path = os.path.join(self.staging_output_dir, timing_filename)
             timing_data = {
                 'bib': racer.get('bib', None) if racer else None,
+                'det_id': det_id,
                 'gender': ('F' if gender_prefix == 'g' else 'M' if gender_prefix == 'b' else '') if racer else '',
                 'matched': racer is not None,
                 'section_elapsed_sec': round(run.duration, 2) if run.end_time else None,
@@ -475,7 +488,7 @@ class SkiFramesRunner:
 
             # Generate video clip in staging directory
             try:
-                video_filename = f"{staging_filename}.mp4"
+                video_filename = f"{staging_filename}_{det_id}.mp4"
                 video_out_path = os.path.join(self.staging_output_dir, video_filename)
 
                 # Build crop region (same as montage)
@@ -519,7 +532,7 @@ class SkiFramesRunner:
             # except Exception as e:
             #     print(f"  Trajectory skipped: {e}")
 
-            print(f"  Staged: {self.staging_output_dir}/{staging_filename}*.jpg")
+            print(f"  Staged: {self.staging_output_dir}/{staging_filename}_{det_id}*.jpg")
         else:
             # Normal mode: output to session dir with name/bib filenames
             custom_filename = self._generate_filename(racer, run.run_number)

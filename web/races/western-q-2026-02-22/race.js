@@ -70,6 +70,25 @@ async function init() {
             console.log('[race] Local mode — media_base_url overridden to:', manifest.media_base_url);
         }
 
+        // Normalize montages: convert old single-object format to array format
+        // Old: montages.Cam1.run1 = {thumb, full, ...}
+        // New: montages.Cam1.run1 = [{det_id, thumb, full, ...}, ...]
+        for (const cat of (manifest.categories || [])) {
+            for (const ath of (cat.athletes || [])) {
+                if (!ath.montages) continue;
+                for (const camId of Object.keys(ath.montages)) {
+                    for (const runKey of Object.keys(ath.montages[camId])) {
+                        const val = ath.montages[camId][runKey];
+                        if (val && !Array.isArray(val)) {
+                            // Legacy single object — wrap in array
+                            if (!val.det_id) val.det_id = 'd000';
+                            ath.montages[camId][runKey] = [val];
+                        }
+                    }
+                }
+            }
+        }
+
         console.log('[race] manifest loaded:', manifest.categories.length, 'categories');
         console.log('[race] terrain:', terrainMeta.width + 'x' + terrainMeta.height, 'at', terrainMeta.resolution_m + 'm resolution');
     } catch (e) {
@@ -2326,11 +2345,14 @@ function getActiveSections() {
 
 /**
  * Get section elapsed time for an athlete/camera/run.
+ * Uses first detection's section_time from the array.
  * Returns number (seconds) or null.
  */
 function getSectionTime(athlete, camId, runKey) {
     if (!athlete.montages || !athlete.montages[camId] || !athlete.montages[camId][runKey]) return null;
-    return athlete.montages[camId][runKey].section_time || null;
+    const dets = athlete.montages[camId][runKey];
+    if (!Array.isArray(dets) || dets.length === 0) return null;
+    return dets[0].section_time || null;
 }
 
 window.handleSort = function handleSort(column) {
@@ -2356,7 +2378,7 @@ function renderResults() {
     const activeSections = getActiveSections();
 
     // Build table header with three rows: group labels, section labels, column headers
-    const sectionColCount = activeSections.length * 3; // time + PM + V per section
+    const sectionColCount = activeSections.length * 4; // time + PM + V + AI per section
     let headerHtml = '<tr>';
     // Row 1: Top-level group headers
     headerHtml += `<th class="th-group th-group-official" colspan="2" rowspan="2">Official Results</th>`;
@@ -2367,7 +2389,7 @@ function renderResults() {
     headerHtml += '</tr><tr>';
     // Row 2: Per-section sub-headers (clickable → focuses 3D map on that section)
     activeSections.forEach(({ cam, sectionIdx }) => {
-        headerHtml += `<th class="th-section-group th-section-clickable" colspan="3" onclick="focusOnSection('${cam.id}')" title="Click to view Section ${sectionIdx} in 3D map">Section ${sectionIdx}</th>`;
+        headerHtml += `<th class="th-section-group th-section-clickable" colspan="4" onclick="focusOnSection('${cam.id}')" title="Click to view Section ${sectionIdx} in 3D map">Section ${sectionIdx}</th>`;
     });
     headerHtml += '</tr><tr>';
     // Row 3: Column headers
@@ -2384,6 +2406,7 @@ function renderResults() {
         headerHtml += `<th class="col-section-time sortable ${stSortCls}" onclick="handleSort('${colKey}')">Time <span class="sort-arrow">${sortColumn === colKey ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
         headerHtml += `<th class="col-pm">PM</th>`;
         headerHtml += `<th class="col-video">V</th>`;
+        headerHtml += `<th class="col-ai">AI</th>`;
     });
     headerHtml += '</tr>';
     thead.innerHTML = headerHtml;
@@ -2452,7 +2475,9 @@ function athleteRow(a, cat, ranks, activeSections) {
     activeSections.forEach(({ cam, sectionIdx }) => {
         const montageKey = activeRun;
         const sectionTime = getSectionTime(a, cam.id, montageKey);
-        const hasMontage = a.montages && a.montages[cam.id] && a.montages[cam.id][montageKey];
+        const dets = (a.montages && a.montages[cam.id] && a.montages[cam.id][montageKey]) || [];
+        const hasMontage = Array.isArray(dets) && dets.length > 0;
+        const detCount = hasMontage ? dets.length : 0;
 
         // Section time cell
         if (sectionTime != null) {
@@ -2460,14 +2485,42 @@ function athleteRow(a, cat, ranks, activeSections) {
         } else {
             html += `<td class="col-section-time"><span class="section-time-na">&mdash;</span></td>`;
         }
-        // PM button cell
+        // PM button cell — show count if >1 detection
+        const pmLabel = hasMontage ? (detCount > 1 ? `PM(${detCount})` : 'PM') : '';
         html += `<td class="col-pm">`;
-        html += `<button class="section-btn ${hasMontage ? 'active' : 'inactive'}" ${hasMontage ? `onclick="window._openMontage('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Photo montage">${hasMontage ? 'PM' : ''}</button>`;
+        html += `<button class="section-btn ${hasMontage ? 'active' : 'inactive'}" ${hasMontage ? `onclick="window._openMontage('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Photo montage">${pmLabel}</button>`;
         html += `</td>`;
-        // Video button cell
-        const hasVideo = hasMontage && a.montages[cam.id][montageKey].video;
+        // Video button cell — show count if >1 video
+        const videoCount = hasMontage ? dets.filter(d => d.video).length : 0;
+        const hasVideo = videoCount > 0;
+        const vLabel = hasVideo ? (videoCount > 1 ? `V(${videoCount})` : 'V') : '';
         html += `<td class="col-video">`;
-        html += `<button class="section-btn-video ${hasVideo ? 'active' : 'inactive'}" ${hasVideo ? `onclick="window._openVideo('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Video clip">${hasVideo ? 'V' : ''}</button>`;
+        html += `<button class="section-btn-video ${hasVideo ? 'active' : 'inactive'}" ${hasVideo ? `onclick="window._openVideo('${cam.id}',${a.bib},'${cat.id}')"` : ''} title="Video clip">${vLabel}</button>`;
+        html += `</td>`;
+        // AI button cell
+        const aiJobKey = `${cam.id}_${a.bib}_${montageKey}`;
+        const aiState = window._aiJobStates && window._aiJobStates[aiJobKey];
+        let aiLabel = 'AI';
+        let aiClass = 'inactive';
+        let aiClick = '';
+        if (hasVideo) {
+            if (aiState && aiState.status === 'running') {
+                aiLabel = `${aiState.progress}%`;
+                aiClass = 'running';
+            } else if (aiState && aiState.status === 'complete') {
+                aiLabel = 'AI \u2713';
+                aiClass = 'complete';
+                aiClick = `onclick="window._showAIResults('${aiJobKey}')"`;
+            } else {
+                aiClass = 'active';
+                const gChar = cat.id.includes('Girls') || cat.id.includes('Women') ? 'g' : 'b';
+                const firstDet = dets[0];
+                const detIdVal = firstDet ? firstDet.det_id || 'd000' : 'd000';
+                aiClick = `onclick="window._runAI('${cam.id}',${a.bib},'${cat.id}','${montageKey}','${gChar}','${detIdVal}')"`;
+            }
+        }
+        html += `<td class="col-ai">`;
+        html += `<button class="section-btn-ai ${aiClass}" id="ai-btn-${aiJobKey}" ${aiClick} title="AI Pose Analysis">${aiLabel}</button>`;
         html += `</td>`;
     });
     html += '</tr>';
@@ -2481,6 +2534,7 @@ function athleteRow(a, cat, ranks, activeSections) {
 
 let lbList = [];
 let lbIdx = 0;
+let lbDetIdx = 0;  // Current detection index within athlete's detections array
 let lbSelectedFps = null;  // Currently selected FPS (null = default/middle)
 
 window._openMontage = function (camId, bib, catId) {
@@ -2491,10 +2545,14 @@ window._openMontage = function (camId, bib, catId) {
 
     const runKey = activeRun;
     lbList = cat.athletes
-        .filter(a => a.montages && a.montages[camId] && a.montages[camId][runKey])
+        .filter(a => {
+            const dets = a.montages && a.montages[camId] && a.montages[camId][runKey];
+            return Array.isArray(dets) && dets.length > 0;
+        })
         .map(a => ({ athlete: a, camId, catId, runKey }));
     lbIdx = lbList.findIndex(item => item.athlete.bib === bib);
     if (lbIdx < 0) lbIdx = 0;
+    lbDetIdx = 0;  // Start at first detection
     showLightbox();
 };
 
@@ -2502,13 +2560,13 @@ function setupLightbox() {
     const lb = document.getElementById('lightbox');
     lb.querySelector('.lb-backdrop').addEventListener('click', closeLB);
     lb.querySelector('.lb-close').addEventListener('click', closeLB);
-    lb.querySelector('.lb-prev').addEventListener('click', () => { if (lbIdx > 0) { lbIdx--; showLightbox(); } });
-    lb.querySelector('.lb-next').addEventListener('click', () => { if (lbIdx < lbList.length - 1) { lbIdx++; showLightbox(); } });
+    lb.querySelector('.lb-prev').addEventListener('click', () => { if (lbIdx > 0) { lbIdx--; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); } });
+    lb.querySelector('.lb-next').addEventListener('click', () => { if (lbIdx < lbList.length - 1) { lbIdx++; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); } });
     document.addEventListener('keydown', e => {
         if (lb.classList.contains('hidden')) return;
         if (e.key === 'Escape') closeLB();
-        if (e.key === 'ArrowLeft' && lbIdx > 0) { lbIdx--; showLightbox(); }
-        if (e.key === 'ArrowRight' && lbIdx < lbList.length - 1) { lbIdx++; showLightbox(); }
+        if (e.key === 'ArrowLeft' && lbIdx > 0) { lbIdx--; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
+        if (e.key === 'ArrowRight' && lbIdx < lbList.length - 1) { lbIdx++; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
     });
 }
 
@@ -2518,7 +2576,13 @@ function showLightbox() {
     if (!item) return;
     const a = item.athlete;
     const runKey = item.runKey || activeRun;
-    const montage = a.montages[item.camId][runKey];
+    const dets = a.montages[item.camId][runKey];
+    if (!Array.isArray(dets) || dets.length === 0) return;
+
+    // Clamp detection index
+    if (lbDetIdx >= dets.length) lbDetIdx = dets.length - 1;
+    if (lbDetIdx < 0) lbDetIdx = 0;
+    const montage = dets[lbDetIdx];
     if (!montage) return;
 
     const sectionIdx = manifest.cameras.findIndex(c => c.id === item.camId);
@@ -2538,9 +2602,48 @@ function showLightbox() {
     lb.classList.remove('hidden');
     document.getElementById('lb-img').src = thumbUrl;
     document.getElementById('lb-name').textContent = `${a.first} ${a.last} (#${a.bib})`;
-    document.getElementById('lb-details').textContent = `${runLabel} | ${sectionLabel}`;
+
+    // Build details with det_id and trigger_time
+    let detailText = `${runLabel} | ${sectionLabel}`;
+    if (montage.det_id) detailText += ` | ${montage.det_id}`;
+    if (montage.trigger_time) detailText += ` | ${montage.trigger_time}`;
+    document.getElementById('lb-details').textContent = detailText;
+
     lb.querySelector('.lb-prev').style.display = lbIdx > 0 ? '' : 'none';
     lb.querySelector('.lb-next').style.display = lbIdx < lbList.length - 1 ? '' : 'none';
+
+    // Detection navigator (only show if multiple detections)
+    const detNav = document.getElementById('lb-det-nav');
+    if (detNav) {
+        if (dets.length > 1) {
+            detNav.style.display = 'flex';
+            detNav.innerHTML = `
+                <button class="det-nav-btn" id="lb-det-prev" ${lbDetIdx <= 0 ? 'disabled' : ''}>&lsaquo;</button>
+                <span class="det-nav-label">${lbDetIdx + 1} / ${dets.length}</span>
+                <button class="det-nav-btn" id="lb-det-next" ${lbDetIdx >= dets.length - 1 ? 'disabled' : ''}>&rsaquo;</button>
+            `;
+            document.getElementById('lb-det-prev').addEventListener('click', () => {
+                if (lbDetIdx > 0) { lbDetIdx--; lbSelectedFps = null; showLightbox(); }
+            });
+            document.getElementById('lb-det-next').addEventListener('click', () => {
+                if (lbDetIdx < dets.length - 1) { lbDetIdx++; lbSelectedFps = null; showLightbox(); }
+            });
+        } else {
+            detNav.style.display = 'none';
+        }
+    }
+
+    // Delete button
+    const delBtn = document.getElementById('lb-delete-btn');
+    if (delBtn) {
+        delBtn.onclick = () => {
+            const det = dets[lbDetIdx];
+            if (!det) return;
+            const gender = a.gender || (item.catId.includes('Girls') || item.catId.includes('Women') ? 'female' : 'male');
+            const genderChar = gender === 'female' ? 'g' : 'b';
+            window._deleteMontage(manifest.race_slug || '', item.camId, runKey, a.bib, genderChar, det.det_id, 'photo');
+        };
+    }
 
     // FPS selector buttons
     const fpsSel = document.getElementById('lb-fps-selector');
@@ -2575,6 +2678,7 @@ function closeLB() { document.getElementById('lightbox').classList.add('hidden')
 
 let vlbList = [];
 let vlbIdx = 0;
+let vlbDetIdx = 0;  // Current detection index for video lightbox
 let vlbSpeed = 1;
 
 window._openVideo = function (camId, bib, catId) {
@@ -2585,10 +2689,14 @@ window._openVideo = function (camId, bib, catId) {
 
     const runKey = activeRun;
     vlbList = cat.athletes
-        .filter(a => a.montages && a.montages[camId] && a.montages[camId][runKey] && a.montages[camId][runKey].video)
+        .filter(a => {
+            const dets = a.montages && a.montages[camId] && a.montages[camId][runKey];
+            return Array.isArray(dets) && dets.some(d => d.video);
+        })
         .map(a => ({ athlete: a, camId, catId, runKey }));
     vlbIdx = vlbList.findIndex(item => item.athlete.bib === bib);
     if (vlbIdx < 0) vlbIdx = 0;
+    vlbDetIdx = 0;  // Start at first detection with video
     showVideoLightbox();
 };
 
@@ -2600,8 +2708,8 @@ function setupVideoLightbox() {
     vlb.querySelector('.vlb-close').addEventListener('click', closeVLB);
     // Prevent clicks on content/controls from bubbling to backdrop and closing the lightbox
     vlb.querySelector('.vlb-content').addEventListener('click', e => e.stopPropagation());
-    vlb.querySelector('.vlb-prev').addEventListener('click', () => { if (vlbIdx > 0) { vlbIdx--; showVideoLightbox(); } });
-    vlb.querySelector('.vlb-next').addEventListener('click', () => { if (vlbIdx < vlbList.length - 1) { vlbIdx++; showVideoLightbox(); } });
+    vlb.querySelector('.vlb-prev').addEventListener('click', () => { if (vlbIdx > 0) { vlbIdx--; vlbDetIdx = 0; showVideoLightbox(); } });
+    vlb.querySelector('.vlb-next').addEventListener('click', () => { if (vlbIdx < vlbList.length - 1) { vlbIdx++; vlbDetIdx = 0; showVideoLightbox(); } });
 
     // Play/Pause button
     const playBtn = document.getElementById('vlb-play-btn');
@@ -2719,8 +2827,8 @@ function setupVideoLightbox() {
     document.addEventListener('keydown', e => {
         if (vlb.classList.contains('hidden')) return;
         if (e.key === 'Escape') closeVLB();
-        if (e.key === 'ArrowLeft' && vlbIdx > 0) { vlbIdx--; showVideoLightbox(); }
-        if (e.key === 'ArrowRight' && vlbIdx < vlbList.length - 1) { vlbIdx++; showVideoLightbox(); }
+        if (e.key === 'ArrowLeft' && vlbIdx > 0) { vlbIdx--; vlbDetIdx = 0; showVideoLightbox(); }
+        if (e.key === 'ArrowRight' && vlbIdx < vlbList.length - 1) { vlbIdx++; vlbDetIdx = 0; showVideoLightbox(); }
         if (e.key === ' ') { e.preventDefault(); togglePlay(); }
         // Frame stepping: , (comma) = back one frame, . (period) = forward one frame
         if (e.key === ',') { e.preventDefault(); stepFrame(-1); }
@@ -2734,8 +2842,15 @@ function showVideoLightbox() {
     if (!item) return;
     const a = item.athlete;
     const runKey = item.runKey || activeRun;
-    const montage = a.montages[item.camId][runKey];
-    if (!montage || !montage.video) return;
+    const dets = a.montages[item.camId][runKey];
+    if (!Array.isArray(dets) || dets.length === 0) return;
+
+    // Filter to detections with video
+    const videoDets = dets.filter(d => d.video);
+    if (videoDets.length === 0) return;
+    if (vlbDetIdx >= videoDets.length) vlbDetIdx = videoDets.length - 1;
+    if (vlbDetIdx < 0) vlbDetIdx = 0;
+    const montage = videoDets[vlbDetIdx];
 
     const videoUrl = manifest.media_base_url + '/' + montage.video;
     const sectionIdx = manifest.cameras.findIndex(c => c.id === item.camId);
@@ -2759,14 +2874,156 @@ function showVideoLightbox() {
         video.play().catch(() => {}); // Autoplay (may fail on mobile without interaction)
     });
 
+    // Build details with det_id and trigger_time
+    let detailText = `${runLabel} | ${sectionLabel} | Video`;
+    if (montage.det_id) detailText += ` | ${montage.det_id}`;
+    if (montage.trigger_time) detailText += ` | ${montage.trigger_time}`;
+
     document.getElementById('vlb-name').textContent = `${a.first} ${a.last} (#${a.bib})`;
-    document.getElementById('vlb-details').textContent = `${runLabel} | ${sectionLabel} | Video`;
+    document.getElementById('vlb-details').textContent = detailText;
     document.getElementById('vlb-time').textContent = '0.00s / 0.00s';
     document.getElementById('vlb-scrubber').value = 0;
 
     vlb.querySelector('.vlb-prev').style.display = vlbIdx > 0 ? '' : 'none';
     vlb.querySelector('.vlb-next').style.display = vlbIdx < vlbList.length - 1 ? '' : 'none';
+
+    // Detection navigator (only show if multiple video detections)
+    const detNav = document.getElementById('vlb-det-nav');
+    if (detNav) {
+        if (videoDets.length > 1) {
+            detNav.style.display = 'flex';
+            detNav.innerHTML = `
+                <button class="det-nav-btn" id="vlb-det-prev" ${vlbDetIdx <= 0 ? 'disabled' : ''}>&lsaquo;</button>
+                <span class="det-nav-label">${vlbDetIdx + 1} / ${videoDets.length}</span>
+                <button class="det-nav-btn" id="vlb-det-next" ${vlbDetIdx >= videoDets.length - 1 ? 'disabled' : ''}>&rsaquo;</button>
+            `;
+            document.getElementById('vlb-det-prev').addEventListener('click', () => {
+                if (vlbDetIdx > 0) { vlbDetIdx--; showVideoLightbox(); }
+            });
+            document.getElementById('vlb-det-next').addEventListener('click', () => {
+                if (vlbDetIdx < videoDets.length - 1) { vlbDetIdx++; showVideoLightbox(); }
+            });
+        } else {
+            detNav.style.display = 'none';
+        }
+    }
+
+    // Delete button
+    const delBtn = document.getElementById('vlb-delete-btn');
+    if (delBtn) {
+        delBtn.onclick = () => {
+            const det = videoDets[vlbDetIdx];
+            if (!det) return;
+            const gender = a.gender || (item.catId.includes('Girls') || item.catId.includes('Women') ? 'female' : 'male');
+            const genderChar = gender === 'female' ? 'g' : 'b';
+            window._deleteMontage(manifest.race_slug || '', item.camId, runKey, a.bib, genderChar, det.det_id, 'video');
+        };
+    }
 }
+
+/**
+ * Delete a detection from both the manifest and disk.
+ * @param {string} raceSlug
+ * @param {string} camId
+ * @param {string} runKey
+ * @param {number} bib
+ * @param {string} genderChar - 'g' or 'b'
+ * @param {string} detId - e.g. 'd001'
+ * @param {string} source - 'photo' or 'video' (which lightbox initiated)
+ */
+window._deleteMontage = async function (raceSlug, camId, runKey, bib, genderChar, detId, source) {
+    // Derive race_slug from media_base_url if not in manifest
+    if (!raceSlug && manifest.media_base_url) {
+        raceSlug = manifest.media_base_url.split('/').pop();
+    }
+
+    // Check for stored email or prompt
+    let email = localStorage.getItem('skiframes_delete_email') || '';
+    if (!email) {
+        email = prompt('Enter your authorized email to delete:');
+        if (!email) return;
+        email = email.trim().toLowerCase();
+        localStorage.setItem('skiframes_delete_email', email);
+    }
+
+    if (!confirm(`Delete detection ${detId} for bib #${bib}?\nThis removes all files (montages + video) for this detection.`)) return;
+
+    try {
+        const resp = await fetch('http://localhost:5000/api/montages/delete-detection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ race_slug: raceSlug, cam_id: camId, run_key: runKey, bib, gender: genderChar, det_id: detId, email })
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            if (resp.status === 403) {
+                // Unauthorized — clear stored email so user can re-enter
+                localStorage.removeItem('skiframes_delete_email');
+            }
+            alert('Delete failed: ' + (err.error || resp.statusText));
+            return;
+        }
+
+        // Update manifest in memory: remove the detection from the array
+        for (const cat of manifest.categories) {
+            for (const ath of cat.athletes) {
+                if (ath.bib !== bib) continue;
+                if (!ath.montages || !ath.montages[camId] || !ath.montages[camId][runKey]) continue;
+                const dets = ath.montages[camId][runKey];
+                if (!Array.isArray(dets)) continue;
+                const idx = dets.findIndex(d => d.det_id === detId);
+                if (idx >= 0) dets.splice(idx, 1);
+                // If array is now empty, clean up
+                if (dets.length === 0) {
+                    delete ath.montages[camId][runKey];
+                    if (Object.keys(ath.montages[camId]).length === 0) delete ath.montages[camId];
+                    if (Object.keys(ath.montages).length === 0) delete ath.montages;
+                }
+            }
+        }
+
+        // Re-render results table
+        renderResults();
+
+        // Handle lightbox state after deletion
+        if (source === 'photo') {
+            // Check if athlete still has detections
+            const item = lbList[lbIdx];
+            if (item) {
+                const aDets = item.athlete.montages && item.athlete.montages[camId] && item.athlete.montages[camId][runKey];
+                if (!Array.isArray(aDets) || aDets.length === 0) {
+                    // No more detections for this athlete — remove from list
+                    lbList.splice(lbIdx, 1);
+                    if (lbList.length === 0) { closeLB(); return; }
+                    if (lbIdx >= lbList.length) lbIdx = lbList.length - 1;
+                    lbDetIdx = 0;
+                } else if (lbDetIdx >= aDets.length) {
+                    lbDetIdx = aDets.length - 1;
+                }
+            }
+            lbSelectedFps = null;
+            showLightbox();
+        } else {
+            // Video lightbox
+            const item = vlbList[vlbIdx];
+            if (item) {
+                const aDets = item.athlete.montages && item.athlete.montages[camId] && item.athlete.montages[camId][runKey];
+                const videoDets = Array.isArray(aDets) ? aDets.filter(d => d.video) : [];
+                if (videoDets.length === 0) {
+                    vlbList.splice(vlbIdx, 1);
+                    if (vlbList.length === 0) { closeVLB(); return; }
+                    if (vlbIdx >= vlbList.length) vlbIdx = vlbList.length - 1;
+                    vlbDetIdx = 0;
+                } else if (vlbDetIdx >= videoDets.length) {
+                    vlbDetIdx = videoDets.length - 1;
+                }
+            }
+            showVideoLightbox();
+        }
+    } catch (e) {
+        alert('Delete error: ' + e.message);
+    }
+};
 
 function closeVLB() {
     const vlb = document.getElementById('video-lightbox');
@@ -2779,6 +3036,134 @@ function closeVLB() {
     if (overlay) overlay.style.display = 'none';
     vlb.classList.add('hidden');
 }
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// AI POSE ANALYSIS
+// ══════════════════════════════════════════════════════════════════════════
+
+window._aiJobStates = {};  // aiJobKey -> {job_id, status, progress, results}
+
+window._runAI = function (camId, bib, catId, runKey, genderChar, detId) {
+    const aiJobKey = `${camId}_${bib}_${runKey}`;
+
+    // Derive race_slug
+    let raceSlug = manifest.race_slug || '';
+    if (!raceSlug && manifest.media_base_url) {
+        raceSlug = manifest.media_base_url.split('/').pop();
+    }
+
+    // Set running state immediately
+    window._aiJobStates[aiJobKey] = { status: 'running', progress: 0, results: null };
+    _updateAIButton(aiJobKey);
+
+    // POST to start analysis
+    fetch('http://localhost:5000/api/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ race_slug: raceSlug, cam_id: camId, run_key: runKey, bib, gender: genderChar, det_id: detId })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            window._aiJobStates[aiJobKey] = { status: 'error', progress: 0, results: null };
+            _updateAIButton(aiJobKey);
+            alert('AI analysis failed: ' + data.error);
+            return;
+        }
+        window._aiJobStates[aiJobKey].job_id = data.job_id;
+        // Start polling
+        _pollAIJob(aiJobKey, data.job_id);
+    })
+    .catch(e => {
+        window._aiJobStates[aiJobKey] = { status: 'error', progress: 0, results: null };
+        _updateAIButton(aiJobKey);
+        alert('AI request failed: ' + e.message);
+    });
+};
+
+function _pollAIJob(aiJobKey, jobId) {
+    fetch(`http://localhost:5000/api/ai/status/${jobId}`)
+        .then(r => r.json())
+        .then(data => {
+            const state = window._aiJobStates[aiJobKey];
+            if (!state) return;
+
+            state.progress = data.progress || 0;
+
+            if (data.status === 'complete') {
+                state.status = 'complete';
+                state.results = data.results;
+                _updateAIButton(aiJobKey);
+                return;
+            }
+            if (data.status === 'error') {
+                state.status = 'error';
+                _updateAIButton(aiJobKey);
+                return;
+            }
+
+            // Still running — update and poll again
+            _updateAIButton(aiJobKey);
+            setTimeout(() => _pollAIJob(aiJobKey, jobId), 2000);
+        })
+        .catch(() => {
+            setTimeout(() => _pollAIJob(aiJobKey, jobId), 3000);
+        });
+}
+
+function _updateAIButton(aiJobKey) {
+    const btn = document.getElementById(`ai-btn-${aiJobKey}`);
+    if (!btn) return;
+
+    const state = window._aiJobStates[aiJobKey];
+    if (!state) return;
+
+    btn.className = 'section-btn-ai';
+    if (state.status === 'running') {
+        btn.textContent = `${state.progress}%`;
+        btn.classList.add('running');
+        btn.onclick = null;
+    } else if (state.status === 'complete') {
+        btn.textContent = 'AI \u2713';
+        btn.classList.add('complete');
+        btn.onclick = () => window._showAIResults(aiJobKey);
+    } else if (state.status === 'error') {
+        btn.textContent = 'AI \u2717';
+        btn.classList.add('error');
+        btn.onclick = null;
+        setTimeout(() => {
+            // Reset after 3s
+            delete window._aiJobStates[aiJobKey];
+            renderResults();
+        }, 3000);
+    }
+}
+
+window._showAIResults = function (aiJobKey) {
+    const state = window._aiJobStates[aiJobKey];
+    if (!state || !state.results) return;
+
+    const r = state.results;
+    const lines = [
+        `AI Pose Analysis Results`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `Frames analyzed: ${r.frames_analyzed} / ${r.total_frames}`,
+        ``,
+        `Knee angles:  L ${r.avg_knee_angle_left}°  R ${r.avg_knee_angle_right}°`,
+        `Edge angles:  L ${r.avg_edge_angle_left}°  R ${r.avg_edge_angle_right}°`,
+        `Edge symmetry: ${r.avg_edge_symmetry}%`,
+        ``,
+        `Body angulation: ${r.avg_body_angulation}°`,
+        `Body inclination: ${r.avg_body_inclination}°`,
+        ``,
+        `Shoulder alignment: ${r.avg_shoulder_alignment}%`,
+        `Hip alignment: ${r.avg_hip_alignment}%`,
+        ``,
+        `Fore/Aft balance:  L ${r.avg_fore_aft_left}°  R ${r.avg_fore_aft_right}°`,
+    ];
+    alert(lines.join('\n'));
+};
 
 
 // ── Boot ─────────────────────────────────────────────────────────────────

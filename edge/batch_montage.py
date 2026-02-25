@@ -46,7 +46,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_RACES_DIR = PROJECT_ROOT / 'web' / 'races'
 
 # Default montage staging directory (same as app.py)
-MONTAGES_DIR = Path(os.environ.get('SKIFRAMES_MONTAGES_DIR', '/tmp/montages'))
+# On 4T server: SKIFRAMES_MONTAGES_DIR=/home/pa91/data/montages
+MONTAGES_DIR = Path(os.environ.get('SKIFRAMES_MONTAGES_DIR', str(PROJECT_ROOT / 'montages')))
 
 
 def find_race_manifest(race_date: str):

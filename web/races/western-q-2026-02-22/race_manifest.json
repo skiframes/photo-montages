@@ -681,29 +681,32 @@
           "run2_start_sec": 44027.04032,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g10_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g10_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g10_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g10_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g10_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g10_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g10_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g10_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.48,
-                "video": "Cam1/run1/g10.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g10_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g10_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g10_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g10_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g10_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g10_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g10_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g10_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.48,
+                  "video": "Cam1/run1/g10.mp4"
+                }
+              ]
             }
           }
         },
@@ -724,29 +727,32 @@
           "run2_start_sec": 43662.69735,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g26_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g26_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g26_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g26_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g26_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g26_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g26_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g26_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 10.96,
-                "video": "Cam1/run1/g26.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g26_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g26_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g26_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g26_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g26_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g26_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g26_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g26_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 10.96,
+                  "video": "Cam1/run1/g26.mp4"
+                }
+              ]
             }
           }
         },
@@ -767,29 +773,32 @@
           "run2_start_sec": 43320.34837,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g40_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g40_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g40_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g40_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g40_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g40_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g40_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g40_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.56,
-                "video": "Cam1/run1/g40.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g40_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g40_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g40_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g40_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g40_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g40_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g40_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g40_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.56,
+                  "video": "Cam1/run1/g40.mp4"
+                }
+              ]
             }
           }
         },
@@ -810,29 +819,32 @@
           "run2_start_sec": 43949.0868,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g13_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g13_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g13_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g13_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g13_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g13_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g13_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g13_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.48,
-                "video": "Cam1/run1/g13.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g13_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g13_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g13_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g13_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g13_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g13_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g13_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g13_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.48,
+                  "video": "Cam1/run1/g13.mp4"
+                }
+              ]
             }
           }
         },
@@ -853,29 +865,32 @@
           "run2_start_sec": 43807.13184,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g19_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g19_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g19_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g19_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g19_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g19_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g19_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g19_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.56,
-                "video": "Cam1/run1/g19.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g19_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g19_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g19_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g19_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g19_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g19_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g19_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g19_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.56,
+                  "video": "Cam1/run1/g19.mp4"
+                }
+              ]
             }
           }
         },
@@ -896,29 +911,32 @@
           "run2_start_sec": 43505.19722,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g33_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g33_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g33_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g33_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g33_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g33_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g33_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g33_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.64,
-                "video": "Cam1/run1/g33.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g33_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g33_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g33_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g33_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g33_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g33_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g33_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g33_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.64,
+                  "video": "Cam1/run1/g33.mp4"
+                }
+              ]
             }
           }
         },
@@ -956,27 +974,30 @@
           "run2_start_sec": 43269.63308,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g42_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g42_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g42_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g42_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g42_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g42_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g42_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g42_7.0fps.jpg"
-                  }
-                ]
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g42_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g42_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g42_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g42_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g42_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g42_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g42_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g42_7.0fps.jpg"
+                    }
+                  ]
+                }
+              ]
             }
           }
         },
@@ -997,29 +1018,32 @@
           "run2_start_sec": 44202.71886,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g4_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g4_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g4_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g4_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g4_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g4_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g4_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g4_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.72,
-                "video": "Cam1/run1/g4.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g4_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g4_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g4_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g4_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g4_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g4_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g4_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g4_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.72,
+                  "video": "Cam1/run1/g4.mp4"
+                }
+              ]
             }
           }
         },
@@ -1040,29 +1064,32 @@
           "run2_start_sec": 43431.45882,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g35_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g35_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g35_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g35_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g35_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g35_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g35_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g35_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.88,
-                "video": "Cam1/run1/g35.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g35_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g35_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g35_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g35_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g35_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g35_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g35_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g35_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.88,
+                  "video": "Cam1/run1/g35.mp4"
+                }
+              ]
             }
           }
         },
@@ -1083,29 +1110,32 @@
           "run2_start_sec": 44141.59899,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g6_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g6_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g6_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g6_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g6_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g6_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g6_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g6_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.72,
-                "video": "Cam1/run1/g6.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g6_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g6_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g6_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g6_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g6_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g6_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g6_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g6_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.72,
+                  "video": "Cam1/run1/g6.mp4"
+                }
+              ]
             }
           }
         },
@@ -1126,29 +1156,32 @@
           "run2_start_sec": 44114.01802,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g7_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g7_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g7_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g7_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g7_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g7_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g7_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g7_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 0.72,
-                "video": "Cam1/run1/g7.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g7_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g7_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g7_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g7_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g7_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g7_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g7_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g7_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 0.72,
+                  "video": "Cam1/run1/g7.mp4"
+                }
+              ]
             }
           }
         },
@@ -1167,33 +1200,7 @@
           "run1_start_sec": 33206.88232,
           "run2_start_tod": "12:12:54.98",
           "run2_start_sec": 43974.98096,
-          "montages": {
-            "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g12_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g12_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g12_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g12_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g12_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g12_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g12_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g12_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 0.72,
-                "video": "Cam1/run1/g12.mp4"
-              }
-            }
-          }
+          "montages": {}
         },
         {
           "bib": 41,
@@ -1229,29 +1236,32 @@
           "run2_start_sec": 43832.01552,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g18_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g18_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g18_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g18_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g18_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g18_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g18_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g18_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 5.6,
-                "video": "Cam1/run1/g18.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g18_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g18_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g18_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g18_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g18_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g18_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g18_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g18_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 5.6,
+                  "video": "Cam1/run1/g18.mp4"
+                }
+              ]
             }
           }
         },
@@ -1289,29 +1299,32 @@
           "run2_start_sec": 43922.43024,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g14_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g14_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g14_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g14_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g14_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g14_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g14_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g14_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.88,
-                "video": "Cam1/run1/g14.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g14_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g14_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g14_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g14_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g14_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g14_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g14_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g14_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.88,
+                  "video": "Cam1/run1/g14.mp4"
+                }
+              ]
             }
           }
         },
@@ -1332,29 +1345,32 @@
           "run2_start_sec": 43638.39877,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g27_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g27_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g27_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g27_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g27_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g27_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g27_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g27_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 1.04,
-                "video": "Cam1/run1/g27.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g27_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g27_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g27_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g27_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g27_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g27_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g27_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g27_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 1.04,
+                  "video": "Cam1/run1/g27.mp4"
+                }
+              ]
             }
           }
         },
@@ -1392,29 +1408,32 @@
           "run2_start_sec": 43742.30293,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g23_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g23_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g23_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g23_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g23_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g23_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g23_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g23_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.48,
-                "video": "Cam1/run1/g23.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g23_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g23_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g23_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g23_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g23_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g23_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g23_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g23_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.48,
+                  "video": "Cam1/run1/g23.mp4"
+                }
+              ]
             }
           }
         },
@@ -1435,29 +1454,32 @@
           "run2_start_sec": 44166.61132,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g5_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g5_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g5_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g5_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g5_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g5_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g5_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g5_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.64,
-                "video": "Cam1/run1/g5.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g5_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g5_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g5_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g5_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g5_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g5_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g5_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g5_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.64,
+                  "video": "Cam1/run1/g5.mp4"
+                }
+              ]
             }
           }
         },
@@ -1478,29 +1500,32 @@
           "run2_start_sec": 44085.47672,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g8_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g8_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g8_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g8_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g8_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g8_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g8_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g8_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.8,
-                "video": "Cam1/run1/g8.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g8_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g8_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g8_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g8_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g8_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g8_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g8_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g8_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.8,
+                  "video": "Cam1/run1/g8.mp4"
+                }
+              ]
             }
           }
         },
@@ -1538,29 +1563,32 @@
           "run2_start_sec": 43559.20791,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g31_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g31_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g31_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g31_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g31_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g31_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g31_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g31_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.64,
-                "video": "Cam1/run1/g31.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g31_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g31_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g31_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g31_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g31_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g31_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g31_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g31_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.64,
+                  "video": "Cam1/run1/g31.mp4"
+                }
+              ]
             }
           }
         },
@@ -1581,29 +1609,32 @@
           "run2_start_sec": 43456.94212,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g34_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g34_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g34_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g34_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g34_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g34_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g34_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g34_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 3.04,
-                "video": "Cam1/run1/g34.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g34_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g34_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g34_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g34_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g34_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g34_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g34_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g34_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 3.04,
+                  "video": "Cam1/run1/g34.mp4"
+                }
+              ]
             }
           }
         },
@@ -1624,29 +1655,32 @@
           "run2_start_sec": 44001.62514,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g11_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g11_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g11_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g11_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g11_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g11_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g11_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g11_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.96,
-                "video": "Cam1/run1/g11.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g11_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g11_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g11_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g11_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g11_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g11_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g11_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g11_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.96,
+                  "video": "Cam1/run1/g11.mp4"
+                }
+              ]
             }
           }
         },
@@ -1701,29 +1735,32 @@
           "run2_start_sec": 43686.86667,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g25_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g25_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g25_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g25_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g25_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g25_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g25_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g25_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 2.96,
-                "video": "Cam1/run1/g25.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g25_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g25_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g25_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g25_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g25_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g25_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g25_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g25_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.96,
+                  "video": "Cam1/run1/g25.mp4"
+                }
+              ]
             }
           }
         },
@@ -1761,29 +1798,32 @@
           "run2_start_sec": 43895.04287,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g15_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g15_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g15_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g15_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g15_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g15_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g15_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g15_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 3.2,
-                "video": "Cam1/run1/g15.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g15_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g15_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g15_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g15_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g15_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g15_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g15_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g15_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 3.2,
+                  "video": "Cam1/run1/g15.mp4"
+                }
+              ]
             }
           }
         },
@@ -1821,29 +1861,32 @@
           "run2_start_sec": 43529.89908,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g32_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g32_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g32_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g32_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g32_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g32_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g32_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g32_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 3.2,
-                "video": "Cam1/run1/g32.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g32_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g32_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g32_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g32_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g32_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g32_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g32_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g32_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 3.2,
+                  "video": "Cam1/run1/g32.mp4"
+                }
+              ]
             }
           }
         },
@@ -1864,29 +1907,32 @@
           "run2_start_sec": 43611.00678,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g28_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g28_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g28_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g28_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g28_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g28_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g28_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g28_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 3.2,
-                "video": "Cam1/run1/g28.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g28_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g28_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g28_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g28_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g28_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g28_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g28_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g28_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 3.2,
+                  "video": "Cam1/run1/g28.mp4"
+                }
+              ]
             }
           }
         },
@@ -1907,29 +1953,32 @@
           "run2_start_sec": 44228.24455,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g2_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g2_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g2_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g2_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g2_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g2_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g2_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g2_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 3.36,
-                "video": "Cam1/run1/g2.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g2_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g2_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g2_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g2_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g2_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g2_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g2_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g2_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 3.36,
+                  "video": "Cam1/run1/g2.mp4"
+                }
+              ]
             }
           }
         },
@@ -1950,29 +1999,32 @@
           "run2_start_sec": 44052.3593,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g9_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g9_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g9_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g9_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g9_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g9_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g9_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g9_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 3.68,
-                "video": "Cam1/run1/g9.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g9_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g9_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g9_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g9_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g9_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g9_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g9_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g9_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 3.68,
+                  "video": "Cam1/run1/g9.mp4"
+                }
+              ]
             }
           }
         },
@@ -1993,29 +2045,32 @@
           "run2_start_sec": null,
           "montages": {
             "Cam1": {
-              "run1": {
-                "thumb": "Cam1/run1/g36_6.0fps_thumb.jpg",
-                "full": "Cam1/run1/g36_6.0fps.jpg",
-                "fps_variants": [
-                  {
-                    "fps": 5.0,
-                    "thumb": "Cam1/run1/g36_5.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g36_5.0fps.jpg"
-                  },
-                  {
-                    "fps": 6.0,
-                    "thumb": "Cam1/run1/g36_6.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g36_6.0fps.jpg"
-                  },
-                  {
-                    "fps": 7.0,
-                    "thumb": "Cam1/run1/g36_7.0fps_thumb.jpg",
-                    "full": "Cam1/run1/g36_7.0fps.jpg"
-                  }
-                ],
-                "section_time": 15.52,
-                "video": "Cam1/run1/g36.mp4"
-              }
+              "run1": [
+                {
+                  "det_id": "d000",
+                  "thumb": "Cam1/run1/g36_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/g36_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/g36_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g36_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/g36_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g36_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/g36_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/g36_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 15.52,
+                  "video": "Cam1/run1/g36.mp4"
+                }
+              ]
             }
           }
         },

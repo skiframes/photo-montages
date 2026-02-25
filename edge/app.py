@@ -36,6 +36,16 @@ except ImportError:
 
 app = Flask(__name__, static_folder='static', template_folder='static')
 
+
+@app.after_request
+def add_cors_headers(response):
+    """Add CORS headers to all responses for local development (port 8888 → port 5000)."""
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, DELETE'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response
+
+
 # Track active processing jobs (subprocess-based: video files)
 # Key: job_id, Value: dict with 'process', 'status', 'output', 'config_path', 'video_path'
 active_jobs = {}
@@ -114,8 +124,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_RACES_DIR = PROJECT_ROOT / 'web' / 'races'
 
 # Montage staging directory (organized by race/camera/run for website integration)
-# Use /tmp/montages for fast local dev; OWC_48 is too slow for iterative review
-MONTAGES_DIR = Path(os.environ.get('SKIFRAMES_MONTAGES_DIR', '/tmp/montages'))
+# Default: <project_root>/montages/  (override with SKIFRAMES_MONTAGES_DIR env var)
+# On 4T server: SKIFRAMES_MONTAGES_DIR=/home/pa91/data/montages
+MONTAGES_DIR = Path(os.environ.get('SKIFRAMES_MONTAGES_DIR', str(Path(__file__).parent.parent / 'montages')))
 
 # Session types and groups
 SESSION_TYPES = ['test', 'race', 'gate_training', 'free_skiing']
@@ -2490,20 +2501,41 @@ def populate_manifest_with_montages():
                     except Exception:
                         pass
 
-                # Collect all FPS variants per (gender_char, bib)
-                # Filename formats:
-                #   New: {g|b}{bib}_{fps}fps.jpg  (gender-prefixed)
-                #   Old: {bib}_{fps}fps.jpg       (no prefix)
-                bib_variants = {}  # (gender_char, bib) -> list of {fps, filename}
-                for img_file in sorted(run_dir.glob('*.jpg')):
-                    filename = img_file.stem  # e.g., "g4_4.0fps" or "4_4.0fps"
+                # Load per-detection timing data (new format with det_id)
+                # {det_id: {bib, gender, section_elapsed_sec, trigger_time, ...}}
+                det_timing = {}  # det_id -> timing dict
+                for tf in run_dir.glob('*_timing.json'):
+                    try:
+                        with open(tf) as tfh:
+                            td = json.load(tfh)
+                        if 'det_id' in td:
+                            det_timing[td['det_id']] = td
+                        # Also populate legacy timing_data
+                        timing_data[(td.get('gender', ''), td.get('bib', 0))] = td.get('section_elapsed_sec')
+                    except Exception:
+                        pass
 
-                    # Skip thumbnails
+                # Collect all FPS variants per (gender_char, bib, det_id)
+                # Filename formats:
+                #   Multi-detect: {g|b}{bib}_{det_id}_{fps}fps.jpg  (e.g., g10_d001_5.0fps.jpg)
+                #   Legacy:       {g|b}{bib}_{fps}fps.jpg           (e.g., g10_5.0fps.jpg)
+                #   Old:          {bib}_{fps}fps.jpg                (no prefix)
+                #   Unmatched:    unmatched_{ts}[_{det_id}]_{fps}fps.jpg
+                detection_variants = {}  # (gender_char, bib, det_id) -> list of {fps, filename}
+                for img_file in sorted(run_dir.glob('*.jpg')):
+                    filename = img_file.stem  # e.g., "g10_d001_5.0fps" or "g4_4.0fps"
+
+                    # Skip thumbnails and unmatched
                     if '_thumb' in filename:
                         continue
+                    if filename.startswith('unmatched_'):
+                        continue
 
-                    # Extract gender prefix, bib, and fps from filename
-                    first_part = filename.split('_')[0]  # "g4" or "4" or "b12"
+                    # Parse filename parts
+                    parts = filename.split('_')
+                    first_part = parts[0]  # "g10" or "4" or "b12"
+
+                    # Extract gender and bib
                     gender_char = ''
                     if first_part and first_part[0] in ('g', 'b') and first_part[1:].isdigit():
                         gender_char = first_part[0]
@@ -2513,46 +2545,54 @@ def populate_manifest_with_montages():
                     else:
                         continue
 
-                    # Extract fps value from filename
+                    # Extract det_id if present (d001, d002, etc.)
+                    det_id = None
+                    for p in parts[1:]:
+                        if re.match(r'^d\d{3}$', p):
+                            det_id = p
+                            break
+
+                    # Extract fps value
                     fps_match = re.search(r'_([\d.]+)fps$', filename)
                     fps_val = float(fps_match.group(1)) if fps_match else 0
 
-                    key = (gender_char, bib)
-                    if key not in bib_variants:
-                        bib_variants[key] = []
-                    bib_variants[key].append({'fps': fps_val, 'filename': filename})
+                    # Use 'd000' for legacy files without det_id
+                    key = (gender_char, bib, det_id or 'd000')
+                    if key not in detection_variants:
+                        detection_variants[key] = []
+                    detection_variants[key].append({'fps': fps_val, 'filename': filename})
 
-                # Build manifest entries with all FPS variants per bib
-                for (gender_char, bib), variants in bib_variants.items():
+                # Build manifest entries — array of detections per bib
+                bib_detections = {}  # (gender_char, bib) -> list of detection entries
+                for (gender_char, bib, det_id), variants in detection_variants.items():
                     if bib not in bib_lookup:
                         print(f"  Warning: bib {bib} not found in manifest")
                         continue
 
-                    # Find correct athlete entry using gender from filename prefix
-                    matches = bib_lookup[bib]
-                    file_gender = 'girls' if gender_char == 'g' else 'boys' if gender_char == 'b' else run_gender
-                    if file_gender and len(matches) > 1:
-                        gender_matches = [m for m in matches if m[2] == file_gender]
-                        if gender_matches:
-                            matches = gender_matches
-                    cat_idx, ath_idx, _ = matches[0]
-
                     # Sort variants by fps
                     variants.sort(key=lambda v: v['fps'])
 
-                    # Use middle fps as default (best balance)
+                    # Use middle fps as default
                     default_variant = variants[len(variants) // 2]
                     default_filename = default_variant['filename']
 
-                    # Build default paths
+                    # Build paths
                     full_path = f"{cam_id}/{run_key}/{default_filename}.jpg"
                     thumb_name = f"{default_filename}_thumb.jpg"
                     thumb_file = run_dir / thumb_name
                     thumb_path = f"{cam_id}/{run_key}/{thumb_name}" if thumb_file.exists() else full_path
 
-                    # Get section elapsed time if available
+                    # Get timing from det_timing or legacy
                     gender_code = 'F' if gender_char == 'g' else 'M' if gender_char == 'b' else ''
-                    section_time = timing_data.get((gender_code, bib))
+                    dt = det_timing.get(det_id, {})
+                    section_time = dt.get('section_elapsed_sec') or timing_data.get((gender_code, bib))
+                    trigger_time = dt.get('start_trigger_time', '')
+                    # Format trigger_time as HH:MM:SS if it's an ISO timestamp
+                    if trigger_time and 'T' in trigger_time:
+                        try:
+                            trigger_time = trigger_time.split('T')[1][:8]
+                        except Exception:
+                            pass
 
                     # Build fps_variants array
                     fps_variants = []
@@ -2568,30 +2608,60 @@ def populate_manifest_with_montages():
                             'full': v_full,
                         })
 
-                    # Update manifest
-                    athlete = manifest['categories'][cat_idx]['athletes'][ath_idx]
-
-                    if 'montages' not in athlete:
-                        athlete['montages'] = {}
-                    if cam_id not in athlete['montages']:
-                        athlete['montages'][cam_id] = {}
-
                     montage_entry = {
+                        'det_id': det_id,
                         'thumb': thumb_path,
                         'full': full_path,
                         'fps_variants': fps_variants,
                     }
                     if section_time is not None:
                         montage_entry['section_time'] = section_time
+                    if trigger_time:
+                        montage_entry['trigger_time'] = trigger_time
 
-                    # Check for video clip ({gender_prefix}{bib}.mp4)
-                    video_prefix = f"{gender_char}{bib}" if gender_char else str(bib)
+                    # Check for video clip (with or without det_id)
+                    base_prefix = f"{gender_char}{bib}" if gender_char else str(bib)
+                    video_prefix = f"{base_prefix}_{det_id}" if det_id and det_id != 'd000' else base_prefix
                     video_file = run_dir / f"{video_prefix}.mp4"
                     if video_file.exists():
                         montage_entry['video'] = f"{cam_id}/{run_key}/{video_prefix}.mp4"
+                    else:
+                        # Try legacy video without det_id
+                        legacy_video = run_dir / f"{base_prefix}.mp4"
+                        if legacy_video.exists():
+                            montage_entry['video'] = f"{cam_id}/{run_key}/{base_prefix}.mp4"
 
-                    athlete['montages'][cam_id][run_key] = montage_entry
-                    updated_count += 1
+                    bib_key = (gender_char, bib)
+                    if bib_key not in bib_detections:
+                        bib_detections[bib_key] = []
+                    bib_detections[bib_key].append(montage_entry)
+
+                # Write detection arrays to manifest
+                for (gender_char, bib), detections in bib_detections.items():
+                    if bib not in bib_lookup:
+                        continue
+
+                    # Find correct athlete entry
+                    matches = bib_lookup[bib]
+                    file_gender = 'girls' if gender_char == 'g' else 'boys' if gender_char == 'b' else run_gender
+                    if file_gender and len(matches) > 1:
+                        gender_matches = [m for m in matches if m[2] == file_gender]
+                        if gender_matches:
+                            matches = gender_matches
+                    cat_idx, ath_idx, _ = matches[0]
+
+                    athlete = manifest['categories'][cat_idx]['athletes'][ath_idx]
+                    if 'montages' not in athlete:
+                        athlete['montages'] = {}
+                    if cam_id not in athlete['montages']:
+                        athlete['montages'][cam_id] = {}
+
+                    # Sort detections by det_id
+                    detections.sort(key=lambda d: d.get('det_id', 'd000'))
+
+                    # Store as array (new format)
+                    athlete['montages'][cam_id][run_key] = detections
+                    updated_count += len(detections)
 
         # Save updated manifest
         with open(manifest_path, 'w') as f:
@@ -2606,6 +2676,129 @@ def populate_manifest_with_montages():
 
     except Exception as e:
         print(f"Error populating manifest: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# MONTAGE DELETE DETECTION ENDPOINT
+# =============================================================================
+
+
+# Authorized emails for delete operations
+AUTHORIZED_DELETE_EMAILS = {'avillach@gmail.com'}
+
+
+@app.route('/api/montages/delete-detection', methods=['POST'])
+def delete_detection():
+    """
+    Delete a single detection entry from the manifest and its files from disk.
+    Requires authorized email.
+
+    Request body:
+    {
+        "race_slug": "western-q-2026-02-22",
+        "cam_id": "Cam1",
+        "run_key": "run1",
+        "bib": 10,
+        "gender": "g",
+        "det_id": "d001",
+        "email": "avillach@gmail.com"
+    }
+    """
+    data = request.get_json() or {}
+
+    # Email authorization check
+    email = (data.get('email') or '').strip().lower()
+    if email not in AUTHORIZED_DELETE_EMAILS:
+        return jsonify({'error': 'Unauthorized. Only authorized users can delete detections.'}), 403
+
+    race_slug = data.get('race_slug')
+    cam_id = data.get('cam_id')
+    run_key = data.get('run_key')
+    bib = data.get('bib')
+    gender = data.get('gender', '')
+    det_id = data.get('det_id')
+
+    if not all([race_slug, cam_id, run_key, bib is not None, det_id]):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    # Find and update manifest
+    manifest_path = WEB_RACES_DIR / race_slug / 'race_manifest.json'
+    if not manifest_path.exists():
+        return jsonify({'error': f'Manifest not found for {race_slug}'}), 404
+
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        # Find athlete by bib and gender
+        found = False
+        for category in manifest.get('categories', []):
+            cat_id = category.get('id', '')
+            cat_gender = 'g' if 'girl' in cat_id.lower() else 'b' if 'boy' in cat_id.lower() else ''
+            for athlete in category.get('athletes', []):
+                if athlete['bib'] != bib:
+                    continue
+                if gender and cat_gender and gender != cat_gender:
+                    continue
+
+                montages = athlete.get('montages', {})
+                cam_data = montages.get(cam_id, {})
+                run_data = cam_data.get(run_key)
+                if not run_data:
+                    continue
+
+                # Handle both array format and legacy single-object format
+                if isinstance(run_data, list):
+                    # Find and remove the detection with matching det_id
+                    new_list = [d for d in run_data if d.get('det_id') != det_id]
+                    if len(new_list) < len(run_data):
+                        found = True
+                        if new_list:
+                            athlete['montages'][cam_id][run_key] = new_list
+                        else:
+                            del athlete['montages'][cam_id][run_key]
+                elif isinstance(run_data, dict):
+                    if run_data.get('det_id') == det_id or det_id == 'd000':
+                        found = True
+                        del athlete['montages'][cam_id][run_key]
+
+                if found:
+                    break
+            if found:
+                break
+
+        if not found:
+            return jsonify({'error': f'Detection {det_id} not found for bib {bib}'}), 404
+
+        # Delete files from staging dir
+        staging_dir = MONTAGES_DIR / race_slug / cam_id / run_key
+        if staging_dir.exists():
+            prefix = f"{gender}{bib}" if gender else str(bib)
+            file_prefix = f"{prefix}_{det_id}" if det_id != 'd000' else prefix
+            deleted_files = []
+            for f in staging_dir.iterdir():
+                if f.name.startswith(file_prefix) or (det_id == 'd000' and f.name.startswith(prefix + '_') and not re.match(r'.*_d\d{3}', f.stem)):
+                    f.unlink()
+                    deleted_files.append(f.name)
+            # Also delete video
+            video_file = staging_dir / f"{file_prefix}.mp4"
+            if video_file.exists():
+                video_file.unlink()
+                deleted_files.append(video_file.name)
+
+            print(f"  Deleted {len(deleted_files)} files for {file_prefix}")
+
+        # Save updated manifest
+        with open(manifest_path, 'w') as f:
+            json.dump(manifest, f, indent=2)
+
+        return jsonify({'success': True, 'deleted_det_id': det_id, 'files_deleted': len(deleted_files) if staging_dir.exists() else 0})
+
+    except Exception as e:
+        print(f"Error deleting detection: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -3761,6 +3954,131 @@ _heartbeat_thread.start()
 # ═══════════════════════════════════════════════════════════════════════════
 # POSE ANALYSIS API
 # ═══════════════════════════════════════════════════════════════════════════
+
+# =============================================================================
+# AI POSE ANALYSIS (async with progress)
+# =============================================================================
+
+ai_jobs = {}  # job_id -> {status, progress, total_frames, analyzed_frames, results, error}
+
+
+@app.route('/api/ai/analyze', methods=['POST'])
+def ai_analyze():
+    """
+    Launch async AI pose analysis on an athlete's video clip.
+    Request body: {race_slug, cam_id, run_key, bib, gender, det_id}
+    Returns: {job_id}
+    """
+    data = request.get_json() or {}
+    race_slug = data.get('race_slug')
+    cam_id = data.get('cam_id')
+    run_key = data.get('run_key')
+    bib = data.get('bib')
+    gender = data.get('gender', '')
+    det_id = data.get('det_id', 'd000')
+
+    if not all([race_slug, cam_id, run_key, bib is not None]):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    # Find video file in montages dir
+    staging_dir = MONTAGES_DIR / race_slug / cam_id / run_key
+    prefix = f"{gender}{bib}" if gender else str(bib)
+    video_prefix = f"{prefix}_{det_id}" if det_id and det_id != 'd000' else prefix
+    video_path = staging_dir / f"{video_prefix}.mp4"
+
+    if not video_path.exists():
+        return jsonify({'error': f'Video not found: {video_path.name}'}), 404
+
+    job_id = str(uuid.uuid4())[:8]
+    ai_jobs[job_id] = {
+        'status': 'running',
+        'progress': 0,
+        'total_frames': 0,
+        'analyzed_frames': 0,
+        'results': None,
+        'error': None,
+        'bib': bib,
+        'cam_id': cam_id,
+        'video_path': str(video_path),
+    }
+
+    def run_analysis():
+        try:
+            from pose_analyzer_yolo import YOLOPoseAnalyzer, FrameHistory
+
+            # Get total frames first
+            cap = cv2.VideoCapture(str(video_path))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25
+            ai_jobs[job_id]['total_frames'] = total_frames
+
+            analyzer = YOLOPoseAnalyzer(slope_angle_deg=0.0, model_size='l')
+            history = FrameHistory(max_frames=total_frames)
+
+            frame_idx = 0
+            sample_rate = max(1, int(fps / 10))  # ~10 fps analysis rate
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                frame_idx += 1
+                ai_jobs[job_id]['analyzed_frames'] = frame_idx
+                ai_jobs[job_id]['progress'] = int(frame_idx / max(total_frames, 1) * 100)
+
+                if frame_idx % sample_rate != 0:
+                    continue
+
+                _, metrics, _, _ = analyzer.analyze_frame(frame)
+                if metrics:
+                    history.add(metrics)
+
+            cap.release()
+
+            # Compile summary results
+            results = {}
+            if len(history.knee_angle_left) > 0:
+                results = {
+                    'frames_analyzed': len(history.knee_angle_left),
+                    'total_frames': total_frames,
+                    'avg_knee_angle_left': round(float(np.mean(history.knee_angle_left)), 1),
+                    'avg_knee_angle_right': round(float(np.mean(history.knee_angle_right)), 1),
+                    'avg_edge_angle_left': round(float(np.mean(history.edge_angle_left)), 1),
+                    'avg_edge_angle_right': round(float(np.mean(history.edge_angle_right)), 1),
+                    'avg_body_angulation': round(float(np.mean(history.body_angulation)), 1),
+                    'avg_body_inclination': round(float(np.mean(history.body_inclination)), 1),
+                    'avg_shoulder_alignment': round(float(np.mean(history.shoulder_alignment)), 0),
+                    'avg_hip_alignment': round(float(np.mean(history.hip_alignment)), 0),
+                    'avg_edge_symmetry': round(float(np.mean(history.edge_symmetry)), 0),
+                    'avg_fore_aft_left': round(float(np.mean(history.fore_aft_left)), 1),
+                    'avg_fore_aft_right': round(float(np.mean(history.fore_aft_right)), 1),
+                }
+
+            ai_jobs[job_id]['status'] = 'complete'
+            ai_jobs[job_id]['progress'] = 100
+            ai_jobs[job_id]['results'] = results
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            ai_jobs[job_id]['status'] = 'error'
+            ai_jobs[job_id]['error'] = str(e)
+
+    thread = threading.Thread(target=run_analysis, daemon=True)
+    thread.start()
+
+    return jsonify({'job_id': job_id})
+
+
+@app.route('/api/ai/status/<job_id>')
+def ai_status(job_id):
+    """Get progress/results for an AI analysis job."""
+    job = ai_jobs.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    return jsonify(job)
+
 
 @app.route('/api/analyze/pose', methods=['POST'])
 def analyze_pose_endpoint():
