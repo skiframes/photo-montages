@@ -122,6 +122,12 @@
                     <option value="">All teams</option>
                 </select>
             </div>
+            <div id="team-download">
+                <select id="team-download-select">
+                    <option value="">Download team media...</option>
+                </select>
+                <button id="team-download-btn" class="team-download-btn" disabled>⬇️ Download</button>
+            </div>
         </div>
         <div id="results-container">
             <table id="results-table">
@@ -966,7 +972,16 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
                 <span id="lb-details"></span>
                 <div id="lb-det-nav" class="det-nav" style="display:none;"></div>
                 <div id="lb-fps-selector" class="lb-fps-selector" style="display:none;"></div>
-                <button id="lb-delete-btn" class="lb-delete-btn" style="display:none" title="Delete this detection">🗑️ Delete</button>
+                <div class="lb-actions">
+                    <button id="lb-download-btn" class="lb-action-btn" title="Download full resolution image">⬇️ Download</button>
+                    <button id="lb-copy-link-btn" class="lb-action-btn" title="Copy link to clipboard">🔗 Copy Link</button>
+                    <button id="lb-delete-btn" class="lb-delete-btn" style="display:none" title="Delete this detection">🗑️ Delete</button>
+                </div>
+            </div>
+            <div class="lb-keys">
+                <span><kbd>&uarr;</kbd> Prev athlete</span>
+                <span><kbd>&darr;</kbd> Next athlete</span>
+                <span><kbd>Esc</kbd> Close</span>
             </div>
         </div>
     </div>
@@ -1000,14 +1015,18 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
                 <span id="vlb-name"></span>
                 <span id="vlb-details"></span>
                 <div id="vlb-det-nav" class="det-nav" style="display:none;"></div>
-                <button id="vlb-delete-btn" class="lb-delete-btn" style="display:none" title="Delete this detection">🗑️ Delete</button>
+                <div class="lb-actions">
+                    <button id="vlb-download-btn" class="lb-action-btn" title="Download video">⬇️ Download</button>
+                    <button id="vlb-copy-link-btn" class="lb-action-btn" title="Copy link to clipboard">🔗 Copy Link</button>
+                    <button id="vlb-delete-btn" class="lb-delete-btn" style="display:none" title="Delete this detection">🗑️ Delete</button>
+                </div>
             </div>
             <div class="vlb-keys">
                 <span><kbd>Space</kbd> Play/Pause</span>
-                <span><kbd>,</kbd> Prev frame</span>
-                <span><kbd>.</kbd> Next frame</span>
-                <span><kbd>&larr;</kbd> Prev athlete</span>
-                <span><kbd>&rarr;</kbd> Next athlete</span>
+                <span><kbd>&larr;</kbd> Prev frame</span>
+                <span><kbd>&rarr;</kbd> Next frame</span>
+                <span><kbd>&uarr;</kbd> Prev athlete</span>
+                <span><kbd>&darr;</kbd> Next athlete</span>
                 <span><kbd>Esc</kbd> Close</span>
             </div>
         </div>
@@ -1015,6 +1034,7 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
 
     <!-- Disclaimer Footer -->
     <footer id="disclaimer">
+        <p>Some athletes may have missing sections because course crew were working nearby &mdash; maintaining the course, or assisting racers &mdash; which created overlapping motion in the camera&rsquo;s trigger zones, making it impossible to cleanly isolate the skier&rsquo;s run in the photo montage or video.</p>
         <p>Official results are available at: <a href="https://www.nhalpine.org/2026-results" target="_blank" rel="noopener">nhalpine.org/2026-results</a></p>
         <p><strong>Disclaimer:</strong> Intermediate section times are unofficial estimates derived from camera analysis, not from official timing equipment. They are provided as a coaching aid only and should not be used for any official purpose. Accuracy is &plusmn;0.08s</p>
     </footer>

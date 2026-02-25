@@ -649,6 +649,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g39_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g39_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -680,8 +681,7 @@
                   ],
                   "section_time": 2.56,
                   "trigger_time": "09:24:29",
-                  "video": "Cam1/run1/g39_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g39_d001.mp4"
                 }
               ]
             }
@@ -706,6 +706,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g43_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g43_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -737,8 +738,7 @@
                   ],
                   "section_time": 2.48,
                   "trigger_time": "09:26:09",
-                  "video": "Cam1/run1/g43_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g43_d001.mp4"
                 }
               ]
             }
@@ -763,6 +763,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g10_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g10_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -794,8 +795,7 @@
                   ],
                   "section_time": 2.4,
                   "trigger_time": "09:12:42",
-                  "video": "Cam1/run1/g10_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g10_d001.mp4"
                 }
               ]
             }
@@ -820,6 +820,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g26_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g26_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -851,8 +852,7 @@
                   ],
                   "section_time": 10.88,
                   "trigger_time": "09:19:01",
-                  "video": "Cam1/run1/g26_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g26_d001.mp4"
                 }
               ]
             }
@@ -877,6 +877,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g40_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g40_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -908,8 +909,7 @@
                   ],
                   "section_time": 2.4,
                   "trigger_time": "09:24:54",
-                  "video": "Cam1/run1/g40_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g40_d001.mp4"
                 }
               ]
             }
@@ -934,6 +934,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g13_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g13_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -965,14 +966,14 @@
                   ],
                   "section_time": 2.4,
                   "trigger_time": "09:14:08",
-                  "video": "Cam1/run1/g13_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g13_d001.mp4"
                 }
               ]
             },
             "Cam3": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam3/run1/thumbnails/g13_d001_6.0fps_thumb.jpg",
                   "full": "Cam3/run1/fullres/g13_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -1004,8 +1005,7 @@
                   ],
                   "section_time": 23.2,
                   "trigger_time": "09:14:05",
-                  "video": "Cam3/run1/g13_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam3/run1/g13_d001.mp4"
                 }
               ]
             }
@@ -1030,6 +1030,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g19_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g19_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -1061,14 +1062,14 @@
                   ],
                   "section_time": 2.56,
                   "trigger_time": "09:16:30",
-                  "video": "Cam1/run1/g19_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g19_d001.mp4"
                 }
               ]
             },
             "Cam3": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam3/run1/thumbnails/g19_d001_6.0fps_thumb.jpg",
                   "full": "Cam3/run1/fullres/g19_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -1100,8 +1101,7 @@
                   ],
                   "section_time": 1.92,
                   "trigger_time": "09:16:24",
-                  "video": "Cam3/run1/g19_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam3/run1/g19_d001.mp4"
                 }
               ]
             }
@@ -1126,6 +1126,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g33_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g33_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -1157,14 +1158,14 @@
                   ],
                   "section_time": 2.56,
                   "trigger_time": "09:21:52",
-                  "video": "Cam1/run1/g33_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g33_d001.mp4"
                 }
               ]
             },
             "Cam3": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam3/run1/thumbnails/g33_d001_6.0fps_thumb.jpg",
                   "full": "Cam3/run1/fullres/g33_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -1196,8 +1197,7 @@
                   ],
                   "section_time": 5.12,
                   "trigger_time": "09:21:31",
-                  "video": "Cam3/run1/g33_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam3/run1/g33_d001.mp4"
                 }
               ]
             }
@@ -1222,6 +1222,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g24_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g24_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -1253,1090 +1254,14 @@
                   ],
                   "section_time": 2.56,
                   "trigger_time": "09:17:53",
-                  "video": "Cam1/run1/g24_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 42,
-          "first": "Gwyneth",
-          "last": "Coyne",
-          "club": "Sunapee",
-          "rank": 10,
-          "run1_time": 41.79,
-          "run2_time": 39.85,
-          "total": "1:21.64",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:25:32.83",
-          "run1_start_sec": 33932.82922,
-          "run2_start_tod": "12:01:09.63",
-          "run2_start_sec": 43269.63308,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g42_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g42_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g42_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g42_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g42_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g42_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g42_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g42_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g42_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g42_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g42_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g42_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.32,
-                  "trigger_time": "09:25:46",
-                  "video": "Cam1/run1/g42_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 4,
-          "first": "Bryce",
-          "last": "Phelps",
-          "club": "Sunapee",
-          "rank": 11,
-          "run1_time": 41.4,
-          "run2_time": 42.04,
-          "total": "1:23.44",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:09:05.79",
-          "run1_start_sec": 32945.78689,
-          "run2_start_tod": "12:16:42.72",
-          "run2_start_sec": 44202.71886,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g4_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g4_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g4_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g4_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g4_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g4_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g4_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g4_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g4_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g4_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g4_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g4_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.56,
-                  "trigger_time": "09:09:20",
-                  "video": "Cam1/run1/g4_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 35,
-          "first": "Margot",
-          "last": "Avillach",
-          "club": "Ragged Mt",
-          "rank": 12,
-          "run1_time": 42.33,
-          "run2_time": 41.2,
-          "total": "1:23.53",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:22:28.63",
-          "run1_start_sec": 33748.62696,
-          "run2_start_tod": "12:03:51.46",
-          "run2_start_sec": 43431.45882,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g35_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g35_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g35_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g35_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g35_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g35_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g35_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g35_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g35_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g35_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g35_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g35_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.72,
-                  "trigger_time": "09:22:42",
-                  "video": "Cam1/run1/g35_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 6,
-          "first": "Sydney",
-          "last": "Beach",
-          "club": "Ford Sayre",
-          "rank": 13,
-          "run1_time": 42.24,
-          "run2_time": 41.87,
-          "total": "1:24.11",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:10:12.97",
-          "run1_start_sec": 33012.96622,
-          "run2_start_tod": "12:15:41.60",
-          "run2_start_sec": 44141.59899,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g6_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g6_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g6_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g6_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g6_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g6_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g6_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g6_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g6_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g6_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g6_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g6_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.56,
-                  "trigger_time": "09:10:27",
-                  "video": "Cam1/run1/g6_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g24_d001.mp4"
                 }
               ]
             },
             "Cam3": {
               "run1": [
                 {
-                  "thumb": "Cam3/run1/thumbnails/g6_d001_6.0fps_thumb.jpg",
-                  "full": "Cam3/run1/fullres/g6_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam3/run1/thumbnails/g6_d001_5.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g6_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam3/run1/thumbnails/g6_d001_5.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g6_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam3/run1/thumbnails/g6_d001_6.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g6_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam3/run1/thumbnails/g6_d001_6.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g6_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam3/run1/thumbnails/g6_d001_7.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g6_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.0,
-                  "trigger_time": "09:10:15",
-                  "video": "Cam3/run1/g6_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 7,
-          "first": "Willa",
-          "last": "Macindoe",
-          "club": "Ford Sayre",
-          "rank": 14,
-          "run1_time": 42.21,
-          "run2_time": 42.21,
-          "total": "1:24.42",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:10:47.06",
-          "run1_start_sec": 33047.05809,
-          "run2_start_tod": "12:15:14.02",
-          "run2_start_sec": 44114.01802,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g7_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g7_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g7_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g7_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g7_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g7_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g7_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g7_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g7_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g7_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g7_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g7_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "det_id": "d001"
-                }
-              ]
-            },
-            "Cam2": {
-              "run1": [
-                {
-                  "thumb": "Cam2/run1/thumbnails/g7_d001_5.0fps_thumb.jpg",
-                  "full": "Cam2/run1/fullres/g7_d001_5.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 4.0,
-                      "thumb": "Cam2/run1/thumbnails/g7_d001_4.0fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g7_d001_4.0fps.jpg"
-                    },
-                    {
-                      "fps": 4.5,
-                      "thumb": "Cam2/run1/thumbnails/g7_d001_4.5fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g7_d001_4.5fps.jpg"
-                    },
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam2/run1/thumbnails/g7_d001_5.0fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g7_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam2/run1/thumbnails/g7_d001_5.5fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g7_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam2/run1/thumbnails/g7_d001_6.0fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g7_d001_6.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 14.96,
-                  "trigger_time": "09:11:04",
-                  "video": "Cam2/run1/g7_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 12,
-          "first": "Emmy",
-          "last": "Guiterman",
-          "club": "Ford Sayre",
-          "rank": 15,
-          "run1_time": 42.16,
-          "run2_time": 42.33,
-          "total": "1:24.49",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:13:26.88",
-          "run1_start_sec": 33206.88232,
-          "run2_start_tod": "12:12:54.98",
-          "run2_start_sec": 43974.98096,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g12_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g12_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g12_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g12_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g12_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g12_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g12_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g12_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g12_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g12_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "det_id": "d001"
-                }
-              ]
-            },
-            "Cam2": {
-              "run1": [
-                {
-                  "thumb": "Cam2/run1/thumbnails/g12_d001_5.0fps_thumb.jpg",
-                  "full": "Cam2/run1/fullres/g12_d001_5.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 4.0,
-                      "thumb": "Cam2/run1/thumbnails/g12_d001_4.0fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g12_d001_4.0fps.jpg"
-                    },
-                    {
-                      "fps": 4.5,
-                      "thumb": "Cam2/run1/thumbnails/g12_d001_4.5fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g12_d001_4.5fps.jpg"
-                    },
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam2/run1/thumbnails/g12_d001_5.0fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g12_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam2/run1/thumbnails/g12_d001_5.5fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g12_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam2/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g12_d001_6.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 5.36,
-                  "trigger_time": "09:13:53",
-                  "video": "Cam2/run1/g12_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            },
-            "Cam3": {
-              "run1": [
-                {
-                  "thumb": "Cam3/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
-                  "full": "Cam3/run1/fullres/g12_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam3/run1/thumbnails/g12_d001_5.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g12_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam3/run1/thumbnails/g12_d001_5.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g12_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam3/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g12_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam3/run1/thumbnails/g12_d001_6.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g12_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam3/run1/thumbnails/g12_d001_7.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g12_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 28.48,
-                  "trigger_time": "09:13:34",
-                  "video": "Cam3/run1/g12_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 41,
-          "first": "Piper",
-          "last": "Magleby",
-          "club": "Ford Sayre",
-          "rank": 16,
-          "run1_time": 43.25,
-          "run2_time": 41.55,
-          "total": "1:24.80",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:25:05.88",
-          "run1_start_sec": 33905.88313,
-          "run2_start_tod": "12:01:34.17",
-          "run2_start_sec": 43294.16759,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g41_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g41_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g41_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g41_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g41_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g41_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g41_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g41_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g41_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g41_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g41_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g41_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.88,
-                  "trigger_time": "09:25:20",
-                  "video": "Cam1/run1/g41_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 18,
-          "first": "Harper",
-          "last": "Barbato",
-          "club": "Ford Sayre",
-          "rank": 17,
-          "run1_time": 42.69,
-          "run2_time": 42.15,
-          "total": "1:24.84",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:15:50.53",
-          "run1_start_sec": 33350.5347,
-          "run2_start_tod": "12:10:32.02",
-          "run2_start_sec": 43832.01552,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g18_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g18_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g18_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g18_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g18_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g18_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g18_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g18_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g18_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g18_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g18_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g18_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 20,
-          "first": "Sylvie",
-          "last": "Vanden Borre",
-          "club": "Proctor",
-          "rank": 18,
-          "run1_time": 43.16,
-          "run2_time": 41.94,
-          "total": "1:25.10",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:16:43.16",
-          "run1_start_sec": 33403.1571,
-          "run2_start_tod": "12:09:29.47",
-          "run2_start_sec": 43769.46958,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g20_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g20_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g20_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g20_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g20_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g20_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g20_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g20_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g20_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g20_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g20_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g20_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.72,
-                  "trigger_time": "09:16:57",
-                  "video": "Cam1/run1/g20_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            },
-            "Cam3": {
-              "run1": [
-                {
-                  "thumb": "Cam3/run1/thumbnails/g20_d001_6.0fps_thumb.jpg",
-                  "full": "Cam3/run1/fullres/g20_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam3/run1/thumbnails/g20_d001_5.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g20_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam3/run1/thumbnails/g20_d001_5.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g20_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam3/run1/thumbnails/g20_d001_6.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g20_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam3/run1/thumbnails/g20_d001_6.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g20_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam3/run1/thumbnails/g20_d001_7.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g20_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 1.84,
-                  "trigger_time": "09:16:49",
-                  "video": "Cam3/run1/g20_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 14,
-          "first": "Molly",
-          "last": "Mcclay",
-          "club": "Proctor",
-          "rank": 19,
-          "run1_time": 42.58,
-          "run2_time": 42.58,
-          "total": "1:25.16",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:14:20.24",
-          "run1_start_sec": 33260.24447,
-          "run2_start_tod": "12:12:02.43",
-          "run2_start_sec": 43922.43024,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g14_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g14_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g14_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g14_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g14_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g14_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g14_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g14_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g14_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g14_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g14_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g14_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.72,
-                  "trigger_time": "09:14:34",
-                  "video": "Cam1/run1/g14_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 27,
-          "first": "Cecilia",
-          "last": "Kerner",
-          "club": "Ford Sayre",
-          "rank": 20,
-          "run1_time": 42.39,
-          "run2_time": 43.11,
-          "total": "1:25.50",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:19:22.86",
-          "run1_start_sec": 33562.85602,
-          "run2_start_tod": "12:07:18.40",
-          "run2_start_sec": 43638.39877,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g27_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g27_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g27_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g27_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g27_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g27_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g27_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g27_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g27_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g27_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g27_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g27_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "det_id": "d001"
-                }
-              ]
-            },
-            "Cam3": {
-              "run1": [
-                {
-                  "thumb": "Cam3/run1/thumbnails/g27_d001_6.0fps_thumb.jpg",
-                  "full": "Cam3/run1/fullres/g27_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam3/run1/thumbnails/g27_d001_5.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g27_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam3/run1/thumbnails/g27_d001_5.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g27_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam3/run1/thumbnails/g27_d001_6.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g27_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam3/run1/thumbnails/g27_d001_6.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g27_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam3/run1/thumbnails/g27_d001_7.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g27_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 1.84,
-                  "trigger_time": "09:19:28",
-                  "video": "Cam3/run1/g27_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 16,
-          "first": "Olivia",
-          "last": "Bourassa",
-          "club": "Sunapee",
-          "rank": 21,
-          "run1_time": 43.27,
-          "run2_time": 42.82,
-          "total": "1:26.09",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:15:17.79",
-          "run1_start_sec": 33317.78738,
-          "run2_start_tod": "12:11:08.14",
-          "run2_start_sec": 43868.1376,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g16_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g16_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g16_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g16_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g16_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g16_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g16_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g16_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g16_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g16_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.37,
-                  "trigger_time": "09:15:32",
-                  "video": "Cam1/run1/g16_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            },
-            "Cam2": {
-              "run1": [
-                {
-                  "thumb": "Cam2/run1/thumbnails/g16_d001_5.0fps_thumb.jpg",
-                  "full": "Cam2/run1/fullres/g16_d001_5.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 4.0,
-                      "thumb": "Cam2/run1/thumbnails/g16_d001_4.0fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g16_d001_4.0fps.jpg"
-                    },
-                    {
-                      "fps": 4.5,
-                      "thumb": "Cam2/run1/thumbnails/g16_d001_4.5fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g16_d001_4.5fps.jpg"
-                    },
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam2/run1/thumbnails/g16_d001_5.0fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g16_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam2/run1/thumbnails/g16_d001_5.5fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g16_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam2/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
-                      "full": "Cam2/run1/fullres/g16_d001_6.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 4.64,
-                  "trigger_time": "09:15:45",
-                  "video": "Cam2/run1/g16_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            },
-            "Cam3": {
-              "run1": [
-                {
-                  "thumb": "Cam3/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
-                  "full": "Cam3/run1/fullres/g16_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam3/run1/thumbnails/g16_d001_5.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g16_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam3/run1/thumbnails/g16_d001_5.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g16_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam3/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g16_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam3/run1/thumbnails/g16_d001_6.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g16_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam3/run1/thumbnails/g16_d001_7.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g16_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.24,
-                  "trigger_time": "09:15:26",
-                  "video": "Cam3/run1/g16_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "bib": 23,
-          "first": "Ada",
-          "last": "Meyer",
-          "club": "Ford Sayre",
-          "rank": 22,
-          "run1_time": 43.47,
-          "run2_time": 42.86,
-          "total": "1:26.33",
-          "run1_status": "finished",
-          "run2_status": "finished",
-          "run1_start_tod": "09:17:12.87",
-          "run1_start_sec": 33432.86949,
-          "run2_start_tod": "12:09:02.30",
-          "run2_start_sec": 43742.30293,
-          "montages": {
-            "Cam1": {
-              "run1": [
-                {
-                  "thumb": "Cam1/run1/thumbnails/g23_d001_6.0fps_thumb.jpg",
-                  "full": "Cam1/run1/fullres/g23_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam1/run1/thumbnails/g23_d001_5.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g23_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam1/run1/thumbnails/g23_d001_5.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g23_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam1/run1/thumbnails/g23_d001_6.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g23_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam1/run1/thumbnails/g23_d001_6.5fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g23_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam1/run1/thumbnails/g23_d001_7.0fps_thumb.jpg",
-                      "full": "Cam1/run1/fullres/g23_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.56,
-                  "trigger_time": "09:17:27",
-                  "video": "Cam1/run1/g23_d001.mp4",
-                  "det_id": "d001"
-                }
-              ]
-            },
-            "Cam3": {
-              "run1": [
-                {
-                  "thumb": "Cam3/run1/thumbnails/g23_d001_6.0fps_thumb.jpg",
-                  "full": "Cam3/run1/fullres/g23_d001_6.0fps.jpg",
-                  "fps_variants": [
-                    {
-                      "fps": 5.0,
-                      "thumb": "Cam3/run1/thumbnails/g23_d001_5.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g23_d001_5.0fps.jpg"
-                    },
-                    {
-                      "fps": 5.5,
-                      "thumb": "Cam3/run1/thumbnails/g23_d001_5.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g23_d001_5.5fps.jpg"
-                    },
-                    {
-                      "fps": 6.0,
-                      "thumb": "Cam3/run1/thumbnails/g23_d001_6.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g23_d001_6.0fps.jpg"
-                    },
-                    {
-                      "fps": 6.5,
-                      "thumb": "Cam3/run1/thumbnails/g23_d001_6.5fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g23_d001_6.5fps.jpg"
-                    },
-                    {
-                      "fps": 7.0,
-                      "thumb": "Cam3/run1/thumbnails/g23_d001_7.0fps_thumb.jpg",
-                      "full": "Cam3/run1/fullres/g23_d001_7.0fps.jpg"
-                    }
-                  ],
-                  "section_time": 2.08,
-                  "trigger_time": "09:17:17",
-                  "video": "Cam3/run1/g23_d001.mp4",
-                  "det_id": "d001"
-                },
-                {
+                  "det_id": "d001",
                   "thumb": "Cam3/run1/thumbnails/g24_d001_6.0fps_thumb.jpg",
                   "full": "Cam3/run1/fullres/g24_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2368,8 +1293,1087 @@
                   ],
                   "section_time": 2.0,
                   "trigger_time": "09:17:47",
-                  "video": "Cam3/run1/g24_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam3/run1/g24_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 42,
+          "first": "Gwyneth",
+          "last": "Coyne",
+          "club": "Sunapee",
+          "rank": 10,
+          "run1_time": 41.79,
+          "run2_time": 39.85,
+          "total": "1:21.64",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:25:32.83",
+          "run1_start_sec": 33932.82922,
+          "run2_start_tod": "12:01:09.63",
+          "run2_start_sec": 43269.63308,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g42_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g42_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g42_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g42_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g42_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g42_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g42_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g42_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g42_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g42_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g42_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g42_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.32,
+                  "trigger_time": "09:25:46",
+                  "video": "Cam1/run1/g42_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 4,
+          "first": "Bryce",
+          "last": "Phelps",
+          "club": "Sunapee",
+          "rank": 11,
+          "run1_time": 41.4,
+          "run2_time": 42.04,
+          "total": "1:23.44",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:09:05.79",
+          "run1_start_sec": 32945.78689,
+          "run2_start_tod": "12:16:42.72",
+          "run2_start_sec": 44202.71886,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g4_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g4_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g4_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g4_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g4_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g4_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g4_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g4_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g4_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g4_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g4_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g4_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.56,
+                  "trigger_time": "09:09:20",
+                  "video": "Cam1/run1/g4_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 35,
+          "first": "Margot",
+          "last": "Avillach",
+          "club": "Ragged Mt",
+          "rank": 12,
+          "run1_time": 42.33,
+          "run2_time": 41.2,
+          "total": "1:23.53",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:22:28.63",
+          "run1_start_sec": 33748.62696,
+          "run2_start_tod": "12:03:51.46",
+          "run2_start_sec": 43431.45882,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g35_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g35_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g35_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g35_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g35_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g35_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g35_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g35_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g35_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g35_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g35_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g35_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.72,
+                  "trigger_time": "09:22:42",
+                  "video": "Cam1/run1/g35_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 6,
+          "first": "Sydney",
+          "last": "Beach",
+          "club": "Ford Sayre",
+          "rank": 13,
+          "run1_time": 42.24,
+          "run2_time": 41.87,
+          "total": "1:24.11",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:10:12.97",
+          "run1_start_sec": 33012.96622,
+          "run2_start_tod": "12:15:41.60",
+          "run2_start_sec": 44141.59899,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g6_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g6_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g6_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g6_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g6_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g6_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g6_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g6_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g6_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g6_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g6_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g6_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.56,
+                  "trigger_time": "09:10:27",
+                  "video": "Cam1/run1/g6_d001.mp4"
+                }
+              ]
+            },
+            "Cam3": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam3/run1/thumbnails/g6_d001_6.0fps_thumb.jpg",
+                  "full": "Cam3/run1/fullres/g6_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam3/run1/thumbnails/g6_d001_5.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g6_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam3/run1/thumbnails/g6_d001_5.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g6_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam3/run1/thumbnails/g6_d001_6.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g6_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam3/run1/thumbnails/g6_d001_6.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g6_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam3/run1/thumbnails/g6_d001_7.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g6_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.0,
+                  "trigger_time": "09:10:15",
+                  "video": "Cam3/run1/g6_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 7,
+          "first": "Willa",
+          "last": "Macindoe",
+          "club": "Ford Sayre",
+          "rank": 14,
+          "run1_time": 42.21,
+          "run2_time": 42.21,
+          "total": "1:24.42",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:10:47.06",
+          "run1_start_sec": 33047.05809,
+          "run2_start_tod": "12:15:14.02",
+          "run2_start_sec": 44114.01802,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g7_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g7_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g7_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g7_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g7_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g7_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g7_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g7_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g7_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g7_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g7_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g7_d001_7.0fps.jpg"
+                    }
+                  ]
+                }
+              ]
+            },
+            "Cam2": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam2/run1/thumbnails/g7_d001_5.0fps_thumb.jpg",
+                  "full": "Cam2/run1/fullres/g7_d001_5.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 4.0,
+                      "thumb": "Cam2/run1/thumbnails/g7_d001_4.0fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g7_d001_4.0fps.jpg"
+                    },
+                    {
+                      "fps": 4.5,
+                      "thumb": "Cam2/run1/thumbnails/g7_d001_4.5fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g7_d001_4.5fps.jpg"
+                    },
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam2/run1/thumbnails/g7_d001_5.0fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g7_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam2/run1/thumbnails/g7_d001_5.5fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g7_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam2/run1/thumbnails/g7_d001_6.0fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g7_d001_6.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 14.96,
+                  "trigger_time": "09:11:04",
+                  "video": "Cam2/run1/g7_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 12,
+          "first": "Emmy",
+          "last": "Guiterman",
+          "club": "Ford Sayre",
+          "rank": 15,
+          "run1_time": 42.16,
+          "run2_time": 42.33,
+          "total": "1:24.49",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:13:26.88",
+          "run1_start_sec": 33206.88232,
+          "run2_start_tod": "12:12:54.98",
+          "run2_start_sec": 43974.98096,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g12_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g12_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g12_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g12_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g12_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g12_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g12_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g12_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g12_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g12_d001_7.0fps.jpg"
+                    }
+                  ]
+                }
+              ]
+            },
+            "Cam2": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam2/run1/thumbnails/g12_d001_5.0fps_thumb.jpg",
+                  "full": "Cam2/run1/fullres/g12_d001_5.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 4.0,
+                      "thumb": "Cam2/run1/thumbnails/g12_d001_4.0fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g12_d001_4.0fps.jpg"
+                    },
+                    {
+                      "fps": 4.5,
+                      "thumb": "Cam2/run1/thumbnails/g12_d001_4.5fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g12_d001_4.5fps.jpg"
+                    },
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam2/run1/thumbnails/g12_d001_5.0fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g12_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam2/run1/thumbnails/g12_d001_5.5fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g12_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam2/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g12_d001_6.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 5.36,
+                  "trigger_time": "09:13:53",
+                  "video": "Cam2/run1/g12_d001.mp4"
+                }
+              ]
+            },
+            "Cam3": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam3/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
+                  "full": "Cam3/run1/fullres/g12_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam3/run1/thumbnails/g12_d001_5.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g12_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam3/run1/thumbnails/g12_d001_5.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g12_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam3/run1/thumbnails/g12_d001_6.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g12_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam3/run1/thumbnails/g12_d001_6.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g12_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam3/run1/thumbnails/g12_d001_7.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g12_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 28.48,
+                  "trigger_time": "09:13:34",
+                  "video": "Cam3/run1/g12_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 41,
+          "first": "Piper",
+          "last": "Magleby",
+          "club": "Ford Sayre",
+          "rank": 16,
+          "run1_time": 43.25,
+          "run2_time": 41.55,
+          "total": "1:24.80",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:25:05.88",
+          "run1_start_sec": 33905.88313,
+          "run2_start_tod": "12:01:34.17",
+          "run2_start_sec": 43294.16759,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g41_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g41_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g41_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g41_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g41_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g41_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g41_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g41_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g41_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g41_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g41_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g41_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.88,
+                  "trigger_time": "09:25:20",
+                  "video": "Cam1/run1/g41_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 18,
+          "first": "Harper",
+          "last": "Barbato",
+          "club": "Ford Sayre",
+          "rank": 17,
+          "run1_time": 42.69,
+          "run2_time": 42.15,
+          "total": "1:24.84",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:15:50.53",
+          "run1_start_sec": 33350.5347,
+          "run2_start_tod": "12:10:32.02",
+          "run2_start_sec": 43832.01552,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g18_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g18_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g18_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g18_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g18_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g18_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g18_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g18_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g18_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g18_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g18_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g18_d001_7.0fps.jpg"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 20,
+          "first": "Sylvie",
+          "last": "Vanden Borre",
+          "club": "Proctor",
+          "rank": 18,
+          "run1_time": 43.16,
+          "run2_time": 41.94,
+          "total": "1:25.10",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:16:43.16",
+          "run1_start_sec": 33403.1571,
+          "run2_start_tod": "12:09:29.47",
+          "run2_start_sec": 43769.46958,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g20_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g20_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g20_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g20_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g20_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g20_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g20_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g20_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g20_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g20_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g20_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g20_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.72,
+                  "trigger_time": "09:16:57",
+                  "video": "Cam1/run1/g20_d001.mp4"
+                }
+              ]
+            },
+            "Cam3": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam3/run1/thumbnails/g20_d001_6.0fps_thumb.jpg",
+                  "full": "Cam3/run1/fullres/g20_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam3/run1/thumbnails/g20_d001_5.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g20_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam3/run1/thumbnails/g20_d001_5.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g20_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam3/run1/thumbnails/g20_d001_6.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g20_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam3/run1/thumbnails/g20_d001_6.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g20_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam3/run1/thumbnails/g20_d001_7.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g20_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 1.84,
+                  "trigger_time": "09:16:49",
+                  "video": "Cam3/run1/g20_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 14,
+          "first": "Molly",
+          "last": "Mcclay",
+          "club": "Proctor",
+          "rank": 19,
+          "run1_time": 42.58,
+          "run2_time": 42.58,
+          "total": "1:25.16",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:14:20.24",
+          "run1_start_sec": 33260.24447,
+          "run2_start_tod": "12:12:02.43",
+          "run2_start_sec": 43922.43024,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g14_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g14_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g14_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g14_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g14_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g14_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g14_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g14_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g14_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g14_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g14_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g14_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.72,
+                  "trigger_time": "09:14:34",
+                  "video": "Cam1/run1/g14_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 27,
+          "first": "Cecilia",
+          "last": "Kerner",
+          "club": "Ford Sayre",
+          "rank": 20,
+          "run1_time": 42.39,
+          "run2_time": 43.11,
+          "total": "1:25.50",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:19:22.86",
+          "run1_start_sec": 33562.85602,
+          "run2_start_tod": "12:07:18.40",
+          "run2_start_sec": 43638.39877,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g27_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g27_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g27_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g27_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g27_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g27_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g27_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g27_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g27_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g27_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g27_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g27_d001_7.0fps.jpg"
+                    }
+                  ]
+                }
+              ]
+            },
+            "Cam3": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam3/run1/thumbnails/g27_d001_6.0fps_thumb.jpg",
+                  "full": "Cam3/run1/fullres/g27_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam3/run1/thumbnails/g27_d001_5.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g27_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam3/run1/thumbnails/g27_d001_5.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g27_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam3/run1/thumbnails/g27_d001_6.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g27_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam3/run1/thumbnails/g27_d001_6.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g27_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam3/run1/thumbnails/g27_d001_7.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g27_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 1.84,
+                  "trigger_time": "09:19:28",
+                  "video": "Cam3/run1/g27_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 16,
+          "first": "Olivia",
+          "last": "Bourassa",
+          "club": "Sunapee",
+          "rank": 21,
+          "run1_time": 43.27,
+          "run2_time": 42.82,
+          "total": "1:26.09",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:15:17.79",
+          "run1_start_sec": 33317.78738,
+          "run2_start_tod": "12:11:08.14",
+          "run2_start_sec": 43868.1376,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g16_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g16_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g16_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g16_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g16_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g16_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g16_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g16_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g16_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g16_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.37,
+                  "trigger_time": "09:15:32",
+                  "video": "Cam1/run1/g16_d001.mp4"
+                }
+              ]
+            },
+            "Cam2": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam2/run1/thumbnails/g16_d001_5.0fps_thumb.jpg",
+                  "full": "Cam2/run1/fullres/g16_d001_5.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 4.0,
+                      "thumb": "Cam2/run1/thumbnails/g16_d001_4.0fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g16_d001_4.0fps.jpg"
+                    },
+                    {
+                      "fps": 4.5,
+                      "thumb": "Cam2/run1/thumbnails/g16_d001_4.5fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g16_d001_4.5fps.jpg"
+                    },
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam2/run1/thumbnails/g16_d001_5.0fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g16_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam2/run1/thumbnails/g16_d001_5.5fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g16_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam2/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
+                      "full": "Cam2/run1/fullres/g16_d001_6.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 4.64,
+                  "trigger_time": "09:15:45",
+                  "video": "Cam2/run1/g16_d001.mp4"
+                }
+              ]
+            },
+            "Cam3": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam3/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
+                  "full": "Cam3/run1/fullres/g16_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam3/run1/thumbnails/g16_d001_5.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g16_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam3/run1/thumbnails/g16_d001_5.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g16_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam3/run1/thumbnails/g16_d001_6.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g16_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam3/run1/thumbnails/g16_d001_6.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g16_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam3/run1/thumbnails/g16_d001_7.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g16_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.24,
+                  "trigger_time": "09:15:26",
+                  "video": "Cam3/run1/g16_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 23,
+          "first": "Ada",
+          "last": "Meyer",
+          "club": "Ford Sayre",
+          "rank": 22,
+          "run1_time": 43.47,
+          "run2_time": 42.86,
+          "total": "1:26.33",
+          "run1_status": "finished",
+          "run2_status": "finished",
+          "run1_start_tod": "09:17:12.87",
+          "run1_start_sec": 33432.86949,
+          "run2_start_tod": "12:09:02.30",
+          "run2_start_sec": 43742.30293,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/g23_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/g23_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/g23_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g23_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/g23_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g23_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/g23_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g23_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/g23_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g23_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/g23_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/g23_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.56,
+                  "trigger_time": "09:17:27",
+                  "video": "Cam1/run1/g23_d001.mp4"
+                }
+              ]
+            },
+            "Cam3": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam3/run1/thumbnails/g23_d001_6.0fps_thumb.jpg",
+                  "full": "Cam3/run1/fullres/g23_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam3/run1/thumbnails/g23_d001_5.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g23_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam3/run1/thumbnails/g23_d001_5.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g23_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam3/run1/thumbnails/g23_d001_6.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g23_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam3/run1/thumbnails/g23_d001_6.5fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g23_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam3/run1/thumbnails/g23_d001_7.0fps_thumb.jpg",
+                      "full": "Cam3/run1/fullres/g23_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "section_time": 2.08,
+                  "trigger_time": "09:17:17",
+                  "video": "Cam3/run1/g23_d001.mp4"
                 }
               ]
             }
@@ -2394,6 +2398,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g5_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g5_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2425,8 +2430,7 @@
                   ],
                   "section_time": 2.48,
                   "trigger_time": "09:09:55",
-                  "video": "Cam1/run1/g5_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g5_d001.mp4"
                 }
               ]
             }
@@ -2451,6 +2455,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g8_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g8_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2482,14 +2487,14 @@
                   ],
                   "section_time": 2.72,
                   "trigger_time": "09:11:32",
-                  "video": "Cam1/run1/g8_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g8_d001.mp4"
                 }
               ]
             },
             "Cam2": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam2/run1/thumbnails/g8_d001_5.0fps_thumb.jpg",
                   "full": "Cam2/run1/fullres/g8_d001_5.0fps.jpg",
                   "fps_variants": [
@@ -2521,8 +2526,7 @@
                   ],
                   "section_time": 5.12,
                   "trigger_time": "09:11:45",
-                  "video": "Cam2/run1/g8_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam2/run1/g8_d001.mp4"
                 }
               ]
             }
@@ -2547,6 +2551,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g44_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g44_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2578,8 +2583,7 @@
                   ],
                   "section_time": 2.64,
                   "trigger_time": "09:26:35",
-                  "video": "Cam1/run1/g44_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g44_d001.mp4"
                 }
               ]
             }
@@ -2604,6 +2608,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g31_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g31_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2635,14 +2640,14 @@
                   ],
                   "section_time": 2.56,
                   "trigger_time": "09:20:58",
-                  "video": "Cam1/run1/g31_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g31_d001.mp4"
                 }
               ]
             },
             "Cam3": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam3/run1/thumbnails/g31_d001_6.0fps_thumb.jpg",
                   "full": "Cam3/run1/fullres/g31_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2674,8 +2679,7 @@
                   ],
                   "section_time": 23.6,
                   "trigger_time": "09:20:57",
-                  "video": "Cam3/run1/g31_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam3/run1/g31_d001.mp4"
                 }
               ]
             }
@@ -2700,6 +2704,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g34_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g34_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2731,8 +2736,7 @@
                   ],
                   "section_time": 2.88,
                   "trigger_time": "09:22:17",
-                  "video": "Cam1/run1/g34_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g34_d001.mp4"
                 }
               ]
             }
@@ -2757,6 +2761,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g11_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g11_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2788,14 +2793,14 @@
                   ],
                   "section_time": 2.8,
                   "trigger_time": "09:13:10",
-                  "video": "Cam1/run1/g11_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g11_d001.mp4"
                 }
               ]
             },
             "Cam3": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam3/run1/thumbnails/g11_d001_6.0fps_thumb.jpg",
                   "full": "Cam3/run1/fullres/g11_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2827,8 +2832,7 @@
                   ],
                   "section_time": 24.64,
                   "trigger_time": "09:13:08",
-                  "video": "Cam3/run1/g11_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam3/run1/g11_d001.mp4"
                 }
               ]
             }
@@ -2853,6 +2857,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g38_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g38_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2884,8 +2889,7 @@
                   ],
                   "section_time": 2.96,
                   "trigger_time": "09:24:06",
-                  "video": "Cam1/run1/g38_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g38_d001.mp4"
                 }
               ]
             }
@@ -2910,6 +2914,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g29_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g29_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2941,14 +2946,14 @@
                   ],
                   "section_time": 2.88,
                   "trigger_time": "09:20:30",
-                  "video": "Cam1/run1/g29_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g29_d001.mp4"
                 }
               ]
             },
             "Cam3": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam3/run1/thumbnails/g29_d001_6.0fps_thumb.jpg",
                   "full": "Cam3/run1/fullres/g29_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -2980,8 +2985,7 @@
                   ],
                   "section_time": 24.16,
                   "trigger_time": "09:20:30",
-                  "video": "Cam3/run1/g29_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam3/run1/g29_d001.mp4"
                 }
               ]
             }
@@ -3006,6 +3010,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g25_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g25_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3037,8 +3042,7 @@
                   ],
                   "section_time": 2.88,
                   "trigger_time": "09:18:42",
-                  "video": "Cam1/run1/g25_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g25_d001.mp4"
                 }
               ]
             }
@@ -3063,6 +3067,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g37_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g37_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3094,8 +3099,7 @@
                   ],
                   "section_time": 2.88,
                   "trigger_time": "09:23:38",
-                  "video": "Cam1/run1/g37_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g37_d001.mp4"
                 }
               ]
             }
@@ -3120,6 +3124,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g15_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g15_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3151,14 +3156,14 @@
                   ],
                   "section_time": 3.12,
                   "trigger_time": "09:15:03",
-                  "video": "Cam1/run1/g15_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g15_d001.mp4"
                 }
               ]
             },
             "Cam3": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam3/run1/thumbnails/g15_d001_6.0fps_thumb.jpg",
                   "full": "Cam3/run1/fullres/g15_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3190,8 +3195,7 @@
                   ],
                   "section_time": 0.72,
                   "trigger_time": "09:14:40",
-                  "video": "Cam3/run1/g15_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam3/run1/g15_d001.mp4"
                 }
               ]
             }
@@ -3216,6 +3220,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g1_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g1_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3247,8 +3252,7 @@
                   ],
                   "section_time": 2.96,
                   "trigger_time": "09:08:08",
-                  "video": "Cam1/run1/g1_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g1_d001.mp4"
                 }
               ]
             }
@@ -3273,6 +3277,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g32_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g32_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3304,8 +3309,7 @@
                   ],
                   "section_time": 3.04,
                   "trigger_time": "09:21:26",
-                  "video": "Cam1/run1/g32_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g32_d001.mp4"
                 }
               ]
             }
@@ -3330,6 +3334,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g28_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g28_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3361,8 +3366,7 @@
                   ],
                   "section_time": 3.12,
                   "trigger_time": "09:20:03",
-                  "video": "Cam1/run1/g28_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g28_d001.mp4"
                 }
               ]
             }
@@ -3387,6 +3391,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g2_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g2_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3418,8 +3423,7 @@
                   ],
                   "section_time": 3.36,
                   "trigger_time": "09:08:42",
-                  "video": "Cam1/run1/g2_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g2_d001.mp4"
                 }
               ]
             }
@@ -3444,6 +3448,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g9_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g9_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3475,14 +3480,14 @@
                   ],
                   "section_time": 3.68,
                   "trigger_time": "09:12:14",
-                  "video": "Cam1/run1/g9_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam1/run1/g9_d001.mp4"
                 }
               ]
             },
             "Cam3": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam3/run1/thumbnails/g9_d001_6.0fps_thumb.jpg",
                   "full": "Cam3/run1/fullres/g9_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3514,8 +3519,7 @@
                   ],
                   "section_time": 1.84,
                   "trigger_time": "09:11:52",
-                  "video": "Cam3/run1/g9_d001.mp4",
-                  "det_id": "d001"
+                  "video": "Cam3/run1/g9_d001.mp4"
                 }
               ]
             }
@@ -3540,6 +3544,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g36_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g36_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3568,8 +3573,7 @@
                       "thumb": "Cam1/run1/thumbnails/g36_d001_7.0fps_thumb.jpg",
                       "full": "Cam1/run1/fullres/g36_d001_7.0fps.jpg"
                     }
-                  ],
-                  "det_id": "d001"
+                  ]
                 }
               ]
             }
@@ -3594,6 +3598,7 @@
             "Cam1": {
               "run1": [
                 {
+                  "det_id": "d001",
                   "thumb": "Cam1/run1/thumbnails/g87_d001_6.0fps_thumb.jpg",
                   "full": "Cam1/run1/fullres/g87_d001_6.0fps.jpg",
                   "fps_variants": [
@@ -3622,8 +3627,7 @@
                       "thumb": "Cam1/run1/thumbnails/g87_d001_7.0fps_thumb.jpg",
                       "full": "Cam1/run1/fullres/g87_d001_7.0fps.jpg"
                     }
-                  ],
-                  "det_id": "d001"
+                  ]
                 }
               ]
             }
@@ -5590,6 +5594,119 @@
           "dsq_run": 2,
           "dsq_gate": 10,
           "dsq_reason": "Improper Language"
+        }
+      ]
+    },
+    {
+      "id": "Forerunners",
+      "athletes": [
+        {
+          "bib": 1,
+          "first": "Forerunner",
+          "last": "F1",
+          "club": "",
+          "is_forerunner": true,
+          "montages": {}
+        },
+        {
+          "bib": 2,
+          "first": "Forerunner",
+          "last": "F2",
+          "club": "",
+          "is_forerunner": true,
+          "montages": {}
+        },
+        {
+          "bib": 3,
+          "first": "Forerunner",
+          "last": "F3",
+          "club": "",
+          "is_forerunner": true,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/f3_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/f3_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/f3_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f3_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/f3_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f3_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/f3_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f3_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/f3_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f3_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/f3_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f3_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "video": "Cam1/run1/f3_d001.mp4"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "bib": 4,
+          "first": "Forerunner",
+          "last": "F4",
+          "club": "",
+          "is_forerunner": true,
+          "montages": {
+            "Cam1": {
+              "run1": [
+                {
+                  "det_id": "d001",
+                  "thumb": "Cam1/run1/thumbnails/f4_d001_6.0fps_thumb.jpg",
+                  "full": "Cam1/run1/fullres/f4_d001_6.0fps.jpg",
+                  "fps_variants": [
+                    {
+                      "fps": 5.0,
+                      "thumb": "Cam1/run1/thumbnails/f4_d001_5.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f4_d001_5.0fps.jpg"
+                    },
+                    {
+                      "fps": 5.5,
+                      "thumb": "Cam1/run1/thumbnails/f4_d001_5.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f4_d001_5.5fps.jpg"
+                    },
+                    {
+                      "fps": 6.0,
+                      "thumb": "Cam1/run1/thumbnails/f4_d001_6.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f4_d001_6.0fps.jpg"
+                    },
+                    {
+                      "fps": 6.5,
+                      "thumb": "Cam1/run1/thumbnails/f4_d001_6.5fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f4_d001_6.5fps.jpg"
+                    },
+                    {
+                      "fps": 7.0,
+                      "thumb": "Cam1/run1/thumbnails/f4_d001_7.0fps_thumb.jpg",
+                      "full": "Cam1/run1/fullres/f4_d001_7.0fps.jpg"
+                    }
+                  ],
+                  "video": "Cam1/run1/f4_d001.mp4"
+                }
+              ]
+            }
+          }
         }
       ]
     }

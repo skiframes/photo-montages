@@ -212,6 +212,87 @@ function setupTeamFilter() {
         filterTeam = e.target.value;
         renderResults();
     });
+
+    // Team download dropdown
+    const dlSel = document.getElementById('team-download-select');
+    const dlBtn = document.getElementById('team-download-btn');
+    if (dlSel && dlBtn) {
+        sorted.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.textContent = t;
+            dlSel.appendChild(opt);
+        });
+        dlSel.addEventListener('change', () => {
+            dlBtn.disabled = !dlSel.value;
+        });
+        dlBtn.addEventListener('click', () => {
+            const team = dlSel.value;
+            if (!team) return;
+            downloadTeamMedia(team);
+        });
+    }
+}
+
+async function downloadTeamMedia(team) {
+    // Show disclaimer modal
+    const proceed = confirm(
+        `Download all media for ${team}?\n\n` +
+        `⚠️ WARNING: This download may be several GB in size.\n\n` +
+        `• Use a desktop computer, not a mobile phone\n` +
+        `• Ensure you have a stable internet connection\n` +
+        `• Make sure you have enough disk space\n\n` +
+        `The download will include all photo montages and video clips for athletes from ${team}.`
+    );
+    if (!proceed) return;
+
+    // Collect all media URLs for the team
+    const mediaUrls = [];
+    manifest.categories.forEach(cat => {
+        cat.athletes.forEach(a => {
+            if (a.club !== team || !a.montages) return;
+            for (const camId of Object.keys(a.montages)) {
+                for (const runKey of Object.keys(a.montages[camId])) {
+                    const dets = a.montages[camId][runKey];
+                    if (!Array.isArray(dets)) continue;
+                    dets.forEach(det => {
+                        // Add full-res image
+                        if (det.full) {
+                            mediaUrls.push({
+                                url: manifest.media_base_url + '/' + det.full,
+                                filename: `${a.last}_${a.first}_${a.bib}/${camId}_${runKey}_${det.full.split('/').pop()}`
+                            });
+                        }
+                        // Add video
+                        if (det.video) {
+                            mediaUrls.push({
+                                url: manifest.media_base_url + '/' + det.video,
+                                filename: `${a.last}_${a.first}_${a.bib}/${camId}_${runKey}_${det.video.split('/').pop()}`
+                            });
+                        }
+                    });
+                }
+            }
+        });
+    });
+
+    if (mediaUrls.length === 0) {
+        alert(`No media found for ${team}.`);
+        return;
+    }
+
+    // For now, open each file in new tab (browsers will prompt to download)
+    // A proper implementation would use a server-side zip endpoint
+    alert(
+        `Found ${mediaUrls.length} files for ${team}.\n\n` +
+        `To download all files, please use the browser's download manager or ` +
+        `contact the race organizer for a bulk download link.`
+    );
+
+    // Open the team-filtered results page so they can download individually
+    document.getElementById('team-select').value = team;
+    filterTeam = team;
+    renderResults();
 }
 
 
@@ -2460,17 +2541,45 @@ function renderResults() {
         return 0;
     });
 
-    tbody.innerHTML = athletes.map(a => athleteRow(a, cat, ranks, activeSections)).join('');
+    let html = athletes.map(a => athleteRow(a, cat, ranks, activeSections)).join('');
+
+    // Append forerunners at the bottom (from Forerunners category, if it exists)
+    const frCat = manifest.categories.find(c => c.id === 'Forerunners');
+    if (frCat && frCat.athletes) {
+        let forerunners = frCat.athletes.filter(a => {
+            // Only show forerunners that have montages for any active section
+            if (!a.montages) return false;
+            return activeSections.some(({ cam }) => {
+                const dets = a.montages[cam.id] && a.montages[cam.id][activeRun];
+                return Array.isArray(dets) && dets.length > 0;
+            });
+        });
+        // Sort forerunners by section time if a section sort is active
+        if (sortColumn && sortColumn.startsWith('sectionTime_') && sortDirection) {
+            const camId = sortColumn.replace('sectionTime_', '');
+            forerunners.sort((a, b) => {
+                const va = getSectionTime(a, camId, activeRun) || 9999;
+                const vb = getSectionTime(b, camId, activeRun) || 9999;
+                return sortDirection === 'desc' ? vb - va : va - vb;
+            });
+        }
+        if (forerunners.length > 0) {
+            html += `<tr class="forerunner-separator"><td colspan="99" class="forerunner-label">Forerunners</td></tr>`;
+            html += forerunners.map(a => athleteRow(a, frCat, {}, activeSections, true)).join('');
+        }
+    }
+
+    tbody.innerHTML = html;
 }
 
-function athleteRow(a, cat, ranks, activeSections) {
-    const rank = ranks[a.bib] || null;
-    const { time, status } = getRunTime(a);
+function athleteRow(a, cat, ranks, activeSections, isForerunner) {
+    const rank = isForerunner ? null : (ranks[a.bib] || null);
+    const { time, status } = isForerunner ? { time: null, status: '' } : getRunTime(a);
 
-    let html = `<tr data-bib="${a.bib}">`;
-    // Official results group
+    let html = `<tr data-bib="${a.bib}" ${isForerunner ? 'class="forerunner-row"' : ''}>`;
+    // Official results group — blank for forerunners
     html += `<td class="col-rank"><span class="rank-val">${rank || ''}</span></td>`;
-    html += `<td class="col-time">${formatTimeCell(time, status)}</td>`;
+    html += `<td class="col-time">${isForerunner ? '' : formatTimeCell(time, status)}</td>`;
     // Identity group
     html += `<td class="col-bib">${a.bib}</td>`;
     html += `<td class="col-name">${a.first} ${a.last}</td>`;
@@ -2560,18 +2669,58 @@ window._openMontage = function (camId, bib, catId) {
     showLightbox();
 };
 
+let lbCurrentFullUrl = ''; // Track current full-res image URL for download/copy
+let vlbCurrentVideoUrl = ''; // Track current video URL for download/copy
+
 function setupLightbox() {
     const lb = document.getElementById('lightbox');
     lb.querySelector('.lb-backdrop').addEventListener('click', closeLB);
     lb.querySelector('.lb-close').addEventListener('click', closeLB);
     lb.querySelector('.lb-prev').addEventListener('click', () => { if (lbIdx > 0) { lbIdx--; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); } });
     lb.querySelector('.lb-next').addEventListener('click', () => { if (lbIdx < lbList.length - 1) { lbIdx++; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); } });
+
+    // Download button - fetch as blob to force download
+    document.getElementById('lb-download-btn').addEventListener('click', async () => {
+        if (!lbCurrentFullUrl) return;
+        const btn = document.getElementById('lb-download-btn');
+        const origText = btn.textContent;
+        btn.textContent = '⏳ Loading...';
+        btn.disabled = true;
+        try {
+            const response = await fetch(lbCurrentFullUrl);
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = lbCurrentFullUrl.split('/').pop();
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Download failed:', e);
+            alert('Download failed. Please try again.');
+        }
+        btn.textContent = origText;
+        btn.disabled = false;
+    });
+
+    // Copy link button
+    document.getElementById('lb-copy-link-btn').addEventListener('click', () => {
+        if (!lbCurrentFullUrl) return;
+        const fullUrl = new URL(lbCurrentFullUrl, window.location.href).href;
+        navigator.clipboard.writeText(fullUrl).then(() => {
+            const btn = document.getElementById('lb-copy-link-btn');
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => { btn.textContent = orig; }, 1500);
+        });
+    });
+
     document.addEventListener('keydown', e => {
         if (lb.classList.contains('hidden')) return;
         if (e.key === 'Escape') closeLB();
-        // UP/DOWN = previous/next athlete, LEFT/RIGHT also supported
-        if ((e.key === 'ArrowUp' || e.key === 'ArrowLeft') && lbIdx > 0) { e.preventDefault(); lbIdx--; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
-        if ((e.key === 'ArrowDown' || e.key === 'ArrowRight') && lbIdx < lbList.length - 1) { e.preventDefault(); lbIdx++; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
+        // UP/DOWN = previous/next athlete
+        if (e.key === 'ArrowUp' && lbIdx > 0) { e.preventDefault(); lbIdx--; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
+        if (e.key === 'ArrowDown' && lbIdx < lbList.length - 1) { e.preventDefault(); lbIdx++; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
         // Shift+D toggles delete button
         if (e.key === 'D' && e.shiftKey) {
             const delBtn = document.getElementById('lb-delete-btn');
@@ -2601,21 +2750,23 @@ function showLightbox() {
 
     // Determine which image to show (selected FPS or default)
     let thumbUrl = manifest.media_base_url + '/' + montage.thumb;
+    let fullUrl = manifest.media_base_url + '/' + montage.full;
     const variants = montage.fps_variants || [];
     if (lbSelectedFps !== null && variants.length > 0) {
         const match = variants.find(v => v.fps === lbSelectedFps);
         if (match) {
             thumbUrl = manifest.media_base_url + '/' + match.thumb;
+            fullUrl = manifest.media_base_url + '/' + match.full;
         }
     }
+    lbCurrentFullUrl = fullUrl; // Store for download/copy buttons
 
     lb.classList.remove('hidden');
     document.getElementById('lb-img').src = thumbUrl;
     document.getElementById('lb-name').textContent = `${a.first} ${a.last} (#${a.bib})`;
 
-    // Build details with det_id and trigger_time
+    // Build details with trigger_time
     let detailText = `${runLabel} | ${sectionLabel}`;
-    if (montage.det_id) detailText += ` | ${montage.det_id}`;
     if (montage.trigger_time) detailText += ` | ${montage.trigger_time}`;
     document.getElementById('lb-details').textContent = detailText;
 
@@ -2833,6 +2984,42 @@ function setupVideoLightbox() {
         });
     });
 
+    // Download button - fetch as blob to force download
+    document.getElementById('vlb-download-btn').addEventListener('click', async () => {
+        if (!vlbCurrentVideoUrl) return;
+        const btn = document.getElementById('vlb-download-btn');
+        const origText = btn.textContent;
+        btn.textContent = '⏳ Loading...';
+        btn.disabled = true;
+        try {
+            const response = await fetch(vlbCurrentVideoUrl);
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = vlbCurrentVideoUrl.split('/').pop();
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Download failed:', e);
+            alert('Download failed. Please try again.');
+        }
+        btn.textContent = origText;
+        btn.disabled = false;
+    });
+
+    // Copy link button
+    document.getElementById('vlb-copy-link-btn').addEventListener('click', () => {
+        if (!vlbCurrentVideoUrl) return;
+        const fullUrl = new URL(vlbCurrentVideoUrl, window.location.href).href;
+        navigator.clipboard.writeText(fullUrl).then(() => {
+            const btn = document.getElementById('vlb-copy-link-btn');
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => { btn.textContent = orig; }, 1500);
+        });
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', e => {
         if (vlb.classList.contains('hidden')) return;
@@ -2872,6 +3059,7 @@ function showVideoLightbox() {
     const montage = videoDets[vlbDetIdx];
 
     const videoUrl = manifest.media_base_url + '/' + montage.video;
+    vlbCurrentVideoUrl = videoUrl; // Store for download/copy buttons
     const sectionIdx = manifest.cameras.findIndex(c => c.id === item.camId);
     const runLabel = runKey === 'run1' ? 'Run 1' : 'Run 2';
     const sectionLabel = 'Section ' + (sectionIdx + 1);
@@ -2893,9 +3081,8 @@ function showVideoLightbox() {
         video.play().catch(() => {}); // Autoplay (may fail on mobile without interaction)
     });
 
-    // Build details with det_id and trigger_time
+    // Build details with trigger_time
     let detailText = `${runLabel} | ${sectionLabel} | Video`;
-    if (montage.det_id) detailText += ` | ${montage.det_id}`;
     if (montage.trigger_time) detailText += ` | ${montage.trigger_time}`;
 
     document.getElementById('vlb-name').textContent = `${a.first} ${a.last} (#${a.bib})`;

@@ -559,8 +559,20 @@ body {
 .det-nav-btn:hover:not([disabled]) { background: rgba(255,255,255,0.3); }
 .det-nav-btn[disabled] { opacity: 0.3; cursor: default; }
 .det-nav-label { color: #94a3b8; font-size: 13px; font-weight: 600; min-width: 40px; text-align: center; }
-.lb-delete-btn { background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.5); color: #ef4444; padding: 4px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; margin-top: 10px; transition: all 0.15s; }
+.lb-delete-btn { background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.5); color: #ef4444; padding: 4px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.15s; }
 .lb-delete-btn:hover { background: rgba(239,68,68,0.4); border-color: #ef4444; }
+.lb-actions { display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+.lb-action-btn { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 4px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.15s; }
+.lb-action-btn:hover { background: rgba(255,255,255,0.3); }
+.lb-keys { display: flex; gap: 16px; justify-content: center; margin-top: 16px; flex-wrap: wrap; color: #64748b; font-size: 11px; }
+.lb-keys kbd { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; font-family: inherit; }
+
+/* ── Team Download ─────────────────────────────────────────────────────── */
+#team-download { padding: 0 8px; font-size: 13px; display: flex; gap: 6px; align-items: center; }
+#team-download-select { padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; background: var(--surface); color: var(--text); }
+.team-download-btn { padding: 4px 10px; border: 1px solid var(--primary); border-radius: 4px; font-size: 12px; background: var(--primary); color: #fff; cursor: pointer; transition: all 0.15s; }
+.team-download-btn:hover:not(:disabled) { background: var(--primary-hover); }
+.team-download-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Video Lightbox ──────────────────────────────────────────────────── */
 #video-lightbox { position: fixed; inset: 0; z-index: 2100; display: flex; align-items: center; justify-content: center; }
@@ -999,4 +1011,28 @@ body {
     .docs-table th, .docs-table td {
         padding: 6px 8px;
     }
+}
+
+
+/* ── Forerunners ───────────────────────────────────────────────────────── */
+
+.forerunner-separator td {
+    padding: 10px 8px 4px !important;
+    border-bottom: 1px solid #334155;
+}
+
+.forerunner-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.forerunner-row {
+    opacity: 0.7;
+}
+
+.forerunner-row .col-name {
+    font-style: italic;
 }
