@@ -5,10 +5,12 @@ Serves mobile-first calibration UI for coaches to configure trigger zones.
 """
 
 import os
+import sys
 import json
 import uuid
 import signal
 import socket
+import logging
 import tempfile
 import threading
 from datetime import datetime, timedelta
@@ -20,6 +22,21 @@ import cv2
 import numpy as np
 import re
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
+
+# --- Timestamped logging setup ---
+# Override print() so every line in /tmp/flask.log gets a timestamp
+_original_print = print
+
+def print(*args, **kwargs):
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    _original_print(f"[{ts}]", *args, **kwargs)
+
+# Also configure Flask/werkzeug logging with timestamps
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    level=logging.INFO,
+)
 
 from calibration import (
     detect_gates, compute_calibration, draw_verification_grid,
@@ -1162,6 +1179,12 @@ def save_config():
         'vola_view': data.get('vola_view', '1'),  # View number 1-5 for filename
         'race_date': data.get('race_date', now.strftime('%Y-%m-%d')),
         'calibration_id': data.get('calibration_id'),  # Links to gate calibration if present
+        # Staging mode fields for batch processing recorded videos
+        'num_athletes': data.get('num_athletes', 0),  # 0 = all
+        'section_id': data.get('section_id', ''),      # e.g., "Cam1"
+        'run_number': data.get('run_number', ''),       # e.g., "run1"
+        'race_slug': data.get('race_slug', ''),         # e.g., "western-q-2026-02-22"
+        'staging_dir': data.get('staging_dir', ''),     # e.g., "/path/to/montages/western-q-2026-02-22"
     }
 
     # Save config
@@ -1893,6 +1916,30 @@ def process_video():
     runner_path = Path(__file__).resolve().parent / 'runner.py'
 
     try:
+        # Log job start with config details
+        try:
+            with open(config_path) as _cf:
+                _cfg = json.load(_cf)
+            _log_msg = (
+                f"\n{'='*70}\n"
+                f"[JOB START] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"  Job ID:        {job_id}\n"
+                f"  Config:        {Path(config_path).name}\n"
+                f"  Camera:        {_cfg.get('camera_id', '?')}\n"
+                f"  Group:         {_cfg.get('group', '?')} ({_cfg.get('session_type', '?')})\n"
+                f"  Section:       {_cfg.get('section_id', 'N/A')} / {_cfg.get('run_number', 'N/A')}\n"
+                f"  Staging dir:   {_cfg.get('staging_dir', 'N/A')}\n"
+                f"  Num athletes:  {_cfg.get('num_athletes', 0)} (of {len(_cfg.get('vola_racers', []))} total)\n"
+                f"  End zone:      {'SET' if _cfg.get('end_zone') else 'NULL (duration mode: ' + str(_cfg.get('run_duration_seconds')) + 's)'}\n"
+                f"  Detection:     threshold={_cfg.get('detection_threshold')}, min_pix_pct={_cfg.get('min_pixel_change_pct')}, min_bright={_cfg.get('min_brightness')}\n"
+                f"  Montage FPS:   {_cfg.get('montage_fps_list')}\n"
+                f"  Videos:        {len(_cfg.get('vola_videos', []))}\n"
+                f"{'='*70}"
+            )
+            print(_log_msg)
+        except Exception as _e:
+            print(f"[JOB START] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} job_id={job_id} config={config_path} (could not parse config: {_e})")
+
         if use_config_videos:
             # Use --use-config-videos flag to process videos from config's vola_videos list
             cmd = [PYTHON, '-u', str(runner_path), '--config', config_path, '--use-config-videos']
@@ -2686,15 +2733,15 @@ def populate_manifest_with_montages():
 # =============================================================================
 
 
-# Authorized emails for delete operations
-AUTHORIZED_DELETE_EMAILS = {'avillach@gmail.com'}
+# Delete password (simple shared secret for coach access)
+DELETE_PASSWORD = os.environ.get('SKIFRAMES_DELETE_PW', 'skiframes2026')
 
 
 @app.route('/api/montages/delete-detection', methods=['POST'])
 def delete_detection():
     """
     Delete a single detection entry from the manifest and its files from disk.
-    Requires authorized email.
+    Requires delete password.
 
     Request body:
     {
@@ -2704,15 +2751,15 @@ def delete_detection():
         "bib": 10,
         "gender": "g",
         "det_id": "d001",
-        "email": "avillach@gmail.com"
+        "password": "..."
     }
     """
     data = request.get_json() or {}
 
-    # Email authorization check
-    email = (data.get('email') or '').strip().lower()
-    if email not in AUTHORIZED_DELETE_EMAILS:
-        return jsonify({'error': 'Unauthorized. Only authorized users can delete detections.'}), 403
+    # Password authorization check
+    password = data.get('password', '')
+    if password != DELETE_PASSWORD:
+        return jsonify({'error': 'Wrong password.'}), 403
 
     race_slug = data.get('race_slug')
     cam_id = data.get('cam_id')
@@ -4014,7 +4061,22 @@ def ai_analyze():
             frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             ai_jobs[job_id]['total_frames'] = total_frames
 
-            analyzer = YOLOPoseAnalyzer(slope_angle_deg=0.0, model_size='l')
+            # Compute slope angle from race manifest using camera+gate GPS
+            slope_angle_deg = 0.0
+            try:
+                from slope_calculator import SlopeCalculator
+                manifest_path = WEB_RACES_DIR / race_slug / 'race_manifest.json'
+                if manifest_path.exists():
+                    calc = SlopeCalculator.from_race_manifest(
+                        str(manifest_path), camera_id=cam_id, run=run_key)
+                    result = calc.compute_apparent_slope_angle()
+                    slope_angle_deg = result.get('slope_angle_deg', 0.0)
+                    print(f"[AI] Slope angle for {cam_id}/{run_key}: {slope_angle_deg}° "
+                          f"(method={result.get('method')}, pitch={result.get('pitch_deg')}°)")
+            except Exception as e:
+                print(f"[AI] Warning: Could not compute slope angle: {e}")
+
+            analyzer = YOLOPoseAnalyzer(slope_angle_deg=slope_angle_deg, model_size='l')
 
             # Output annotated video alongside original: g10.mp4 → g10_ai.mp4
             ai_video_name = video_path.stem + '_ai.mp4'
@@ -4048,6 +4110,22 @@ def ai_analyze():
             cap.release()
             out_video.release()
 
+            # Re-encode to H.264 for browser compatibility (OpenCV mp4v = mpeg4, not playable in Safari/Chrome)
+            ai_video_h264 = video_path.parent / (video_path.stem + '_ai_h264.mp4')
+            import subprocess as _sp
+            ffmpeg_cmd = [
+                'ffmpeg', '-y', '-i', str(ai_video_path),
+                '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+                '-pix_fmt', 'yuv420p',  # Required for Safari
+                '-movflags', '+faststart',  # Enables streaming
+                str(ai_video_h264),
+            ]
+            _sp.run(ffmpeg_cmd, capture_output=True, check=True)
+
+            # Replace the mpeg4 version with the h264 version
+            ai_video_path.unlink()
+            ai_video_h264.rename(ai_video_path)
+
             # Build relative path for serving via /montages/ route
             # e.g. Cam1/run1/g10_ai.mp4
             rel_path = str(ai_video_path.relative_to(MONTAGES_DIR / race_slug))
@@ -4058,6 +4136,7 @@ def ai_analyze():
                 'ai_video': rel_path,
                 'frames_analyzed': poses_detected,
                 'total_frames': total_frames,
+                'slope_angle_deg': slope_angle_deg,
             }
 
         except Exception as e:

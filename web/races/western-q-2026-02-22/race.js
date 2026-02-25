@@ -2567,6 +2567,11 @@ function setupLightbox() {
         if (e.key === 'Escape') closeLB();
         if (e.key === 'ArrowLeft' && lbIdx > 0) { lbIdx--; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
         if (e.key === 'ArrowRight' && lbIdx < lbList.length - 1) { lbIdx++; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
+        // Shift+D toggles delete button
+        if (e.key === 'D' && e.shiftKey) {
+            const delBtn = document.getElementById('lb-delete-btn');
+            if (delBtn) delBtn.style.display = delBtn.style.display === 'none' ? '' : 'none';
+        }
     });
 }
 
@@ -2833,6 +2838,11 @@ function setupVideoLightbox() {
         // Frame stepping: , (comma) = back one frame, . (period) = forward one frame
         if (e.key === ',') { e.preventDefault(); stepFrame(-1); }
         if (e.key === '.') { e.preventDefault(); stepFrame(1); }
+        // Shift+D toggles delete button
+        if (e.key === 'D' && e.shiftKey) {
+            const delBtn = document.getElementById('vlb-delete-btn');
+            if (delBtn) delBtn.style.display = delBtn.style.display === 'none' ? '' : 'none';
+        }
     });
 }
 
@@ -2937,13 +2947,11 @@ window._deleteMontage = async function (raceSlug, camId, runKey, bib, genderChar
         raceSlug = manifest.media_base_url.split('/').pop();
     }
 
-    // Check for stored email or prompt
-    let email = localStorage.getItem('skiframes_delete_email') || '';
-    if (!email) {
-        email = prompt('Enter your authorized email to delete:');
-        if (!email) return;
-        email = email.trim().toLowerCase();
-        localStorage.setItem('skiframes_delete_email', email);
+    // Prompt for password (cached in sessionStorage for this browser session only)
+    let pw = sessionStorage.getItem('skiframes_delete_pw') || '';
+    if (!pw) {
+        pw = prompt('Enter delete password:');
+        if (!pw) return;
     }
 
     if (!confirm(`Delete detection ${detId} for bib #${bib}?\nThis removes all files (montages + video) for this detection.`)) return;
@@ -2952,17 +2960,19 @@ window._deleteMontage = async function (raceSlug, camId, runKey, bib, genderChar
         const resp = await fetch('http://localhost:5000/api/montages/delete-detection', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ race_slug: raceSlug, cam_id: camId, run_key: runKey, bib, gender: genderChar, det_id: detId, email })
+            body: JSON.stringify({ race_slug: raceSlug, cam_id: camId, run_key: runKey, bib, gender: genderChar, det_id: detId, password: pw })
         });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             if (resp.status === 403) {
-                // Unauthorized — clear stored email so user can re-enter
-                localStorage.removeItem('skiframes_delete_email');
+                // Wrong password — clear cached pw so user can re-enter
+                sessionStorage.removeItem('skiframes_delete_pw');
             }
             alert('Delete failed: ' + (err.error || resp.statusText));
             return;
         }
+        // Password was correct — cache it for this session
+        sessionStorage.setItem('skiframes_delete_pw', pw);
 
         // Update manifest in memory: remove the detection from the array
         for (const cat of manifest.categories) {
@@ -3095,11 +3105,15 @@ function _pollAIJob(aiJobKey, jobId) {
                 state.status = 'complete';
                 state.results = data.results;
                 _updateAIButton(aiJobKey);
+                // Auto-open the annotated video
+                window._showAIResults(aiJobKey);
                 return;
             }
             if (data.status === 'error') {
                 state.status = 'error';
+                state.errorMsg = data.error || 'Unknown error';
                 _updateAIButton(aiJobKey);
+                alert('AI analysis error: ' + state.errorMsg);
                 return;
             }
 
@@ -3142,27 +3156,58 @@ function _updateAIButton(aiJobKey) {
 
 window._showAIResults = function (aiJobKey) {
     const state = window._aiJobStates[aiJobKey];
-    if (!state || !state.results) return;
+    if (!state || !state.results || !state.results.ai_video) return;
 
-    const r = state.results;
-    const lines = [
-        `AI Pose Analysis Results`,
-        `━━━━━━━━━━━━━━━━━━━━━━━━`,
-        `Frames analyzed: ${r.frames_analyzed} / ${r.total_frames}`,
-        ``,
-        `Knee angles:  L ${r.avg_knee_angle_left}°  R ${r.avg_knee_angle_right}°`,
-        `Edge angles:  L ${r.avg_edge_angle_left}°  R ${r.avg_edge_angle_right}°`,
-        `Edge symmetry: ${r.avg_edge_symmetry}%`,
-        ``,
-        `Body angulation: ${r.avg_body_angulation}°`,
-        `Body inclination: ${r.avg_body_inclination}°`,
-        ``,
-        `Shoulder alignment: ${r.avg_shoulder_alignment}%`,
-        `Hip alignment: ${r.avg_hip_alignment}%`,
-        ``,
-        `Fore/Aft balance:  L ${r.avg_fore_aft_left}°  R ${r.avg_fore_aft_right}°`,
-    ];
-    alert(lines.join('\n'));
+    // Open the AI-annotated video in the video lightbox
+    const aiVideoUrl = manifest.media_base_url + '/' + state.results.ai_video;
+
+    // Parse aiJobKey to get athlete info: "Cam1_10_run1"
+    const parts = aiJobKey.split('_');
+    const camId = parts[0];
+    const bib = parseInt(parts[1]);
+    const runKey = parts.slice(2).join('_');
+
+    // Find the athlete
+    let athlete = null;
+    for (const cat of manifest.categories || []) {
+        for (const a of cat.athletes || []) {
+            if (a.bib === bib) { athlete = a; break; }
+        }
+        if (athlete) break;
+    }
+
+    const vlb = document.getElementById('video-lightbox');
+    vlb.classList.remove('hidden');
+
+    // Hide canvas overlay from previous video
+    const overlay = document.getElementById('vlb-canvas-overlay');
+    if (overlay) overlay.style.display = 'none';
+
+    const video = document.getElementById('vlb-video');
+    video.src = aiVideoUrl;
+    video.playbackRate = vlbSpeed;
+    video.load();
+    video.addEventListener('loadeddata', function onLoaded() {
+        video.removeEventListener('loadeddata', onLoaded);
+        video.currentTime = 0;
+        video.play().catch(() => {});
+    });
+
+    const nameStr = athlete ? `${athlete.first} ${athlete.last} (#${athlete.bib})` : `Bib #${bib}`;
+    document.getElementById('vlb-name').textContent = nameStr;
+    document.getElementById('vlb-details').textContent = `AI Pose Analysis | ${state.results.frames_analyzed} poses / ${state.results.total_frames} frames`;
+    document.getElementById('vlb-time').textContent = '0.00s / 0.00s';
+    document.getElementById('vlb-scrubber').value = 0;
+
+    // Hide navigation arrows (single AI video, not part of athlete list)
+    vlb.querySelector('.vlb-prev').style.display = 'none';
+    vlb.querySelector('.vlb-next').style.display = 'none';
+
+    // Hide detection nav and delete button for AI view
+    const detNav = document.getElementById('vlb-det-nav');
+    if (detNav) detNav.style.display = 'none';
+    const delBtn = document.getElementById('vlb-delete-btn');
+    if (delBtn) delBtn.style.display = 'none';
 };
 
 
