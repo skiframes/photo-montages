@@ -2569,16 +2569,21 @@ def populate_manifest_with_montages():
                         pass
 
                 # Load per-detection timing data (new format with det_id)
-                # {det_id: {bib, gender, section_elapsed_sec, trigger_time, ...}}
-                det_timing = {}  # det_id -> timing dict
+                # Key: (gender_char, bib, det_id) -> timing dict
+                det_timing = {}
                 for tf in run_dir.glob('*_timing.json'):
                     try:
                         with open(tf) as tfh:
                             td = json.load(tfh)
-                        if 'det_id' in td:
-                            det_timing[td['det_id']] = td
+                        bib_val = td.get('bib')
+                        det_id_val = td.get('det_id', 'd000')
+                        gender_val = td.get('gender', '')
+                        # Map gender code to char: 'F' -> 'g', 'M' -> 'b'
+                        gc = 'g' if gender_val == 'F' else 'b' if gender_val == 'M' else ''
+                        if bib_val is not None:
+                            det_timing[(gc, bib_val, det_id_val)] = td
                         # Also populate legacy timing_data
-                        timing_data[(td.get('gender', ''), td.get('bib', 0))] = td.get('section_elapsed_sec')
+                        timing_data[(gender_val, bib_val or 0)] = td.get('section_elapsed_sec')
                     except Exception:
                         pass
 
@@ -2662,7 +2667,7 @@ def populate_manifest_with_montages():
 
                     # Get timing from det_timing or legacy
                     gender_code = 'F' if gender_char == 'g' else 'M' if gender_char == 'b' else ''
-                    dt = det_timing.get(det_id, {})
+                    dt = det_timing.get((gender_char, bib, det_id), {})
                     section_time = dt.get('section_elapsed_sec') or timing_data.get((gender_code, bib))
                     trigger_time = dt.get('start_trigger_time', '')
                     # Format trigger_time as HH:MM:SS if it's an ISO timestamp
