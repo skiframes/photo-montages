@@ -114,7 +114,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_RACES_DIR = PROJECT_ROOT / 'web' / 'races'
 
 # Montage staging directory (organized by race/camera/run for website integration)
-MONTAGES_DIR = DATA_BASE_DIR / 'montages'
+# Use /tmp/montages for fast local dev; OWC_48 is too slow for iterative review
+MONTAGES_DIR = Path(os.environ.get('SKIFRAMES_MONTAGES_DIR', '/tmp/montages'))
 
 # Session types and groups
 SESSION_TYPES = ['test', 'race', 'gate_training', 'free_skiing']
@@ -662,6 +663,10 @@ def load_race_manifest(vola_file_path: str) -> dict:
     1. Same directory as the Vola CSV file
     2. web/races/*/race_manifest.json matching the race date
 
+    Gender-aware: When bibs overlap between categories (e.g., U12_Girls bib 4
+    and U12_Boys bib 4), the gender from the Vola CSV filename (girls-run1.csv
+    or boys-run1.csv) determines which athlete gets priority.
+
     Returns dict mapping bib number to:
         {'name': 'Firstname Lastname', 'team': 'PROC', 'gender': 'Girls',
          'category': 'U12', 'rank': 1, 'run1_time': 39.61, ...}
@@ -671,6 +676,14 @@ def load_race_manifest(vola_file_path: str) -> dict:
 
     vola_path = Path(vola_file_path)
     vola_dir = vola_path.parent
+
+    # Detect gender from Vola CSV filename (e.g., "girls-run1.csv" or "boys-run2.csv")
+    vola_gender = None
+    fname_lower = vola_path.stem.lower()
+    if 'girl' in fname_lower:
+        vola_gender = 'Girls'
+    elif 'boy' in fname_lower:
+        vola_gender = 'Boys'
 
     # 1. Check same directory as Vola CSV
     candidate = vola_dir / 'race_manifest.json'
@@ -699,6 +712,11 @@ def load_race_manifest(vola_file_path: str) -> dict:
         with open(manifest_path) as f:
             manifest = json.load(f)
 
+        # Two-pass approach: first load matching gender, then fill gaps with others.
+        # This ensures that when bibs overlap, the correct gender gets priority.
+        matching_entries = {}    # bib -> racer dict (matching gender)
+        other_entries = {}       # bib -> racer dict (other gender)
+
         for category in manifest.get('categories', []):
             cat_id = category.get('id', '')  # e.g. "U12_Girls"
             parts = cat_id.split('_')
@@ -709,7 +727,7 @@ def load_race_manifest(vola_file_path: str) -> dict:
                 bib = athlete.get('bib')
                 if bib is None:
                     continue
-                bib_to_racer[bib] = {
+                entry = {
                     'name': f"{athlete.get('first', '')} {athlete.get('last', '')}".strip(),
                     'team': athlete.get('club', ''),
                     'gender': gender,
@@ -721,8 +739,20 @@ def load_race_manifest(vola_file_path: str) -> dict:
                     'run1_status': athlete.get('run1_status', 'finished'),
                     'run2_status': athlete.get('run2_status', 'finished'),
                 }
+                if vola_gender and gender == vola_gender:
+                    matching_entries[bib] = entry
+                else:
+                    other_entries[bib] = entry
 
-        print(f"Loaded {len(bib_to_racer)} athletes from {manifest_path}")
+        # Start with other-gender entries, then overwrite with matching gender
+        # This ensures matching gender always wins for overlapping bibs
+        bib_to_racer = {**other_entries, **matching_entries}
+
+        if vola_gender:
+            print(f"Loaded {len(bib_to_racer)} athletes from {manifest_path} "
+                  f"(prioritizing {vola_gender}, {len(matching_entries)} matched)")
+        else:
+            print(f"Loaded {len(bib_to_racer)} athletes from {manifest_path}")
     except Exception as e:
         print(f"Error loading race manifest {manifest_path}: {e}")
 
@@ -2105,6 +2135,12 @@ def populate_manifest_with_montages():
         with open(manifest_path) as f:
             manifest = json.load(f)
 
+        # Clear all existing montage entries before repopulating
+        # This ensures stale entries (from renamed/deleted files) are removed
+        for category in manifest.get('categories', []):
+            for athlete in category.get('athletes', []):
+                athlete['montages'] = {}
+
         # Build bib → list of (cat_idx, athlete_idx, gender_key) for all matches
         # Boys and girls share bib numbers, so we need gender-aware lookup
         bib_lookup = {}  # {bib: [(cat_idx, athlete_idx, gender_key), ...]}
@@ -2159,11 +2195,11 @@ def populate_manifest_with_montages():
                     except Exception:
                         pass
 
-                # Find all fullres images (not thumbs)
+                # Collect all FPS variants per (gender_char, bib)
                 # Filename formats:
                 #   New: {g|b}{bib}_{fps}fps.jpg  (gender-prefixed)
                 #   Old: {bib}_{fps}fps.jpg       (no prefix)
-                seen_keys = set()  # (gender_char, bib) to avoid duplicates
+                bib_variants = {}  # (gender_char, bib) -> list of {fps, filename}
                 for img_file in sorted(run_dir.glob('*.jpg')):
                     filename = img_file.stem  # e.g., "g4_4.0fps" or "4_4.0fps"
 
@@ -2171,22 +2207,28 @@ def populate_manifest_with_montages():
                     if '_thumb' in filename:
                         continue
 
-                    # Extract gender prefix and bib from filename
+                    # Extract gender prefix, bib, and fps from filename
                     first_part = filename.split('_')[0]  # "g4" or "4" or "b12"
                     gender_char = ''
                     if first_part and first_part[0] in ('g', 'b') and first_part[1:].isdigit():
-                        gender_char = first_part[0]  # 'g' or 'b'
+                        gender_char = first_part[0]
                         bib = int(first_part[1:])
                     elif first_part.isdigit():
                         bib = int(first_part)
                     else:
                         continue
 
-                    key = (gender_char, bib)
-                    if key in seen_keys:
-                        continue
-                    seen_keys.add(key)
+                    # Extract fps value from filename
+                    fps_match = re.search(r'_([\d.]+)fps$', filename)
+                    fps_val = float(fps_match.group(1)) if fps_match else 0
 
+                    key = (gender_char, bib)
+                    if key not in bib_variants:
+                        bib_variants[key] = []
+                    bib_variants[key].append({'fps': fps_val, 'filename': filename})
+
+                # Build manifest entries with all FPS variants per bib
+                for (gender_char, bib), variants in bib_variants.items():
                     if bib not in bib_lookup:
                         print(f"  Warning: bib {bib} not found in manifest")
                         continue
@@ -2200,15 +2242,36 @@ def populate_manifest_with_montages():
                             matches = gender_matches
                     cat_idx, ath_idx, _ = matches[0]
 
-                    # Build montage paths relative to media_base_url
-                    full_path = f"{cam_id}/{run_key}/{filename}.jpg"
-                    thumb_name = f"{filename}_thumb.jpg"
+                    # Sort variants by fps
+                    variants.sort(key=lambda v: v['fps'])
+
+                    # Use middle fps as default (best balance)
+                    default_variant = variants[len(variants) // 2]
+                    default_filename = default_variant['filename']
+
+                    # Build default paths
+                    full_path = f"{cam_id}/{run_key}/{default_filename}.jpg"
+                    thumb_name = f"{default_filename}_thumb.jpg"
                     thumb_file = run_dir / thumb_name
                     thumb_path = f"{cam_id}/{run_key}/{thumb_name}" if thumb_file.exists() else full_path
 
                     # Get section elapsed time if available
                     gender_code = 'F' if gender_char == 'g' else 'M' if gender_char == 'b' else ''
                     section_time = timing_data.get((gender_code, bib))
+
+                    # Build fps_variants array
+                    fps_variants = []
+                    for v in variants:
+                        vf = v['filename']
+                        v_full = f"{cam_id}/{run_key}/{vf}.jpg"
+                        v_thumb_name = f"{vf}_thumb.jpg"
+                        v_thumb_file = run_dir / v_thumb_name
+                        v_thumb = f"{cam_id}/{run_key}/{v_thumb_name}" if v_thumb_file.exists() else v_full
+                        fps_variants.append({
+                            'fps': v['fps'],
+                            'thumb': v_thumb,
+                            'full': v_full,
+                        })
 
                     # Update manifest
                     athlete = manifest['categories'][cat_idx]['athletes'][ath_idx]
@@ -2221,6 +2284,7 @@ def populate_manifest_with_montages():
                     montage_entry = {
                         'thumb': thumb_path,
                         'full': full_path,
+                        'fps_variants': fps_variants,
                     }
                     if section_time is not None:
                         montage_entry['section_time'] = section_time
@@ -2982,13 +3046,17 @@ def compute_calibration_endpoint():
     camera_id = data.get('camera_id')
     discipline = data.get('discipline', 'sl_adult')
     gates = data.get('gates', [])
+    slope_only = data.get('slope_only', False)
 
     if not frame_id:
         return jsonify({'error': 'frame_id is required'}), 400
     if not camera_id:
         return jsonify({'error': 'camera_id is required'}), 400
-    if len(gates) < 4:
-        return jsonify({'error': f'Need at least 4 gates, got {len(gates)}'}), 400
+
+    # Minimum gates: 2 for slope-only, 4 for full calibration
+    min_gates = 2 if slope_only else 4
+    if len(gates) < min_gates:
+        return jsonify({'error': f'Need at least {min_gates} gates, got {len(gates)}'}), 400
 
     frame_path = CALIBRATION_FRAMES_DIR / f'{frame_id}.jpg'
     if not frame_path.exists():
@@ -3003,6 +3071,75 @@ def compute_calibration_endpoint():
     # GPS world coordinates (Mode B) — None falls back to Mode A
     world_coords = data.get('world_coords')
 
+    # Generate calibration ID
+    ts = datetime.now().strftime('%Y-%m-%d_%H%M')
+    cal_id = f'{camera_id}_{ts}'
+
+    if slope_only:
+        # Slope-only mode: save gates without computing homography
+        calibration = {
+            'camera_id': camera_id,
+            'discipline': discipline,
+            'frame_id': frame_id,
+            'gates': gates,
+            'frame_shape': list(frame.shape[:2]),
+            'calibration_id': cal_id,
+            'calibration_mode': 'slope_only',
+            'timestamp': datetime.now().isoformat(),
+        }
+
+        # Compute slope angle from gate pixel positions
+        slope_angle_deg = None
+        try:
+            from slope_calculator import compute_slope_from_pixels_only
+            import tempfile
+            import json as json_mod
+
+            # Write temp calibration file for slope calculation
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json_mod.dump({'gates': gates}, f)
+                temp_path = f.name
+
+            result = compute_slope_from_pixels_only(temp_path)
+            slope_angle_deg = result.get('slope_angle_deg')
+            calibration['slope_angle_deg'] = slope_angle_deg
+            calibration['slope_direction'] = result.get('direction_label')
+
+            import os
+            os.unlink(temp_path)
+        except Exception as e:
+            print(f"Warning: Could not compute slope angle: {e}")
+
+        # Draw gates on verification frame (no grid)
+        verify_frame = frame.copy()
+        for gate in gates:
+            top = tuple(gate['top'])
+            base = tuple(gate['base'])
+            color = (0, 0, 255) if gate.get('color') == 'red' else (255, 0, 0)
+            cv2.line(verify_frame, top, base, color, 3)
+            cv2.circle(verify_frame, top, 8, color, -1)
+            cv2.circle(verify_frame, base, 8, color, -1)
+            # Draw gate ID
+            cv2.putText(verify_frame, str(gate['id']), (base[0] + 10, base[1]),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.5, color, 3)
+
+        verify_path = CALIBRATION_FRAMES_DIR / f'{frame_id}_verify.jpg'
+        cv2.imwrite(str(verify_path), verify_frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+
+        # Store pending calibration
+        with pending_calibrations_lock:
+            pending_calibrations[cal_id] = calibration
+
+        return jsonify({
+            'success': True,
+            'calibration_id': cal_id,
+            'slope_only': True,
+            'slope_angle_deg': slope_angle_deg,
+            'verification_frame_url': f'/api/calibrate/frame/{frame_id}/verification',
+            'gate_count': len(gates),
+        })
+
+    # Full calibration mode (4+ gates)
     try:
         calibration = compute_calibration(gates, gate_spec, frame.shape, world_coords=world_coords)
     except Exception as e:
@@ -3019,9 +3156,6 @@ def compute_calibration_endpoint():
     else:
         calibration['calibration_mode'] = 'pixel'
 
-    # Generate calibration ID
-    ts = datetime.now().strftime('%Y-%m-%d_%H%M')
-    cal_id = f'{camera_id}_{ts}'
     calibration['calibration_id'] = cal_id
 
     # Draw verification grid
@@ -3231,6 +3365,86 @@ def _device_heartbeat_loop():
 # Start heartbeat thread
 _heartbeat_thread = threading.Thread(target=_device_heartbeat_loop, daemon=True)
 _heartbeat_thread.start()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# POSE ANALYSIS API
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/analyze/pose', methods=['POST'])
+def analyze_pose_endpoint():
+    """Run AI pose analysis on a racer's video segment."""
+    data = request.json or {}
+    bib = data.get('bib')
+    name = data.get('name', f'Bib{bib}')
+    vola_file = data.get('vola_file')
+    video_path = data.get('video_path')
+    race = data.get('race')
+    calibration_id = data.get('calibration_id')
+
+    if not video_path:
+        return jsonify({'error': 'video_path is required'}), 400
+
+    # Find calibration file
+    calibration_path = None
+    if calibration_id:
+        cal_path = CALIBRATIONS_DIR / f'{calibration_id}.json'
+        if cal_path.exists():
+            calibration_path = str(cal_path)
+    else:
+        # Try to find the most recent calibration
+        cals = sorted(CALIBRATIONS_DIR.glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True)
+        if cals:
+            calibration_path = str(cals[0])
+
+    # Generate output path
+    output_dir = Path('/tmp/pose_analysis')
+    output_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    output_video = output_dir / f'{safe_name}_{bib}_pose.mp4'
+
+    try:
+        import subprocess
+
+        cmd = [
+            'python3', 'pose_analyzer_yolo.py',
+            video_path,
+            '--output-video', str(output_video),
+        ]
+
+        if calibration_path:
+            cmd.extend(['--calibration', calibration_path])
+
+        # Run pose analysis (this can take a while)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+
+        if result.returncode != 0:
+            return jsonify({
+                'error': f'Analysis failed: {result.stderr}',
+                'stdout': result.stdout,
+            }), 500
+
+        # Try to open the output video
+        try:
+            subprocess.Popen(['open', str(output_video)])
+        except Exception:
+            pass  # Ignore if open fails
+
+        return jsonify({
+            'success': True,
+            'output_video': str(output_video),
+            'stdout': result.stdout,
+        })
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Analysis timed out (5 min limit)'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

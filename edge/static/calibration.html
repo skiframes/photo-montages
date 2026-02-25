@@ -969,6 +969,7 @@
                                     <th style="padding: 4px;">Team</th>
                                     <th style="padding: 4px;">Start</th>
                                     <th style="padding: 4px;">Duration</th>
+                                    <th style="padding: 4px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="stitchRacersTable"></tbody>
@@ -1146,6 +1147,35 @@
                     </div>
 
                     <div id="gatesVideoSection" style="display: none;">
+                        <!-- Race Video Selection (like Session Setup mode) -->
+                        <div id="gatesRaceVideoSection" style="margin-bottom: 16px; padding: 12px; background: #f0f9ff; border-radius: 8px; border: 1px solid #bfdbfe;">
+                            <label style="font-weight: 600; color: #1e40af; margin-bottom: 8px; display: block;">Load Race Videos</label>
+
+                            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                                <div style="flex: 1;">
+                                    <label for="gatesRaceDate" style="font-size: 12px;">Date</label>
+                                    <input type="date" id="gatesRaceDate" style="width: 100%;">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label for="gatesRaceCamera" style="font-size: 12px;">Camera</label>
+                                    <select id="gatesRaceCamera" style="width: 100%;">
+                                        <option value="R1">R1</option>
+                                        <option value="R2">R2</option>
+                                        <option value="R3">R3</option>
+                                        <option value="Axis">Axis</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <button class="btn btn-outline btn-sm" id="gatesLoadRaceVideos" style="width: 100%;">
+                                Find Race Videos
+                            </button>
+
+                            <div id="gatesRaceVideosInfo" style="display: none; margin-top: 8px; font-size: 12px; color: var(--success);">
+                                Found <span id="gatesRaceVideoCount">0</span> videos
+                            </div>
+                        </div>
+
                         <label for="gatesVideoDropdown">Video File</label>
                         <select id="gatesVideoDropdown">
                             <option value="">Select a video...</option>
@@ -1255,15 +1285,27 @@
                             <button class="btn btn-outline btn-sm" id="gatesAddBlueBtn" style="color: #2563eb; border-color: #2563eb;">+ Blue Gate</button>
                             <button class="btn btn-outline btn-sm" id="gatesAddRedBtn" style="color: #dc2626; border-color: #dc2626;">+ Red Gate</button>
                         </div>
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <label for="gatesStartNumber" style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">Next gate #:</label>
+                            <input type="number" id="gatesStartNumber" min="1" max="50" value="1" style="width: 60px; padding: 4px 8px; font-size: 13px;">
+                            <span style="font-size: 11px; color: var(--text-muted);">(use gate numbers from race manifest)</span>
+                        </div>
+                        <div style="margin-top: 8px; padding: 8px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; font-size: 12px; color: #92400e;">
+                            <strong>GS Panel Gates:</strong><br>
+                            • <strong>2 poles</strong> (1 per gate): slope angle only<br>
+                            • <strong>4 poles</strong> (2 per gate): full homography calibration<br>
+                            <em style="font-size: 11px;">For 4-pole mode: mark TURNING pole first (has GPS), then OUTSIDE pole. Use same gate # for both poles of each gate.</em>
+                        </div>
                     </div>
 
                     <div id="gatesAddInstructions" style="display: none; margin-top: 8px; padding: 8px; background: #f0f9ff; border-radius: 6px; font-size: 13px;">
-                        <span id="gatesAddInstructionText">Tap the <strong>top</strong> of the gate pole, then tap the <strong>base</strong>.</span>
+                        <span id="gatesAddInstructionText">Tap the <strong>top</strong> of the TURNING pole, then tap the <strong>base</strong>.</span>
                         <button class="btn btn-outline btn-sm" id="gatesCancelAdd" style="margin-left: 8px; font-size: 11px;">Cancel</button>
                     </div>
 
                     <div id="gatesMinWarning" style="display: none; margin-top: 8px; padding: 8px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;">
-                        Need at least 4 gates for calibration.
+                        Need at least 4 gates for full calibration (homography).<br>
+                        <span style="font-size: 11px;">For slope angle only, 2 gates is sufficient.</span>
                     </div>
 
                     <!-- GPS Walk Gates -->
@@ -2070,7 +2112,7 @@
                     elements.outputStagingDetails.style.background = '#f0fdf4';
                 } else {
                     elements.outputStagingPath.textContent =
-                        '/Volumes/OWC_48/data/montages/<race>/<section>/<run>/';
+                        '/tmp/montages/<race>/<section>/<run>/';
                     elements.outputStagingWarning.style.display = 'block';
                     elements.outputStagingDetails.style.borderColor = '#fde68a';
                     elements.outputStagingDetails.style.background = '#fef9c3';
@@ -3780,6 +3822,10 @@
                         <td style="padding: 4px;">${r.team}</td>
                         <td style="padding: 4px;">${r.start_time_str}</td>
                         <td style="padding: 4px;">${r.run_duration ? r.run_duration.toFixed(1) + 's' : '-'}</td>
+                        <td style="padding: 4px;">
+                            <button class="btn btn-outline btn-sm" onclick="playRacerVideo(${r.bib}, '${r.name.replace(/'/g, "\\'")}')">Video</button>
+                            <button class="btn btn-sm" style="background: #7c3aed; color: white; margin-left: 4px;" onclick="runAIAnalysis(${r.bib}, '${r.name.replace(/'/g, "\\'")}')">AI</button>
+                        </td>
                     </tr>
                 `).join('');
 
@@ -3823,6 +3869,86 @@
                 showStatus(`Loaded ${data.total_racers} racers, ${4 - missingCameras.length}/4 videos found`, 'success');
             } catch (e) {
                 showStatus('Error loading racers: ' + e.message, 'error');
+            }
+        }
+
+        // Play video clip for a specific racer
+        async function playRacerVideo(bib, name) {
+            try {
+                // Find the racer's video path (use R2 for now, could be configurable)
+                const camera = 'R2';
+                const videoPaths = state.stitchVideoPaths[camera];
+                if (!videoPaths || videoPaths.length === 0) {
+                    showStatus(`No ${camera} video found`, 'error');
+                    return;
+                }
+
+                // Request server to extract and play the racer's segment
+                const res = await fetch('/api/stitch/play-racer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bib: bib,
+                        name: name,
+                        vola_file: elements.stitchVolaFile.value,
+                        video_path: videoPaths[0],
+                        race: elements.stitchRaceSelect.value,
+                    })
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    showStatus('Error: ' + data.error, 'error');
+                    return;
+                }
+
+                showStatus(`Playing video for ${name} (Bib ${bib})`, 'success');
+            } catch (e) {
+                showStatus('Error playing video: ' + e.message, 'error');
+            }
+        }
+
+        // Run AI pose analysis for a specific racer
+        async function runAIAnalysis(bib, name) {
+            try {
+                // Find the racer's video path (use R2 for now)
+                const camera = 'R2';
+                const videoPaths = state.stitchVideoPaths[camera];
+                if (!videoPaths || videoPaths.length === 0) {
+                    showStatus(`No ${camera} video found`, 'error');
+                    return;
+                }
+
+                showStatus(`Starting AI analysis for ${name}...`, 'success');
+
+                // Request server to run pose analysis
+                const res = await fetch('/api/analyze/pose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bib: bib,
+                        name: name,
+                        vola_file: elements.stitchVolaFile.value,
+                        video_path: videoPaths[0],
+                        race: elements.stitchRaceSelect.value,
+                        calibration_id: state.calibrationId || null,
+                    })
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    showStatus('Error: ' + data.error, 'error');
+                    return;
+                }
+
+                if (data.output_video) {
+                    showStatus(`AI analysis complete! Output: ${data.output_video}`, 'success');
+                    // Could auto-open the video here
+                } else {
+                    showStatus(`AI analysis started. Job ID: ${data.job_id}`, 'success');
+                }
+            } catch (e) {
+                showStatus('Error running AI analysis: ' + e.message, 'error');
             }
         }
 
@@ -4183,6 +4309,12 @@
             uploadProgress: document.getElementById('gatesUploadProgress'),
             uploadFill: document.getElementById('gatesUploadFill'),
             uploadStatus: document.getElementById('gatesUploadStatus'),
+            // Race video loading elements
+            raceDate: document.getElementById('gatesRaceDate'),
+            raceCamera: document.getElementById('gatesRaceCamera'),
+            loadRaceVideos: document.getElementById('gatesLoadRaceVideos'),
+            raceVideosInfo: document.getElementById('gatesRaceVideosInfo'),
+            raceVideoCount: document.getElementById('gatesRaceVideoCount'),
             detectionCard: document.getElementById('gatesDetectionCard'),
             discipline: document.getElementById('gatesDiscipline'),
             advancedToggle: document.getElementById('gatesAdvancedToggle'),
@@ -4203,6 +4335,7 @@
             gatesCount: document.getElementById('gatesCount'),
             addBlueBtn: document.getElementById('gatesAddBlueBtn'),
             addRedBtn: document.getElementById('gatesAddRedBtn'),
+            startNumber: document.getElementById('gatesStartNumber'),
             addInstructions: document.getElementById('gatesAddInstructions'),
             cancelAdd: document.getElementById('gatesCancelAdd'),
             minWarning: document.getElementById('gatesMinWarning'),
@@ -4285,6 +4418,72 @@
                     gatesEl.videoDropdown.innerHTML += `<option value="${state.gatesUploadedVideoPath}" selected>${name} (uploaded)</option>`;
                 }
             } catch (e) { console.error('Failed to load videos:', e); }
+        }
+
+        async function gatesLoadRaceVideos() {
+            const date = gatesEl.raceDate.value;
+            const camera = gatesEl.raceCamera.value;
+
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+
+            gatesEl.loadRaceVideos.innerHTML = '<span class="spinner"></span>Loading...';
+            gatesEl.loadRaceVideos.disabled = true;
+
+            try {
+                // Use the recordings/videos API endpoint
+                const res = await fetch('/api/recordings/videos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        camera_id: camera,
+                        date: date  // API accepts YYYY-MM-DD format
+                    })
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                const videos = data.videos || [];
+
+                if (videos.length === 0) {
+                    gatesEl.raceVideosInfo.style.display = 'block';
+                    gatesEl.raceVideoCount.textContent = '0';
+                    gatesEl.raceVideosInfo.style.color = 'var(--error)';
+                    gatesEl.raceVideosInfo.innerHTML = `No videos found for ${date} / ${camera}`;
+                } else {
+                    // Populate dropdown with found videos
+                    gatesEl.videoDropdown.innerHTML = '<option value="">Select a video...</option>' +
+                        videos.map(v => {
+                            const name = v.name || v.path.split('/').pop();
+                            const timeInfo = v.start_time ? ` (${v.start_time})` : '';
+                            return `<option value="${v.path}">${name}${timeInfo}</option>`;
+                        }).join('');
+
+                    gatesEl.raceVideosInfo.style.display = 'block';
+                    gatesEl.raceVideosInfo.style.color = 'var(--success)';
+                    gatesEl.raceVideosInfo.innerHTML = `Found <strong>${videos.length}</strong> videos`;
+
+                    // Auto-select first video
+                    if (videos.length > 0) {
+                        gatesEl.videoDropdown.value = videos[0].path;
+                        gatesLoadVideoInfo();
+                    }
+                }
+
+            } catch (e) {
+                console.error('Failed to load race videos:', e);
+                gatesEl.raceVideosInfo.style.display = 'block';
+                gatesEl.raceVideosInfo.style.color = 'var(--error)';
+                gatesEl.raceVideosInfo.innerHTML = 'Error: ' + e.message;
+            } finally {
+                gatesEl.loadRaceVideos.innerHTML = 'Find Race Videos';
+                gatesEl.loadRaceVideos.disabled = false;
+            }
         }
 
         async function gatesLoadVideoInfo() {
@@ -4629,7 +4828,7 @@
                 const colorName = state.addGateColor.charAt(0).toUpperCase() + state.addGateColor.slice(1);
                 const colorHex = state.addGateColor === 'red' ? '#dc2626' : '#2563eb';
                 document.getElementById('gatesAddInstructionText').innerHTML =
-                    `Now tap the <strong>base</strong> of the <strong style="color:${colorHex}">${colorName}</strong> gate pole.`;
+                    `Now tap the <strong>base</strong> of the <strong style="color:${colorHex}">${colorName}</strong> turning pole.`;
                 // Show a marker where top was tapped (color-matched)
                 const markerColor = state.addGateColor === 'red' ? '#dc2626' : '#2563eb';
                 const markerBg = state.addGateColor === 'red' ? 'rgba(220,38,38,0.4)' : 'rgba(37,99,235,0.4)';
@@ -4643,9 +4842,10 @@
                 setTimeout(() => { state.addGateTapCount = 1; }, 400);
             } else if (state.addGateTapCount === 1) {
                 // Second tap = base of pole
-                const newId = state.gates.length > 0
-                    ? Math.max(...state.gates.map(g => g.id)) + 1
-                    : 1;
+                // Use the "Next gate #" input value, then increment it
+                const startNum = parseInt(gatesEl.startNumber.value) || 1;
+                const newId = startNum;
+                gatesEl.startNumber.value = startNum + 1;  // Auto-increment for next gate
                 const color = state.addGateColor;
 
                 state.gates.push({
@@ -4684,13 +4884,14 @@
             const marker = document.getElementById('addGateTopMarker');
             if (marker) marker.remove();
 
-            // Show instructions with color-specific text
+            // Show instructions with color-specific text and gate number
             const colorName = color.charAt(0).toUpperCase() + color.slice(1);
             const colorHex = color === 'red' ? '#dc2626' : '#2563eb';
+            const nextGateNum = parseInt(gatesEl.startNumber.value) || 1;
             gatesEl.addInstructions.style.display = 'block';
             gatesEl.addInstructions.style.color = colorHex;
             document.getElementById('gatesAddInstructionText').innerHTML =
-                `Tap the <strong>top</strong> of the <strong style="color:${colorHex}">${colorName}</strong> gate pole, then tap the <strong>base</strong>.`;
+                `Adding <strong style="color:${colorHex}">Gate ${nextGateNum} (${colorName})</strong> — tap <strong>top</strong> of TURNING pole, then <strong>base</strong>.`;
 
             // Highlight active button, reset the other
             const activeBtn = color === 'blue' ? gatesEl.addBlueBtn : gatesEl.addRedBtn;
@@ -4732,19 +4933,27 @@
         function updateGatesCount() {
             const active = state.gates.filter(g => !g.dismissed);
             gatesEl.gatesCount.textContent = `${active.length} gate${active.length !== 1 ? 's' : ''} (${state.gates.filter(g => g.dismissed).length} dismissed)`;
-            gatesEl.computeBtn.disabled = active.length < 4;
-            gatesEl.minWarning.style.display = active.length < 4 ? 'block' : 'none';
+            // Allow 2+ gates (for slope angle), but show warning if <4 (for full homography)
+            gatesEl.computeBtn.disabled = active.length < 2;
+            gatesEl.minWarning.style.display = (active.length >= 2 && active.length < 4) ? 'block' : 'none';
+            // Update button text based on gate count
+            if (active.length >= 4) {
+                gatesEl.computeBtn.textContent = 'Compute Calibration';
+            } else if (active.length >= 2) {
+                gatesEl.computeBtn.textContent = 'Save Gates (Slope Only)';
+            }
         }
 
         async function gatesCompute() {
             const activeGates = state.gates.filter(g => !g.dismissed);
-            if (activeGates.length < 4) {
-                showStatus('Need at least 4 gates', 'error');
+            if (activeGates.length < 2) {
+                showStatus('Need at least 2 gates', 'error');
                 return;
             }
 
+            const slopeOnlyMode = activeGates.length < 4;
             gatesEl.computeBtn.disabled = true;
-            gatesEl.computeBtn.textContent = 'Computing...';
+            gatesEl.computeBtn.textContent = slopeOnlyMode ? 'Saving...' : 'Computing...';
 
             const cameraId = state.gatesSourceType === 'rtsp'
                 ? gatesEl.cameraSelect.value
@@ -4768,6 +4977,7 @@
                         gates: activeGates,
                         world_coords: worldCoords,
                         gps_data: gpsData,
+                        slope_only: slopeOnlyMode,
                     }),
                 });
                 const data = await res.json();
@@ -4781,37 +4991,55 @@
                 // Show verification
                 gatesEl.verifyCard.style.display = 'block';
                 gatesEl.verifyImage.src = data.verification_frame_url + '?t=' + Date.now();
-                gatesEl.reprojError.textContent = data.reprojection_error.toFixed(1);
-                document.getElementById('gatesFocalLength').textContent =
-                    data.focal_length ? Math.round(data.focal_length) : '—';
 
-                // Quality indicator (thresholds adjusted for virtual-plane error
-                // which includes both base+top fits and is naturally higher)
-                const err = data.reprojection_error;
-                if (err < 15) {
-                    gatesEl.reprojQuality.textContent = '(excellent)';
-                    gatesEl.reprojQuality.style.color = 'var(--success)';
-                } else if (err < 40) {
-                    gatesEl.reprojQuality.textContent = '(good)';
-                    gatesEl.reprojQuality.style.color = 'var(--primary)';
+                if (slopeOnlyMode) {
+                    // Slope-only mode - no homography computed
+                    gatesEl.reprojError.textContent = 'N/A';
+                    gatesEl.reprojQuality.textContent = '(slope angle only)';
+                    gatesEl.reprojQuality.style.color = 'var(--text-muted)';
+                    document.getElementById('gatesFocalLength').textContent = '—';
+
+                    // Show slope angle if computed
+                    if (data.slope_angle_deg !== undefined) {
+                        const dir = data.slope_angle_deg < 0 ? 'LEFT' : data.slope_angle_deg > 0 ? 'RIGHT' : 'vertical';
+                        showStatus(`Gates saved. Slope angle: ${Math.abs(data.slope_angle_deg).toFixed(1)}° ${dir}`, 'success');
+                    } else {
+                        showStatus('Gates saved for slope angle calculation', 'success');
+                    }
                 } else {
-                    gatesEl.reprojQuality.textContent = '(poor — adjust gates)';
-                    gatesEl.reprojQuality.style.color = 'var(--danger)';
-                }
+                    // Full calibration mode
+                    gatesEl.reprojError.textContent = data.reprojection_error.toFixed(1);
+                    document.getElementById('gatesFocalLength').textContent =
+                        data.focal_length ? Math.round(data.focal_length) : '—';
 
-                // Show per-gate errors so user knows which gates to adjust
-                const perGateEl = document.getElementById('gatesPerGateErrors');
-                if (perGateEl && data.per_gate_errors && data.per_gate_errors.length > 0) {
-                    const gateErrHtml = data.per_gate_errors.map(ge => {
-                        const color = ge.total_error < 10 ? 'var(--success)' :
-                                      ge.total_error < 30 ? 'var(--primary)' : 'var(--danger)';
-                        return `<span style="color:${color}; margin-right:8px;">Gate ${ge.gate_id}: ${ge.total_error}px</span>`;
-                    }).join('');
-                    perGateEl.innerHTML = gateErrHtml;
-                    perGateEl.style.display = 'block';
-                }
+                    // Quality indicator (thresholds adjusted for virtual-plane error
+                    // which includes both base+top fits and is naturally higher)
+                    const err = data.reprojection_error;
+                    if (err < 15) {
+                        gatesEl.reprojQuality.textContent = '(excellent)';
+                        gatesEl.reprojQuality.style.color = 'var(--success)';
+                    } else if (err < 40) {
+                        gatesEl.reprojQuality.textContent = '(good)';
+                        gatesEl.reprojQuality.style.color = 'var(--primary)';
+                    } else {
+                        gatesEl.reprojQuality.textContent = '(poor — adjust gates)';
+                        gatesEl.reprojQuality.style.color = 'var(--danger)';
+                    }
 
-                showStatus(`Calibration computed (error: ${data.reprojection_error.toFixed(1)}px)`, 'success');
+                    // Show per-gate errors so user knows which gates to adjust
+                    const perGateEl = document.getElementById('gatesPerGateErrors');
+                    if (perGateEl && data.per_gate_errors && data.per_gate_errors.length > 0) {
+                        const gateErrHtml = data.per_gate_errors.map(ge => {
+                            const color = ge.total_error < 10 ? 'var(--success)' :
+                                          ge.total_error < 30 ? 'var(--primary)' : 'var(--danger)';
+                            return `<span style="color:${color}; margin-right:8px;">Gate ${ge.gate_id}: ${ge.total_error}px</span>`;
+                        }).join('');
+                        perGateEl.innerHTML = gateErrHtml;
+                        perGateEl.style.display = 'block';
+                    }
+
+                    showStatus(`Calibration computed (error: ${data.reprojection_error.toFixed(1)}px)`, 'success');
+                }
             } catch (e) {
                 showStatus('Error computing calibration: ' + e.message, 'error');
             } finally {
@@ -5242,6 +5470,13 @@
             // Upload
             gatesEl.uploadVideo.addEventListener('click', () => gatesEl.videoUploadInput.click());
             gatesEl.videoUploadInput.addEventListener('change', gatesUploadVideo);
+
+            // Race video loading
+            gatesEl.loadRaceVideos.addEventListener('click', gatesLoadRaceVideos);
+
+            // Set default date to today
+            const today = new Date().toISOString().split('T')[0];
+            gatesEl.raceDate.value = today;
 
             // Grab frame
             gatesEl.grabFrame.addEventListener('click', gatesGrabFrame);
