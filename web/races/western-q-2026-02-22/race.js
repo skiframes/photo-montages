@@ -2395,9 +2395,10 @@ function renderResults() {
     // Row 3: Column headers
     const rankSortCls = sortColumn === 'rank' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
     const timeSortCls = sortColumn === 'time' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+    const bibSortCls = sortColumn === 'bib' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
     headerHtml += `<th class="col-rank sortable ${rankSortCls}" onclick="handleSort('rank')">Rank <span class="sort-arrow">${sortColumn === 'rank' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
     headerHtml += `<th class="col-time sortable ${timeSortCls}" onclick="handleSort('time')">Time <span class="sort-arrow">${sortColumn === 'time' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
-    headerHtml += `<th class="col-bib">Bib</th>`;
+    headerHtml += `<th class="col-bib sortable ${bibSortCls}" onclick="handleSort('bib')">Bib <span class="sort-arrow">${sortColumn === 'bib' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
     headerHtml += `<th class="col-name">Name</th>`;
     headerHtml += `<th class="col-club">Club</th>`;
     activeSections.forEach(({ cam, sectionIdx }) => {
@@ -2438,6 +2439,9 @@ function renderResults() {
                 const ta = getRunTime(a), tb = getRunTime(b);
                 va = (ta.status === 'finished' && ta.time != null) ? ta.time : 9999;
                 vb = (tb.status === 'finished' && tb.time != null) ? tb.time : 9999;
+            } else if (sortColumn === 'bib') {
+                va = a.bib;
+                vb = b.bib;
             } else if (sortColumn.startsWith('sectionTime_')) {
                 const camId = sortColumn.replace('sectionTime_', '');
                 va = getSectionTime(a, camId, activeRun) || 9999;
