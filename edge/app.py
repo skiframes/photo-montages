@@ -4093,6 +4093,7 @@ def ai_analyze():
 
     def run_analysis():
         try:
+            ai_jobs[job_id]['status_msg'] = 'Loading AI model...'
             from pose_analyzer_yolo import YOLOPoseAnalyzer
 
             # Get total frames first
@@ -4118,7 +4119,9 @@ def ai_analyze():
             except Exception as e:
                 print(f"[AI] Warning: Could not compute slope angle: {e}")
 
+            ai_jobs[job_id]['status_msg'] = 'Initializing pose analyzer...'
             analyzer = YOLOPoseAnalyzer(slope_angle_deg=slope_angle_deg, model_size='l')
+            ai_jobs[job_id]['status_msg'] = 'Analyzing frames...'
 
             # Output annotated video alongside original: g10.mp4 → g10_ai.mp4
             ai_video_name = video_path.stem + '_ai.mp4'
@@ -4153,6 +4156,7 @@ def ai_analyze():
             out_video.release()
 
             # Re-encode to H.264 for browser compatibility (OpenCV mp4v = mpeg4, not playable in Safari/Chrome)
+            ai_jobs[job_id]['status_msg'] = 'Encoding video for browser...'
             ai_video_h264 = video_path.parent / (video_path.stem + '_ai_h264.mp4')
             import subprocess as _sp
             ffmpeg_cmd = [
@@ -4207,6 +4211,7 @@ def ai_status(job_id):
         'analyzed_frames': job['analyzed_frames'],
         'results': job['results'],
         'error': job['error'],
+        'status_msg': job.get('status_msg', ''),
     })
 
 

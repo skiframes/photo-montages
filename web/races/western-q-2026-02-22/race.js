@@ -3100,6 +3100,7 @@ function _pollAIJob(aiJobKey, jobId) {
             if (!state) return;
 
             state.progress = data.progress || 0;
+            state.status_msg = data.status_msg || '';
 
             if (data.status === 'complete') {
                 state.status = 'complete';
@@ -3117,9 +3118,10 @@ function _pollAIJob(aiJobKey, jobId) {
                 return;
             }
 
-            // Still running — update and poll again
+            // Still running — update and poll again (faster during loading phase)
             _updateAIButton(aiJobKey);
-            setTimeout(() => _pollAIJob(aiJobKey, jobId), 2000);
+            const pollInterval = state.progress === 0 ? 1000 : 2000;
+            setTimeout(() => _pollAIJob(aiJobKey, jobId), pollInterval);
         })
         .catch(() => {
             setTimeout(() => _pollAIJob(aiJobKey, jobId), 3000);
@@ -3135,7 +3137,13 @@ function _updateAIButton(aiJobKey) {
 
     btn.className = 'section-btn-ai';
     if (state.status === 'running') {
-        btn.textContent = `${state.progress}%`;
+        if (state.progress === 0 && state.status_msg) {
+            // Show short status while model loads (truncate for small button)
+            const msg = state.status_msg.replace('Loading AI model...', 'Loading...').replace('Initializing pose analyzer...', 'Init...').replace('Encoding video for browser...', 'Encoding...');
+            btn.textContent = msg;
+        } else {
+            btn.textContent = `${state.progress}%`;
+        }
         btn.classList.add('running');
         btn.onclick = null;
     } else if (state.status === 'complete') {
