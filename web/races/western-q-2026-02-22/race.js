@@ -2565,8 +2565,9 @@ function setupLightbox() {
     document.addEventListener('keydown', e => {
         if (lb.classList.contains('hidden')) return;
         if (e.key === 'Escape') closeLB();
-        if (e.key === 'ArrowLeft' && lbIdx > 0) { lbIdx--; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
-        if (e.key === 'ArrowRight' && lbIdx < lbList.length - 1) { lbIdx++; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
+        // UP/DOWN = previous/next athlete, LEFT/RIGHT also supported
+        if ((e.key === 'ArrowUp' || e.key === 'ArrowLeft') && lbIdx > 0) { e.preventDefault(); lbIdx--; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
+        if ((e.key === 'ArrowDown' || e.key === 'ArrowRight') && lbIdx < lbList.length - 1) { e.preventDefault(); lbIdx++; lbDetIdx = 0; lbSelectedFps = null; showLightbox(); }
         // Shift+D toggles delete button
         if (e.key === 'D' && e.shiftKey) {
             const delBtn = document.getElementById('lb-delete-btn');
@@ -2832,10 +2833,14 @@ function setupVideoLightbox() {
     document.addEventListener('keydown', e => {
         if (vlb.classList.contains('hidden')) return;
         if (e.key === 'Escape') closeVLB();
-        if (e.key === 'ArrowLeft' && vlbIdx > 0) { vlbIdx--; vlbDetIdx = 0; showVideoLightbox(); }
-        if (e.key === 'ArrowRight' && vlbIdx < vlbList.length - 1) { vlbIdx++; vlbDetIdx = 0; showVideoLightbox(); }
+        // UP/DOWN = previous/next athlete
+        if (e.key === 'ArrowUp' && vlbIdx > 0) { e.preventDefault(); vlbIdx--; vlbDetIdx = 0; showVideoLightbox(); }
+        if (e.key === 'ArrowDown' && vlbIdx < vlbList.length - 1) { e.preventDefault(); vlbIdx++; vlbDetIdx = 0; showVideoLightbox(); }
+        // LEFT/RIGHT = frame stepping
+        if (e.key === 'ArrowLeft') { e.preventDefault(); stepFrame(-1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); stepFrame(1); }
         if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-        // Frame stepping: , (comma) = back one frame, . (period) = forward one frame
+        // , and . also step frames
         if (e.key === ',') { e.preventDefault(); stepFrame(-1); }
         if (e.key === '.') { e.preventDefault(); stepFrame(1); }
         // Shift+D toggles delete button
