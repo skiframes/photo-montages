@@ -2651,7 +2651,7 @@ function showLightbox() {
             if (!det) return;
             const gender = a.gender || (item.catId.includes('Girls') || item.catId.includes('Women') ? 'female' : 'male');
             const genderChar = gender === 'female' ? 'g' : 'b';
-            window._deleteMontage(manifest.race_slug || '', item.camId, runKey, a.bib, genderChar, det.det_id, 'photo');
+            window._deleteMontage(manifest.race_slug || '', item.camId, runKey, a.bib, genderChar, det.det_id || 'd000', 'photo');
         };
     }
 
@@ -2935,7 +2935,7 @@ function showVideoLightbox() {
             if (!det) return;
             const gender = a.gender || (item.catId.includes('Girls') || item.catId.includes('Women') ? 'female' : 'male');
             const genderChar = gender === 'female' ? 'g' : 'b';
-            window._deleteMontage(manifest.race_slug || '', item.camId, runKey, a.bib, genderChar, det.det_id, 'video');
+            window._deleteMontage(manifest.race_slug || '', item.camId, runKey, a.bib, genderChar, det.det_id || 'd000', 'video');
         };
     }
 }
