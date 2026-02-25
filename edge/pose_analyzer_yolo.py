@@ -30,13 +30,20 @@ from collections import deque
 import cv2
 import numpy as np
 
-# SAM/SAM2 support (optional) - Segment Anything Model for precise ski segmentation
+# SAM/SAM2/SAM3 support (optional) - Segment Anything Model for precise ski segmentation
 HAS_SAM = False
 SAMModel = None
+SAM3SemanticPredictor = None
 try:
     from ultralytics import SAM as _SAM
     SAMModel = _SAM
     HAS_SAM = True
+    # SAM3 text prompts require SAM3SemanticPredictor
+    try:
+        from ultralytics.models.sam import SAM3SemanticPredictor as _SAM3Predictor
+        SAM3SemanticPredictor = _SAM3Predictor
+    except ImportError:
+        pass
 except ImportError:
     try:
         # Try alternative import path
@@ -361,11 +368,8 @@ try:
 except ImportError:
     HAS_YOLO = False
 
-try:
-    from segment_anything import sam_model_registry, SamPredictor
-    HAS_SAM = True
-except ImportError:
-    HAS_SAM = False
+# Note: segment_anything (original Meta SAM) is NOT used.
+# We use ultralytics SAM (SAM2/SAM3) instead - see HAS_SAM set at top of file.
 
 
 # COCO keypoint indices
@@ -563,6 +567,7 @@ class YOLOPoseAnalyzer:
 
         # Initialize SAM for precise ski segmentation (SAM3 preferred, then SAM2)
         self.sam_model = None
+        self.sam3_text_predictor = None  # SAM3SemanticPredictor for text prompts
         self.sam_version = None  # 'sam3' or 'sam2'
         self.use_sam = use_sam3 and HAS_SAM
 
@@ -589,7 +594,20 @@ class YOLOPoseAnalyzer:
                         # Detect version
                         if 'sam3' in sam_model_path.lower():
                             self.sam_version = 'sam3'
-                            print("SAM3 loaded - will use text prompts for ski detection.")
+                            # Initialize SAM3SemanticPredictor for text prompts
+                            if SAM3SemanticPredictor is not None:
+                                self.sam3_text_predictor = SAM3SemanticPredictor(overrides=dict(
+                                    model=sam_model_path,
+                                    task="segment",
+                                    mode="predict",
+                                    conf=0.25,
+                                    verbose=False,
+                                ))
+                                print("SAM3 loaded - will use text prompts for ski detection.")
+                            else:
+                                print("SAM3 loaded but SAM3SemanticPredictor not available.")
+                                print("  Falling back to bbox prompts.")
+                                self.sam_version = 'sam2'  # Fall back to SAM2 API
                         else:
                             self.sam_version = 'sam2'
                             print("SAM2 loaded - will use bbox prompts for ski segmentation.")
@@ -898,14 +916,18 @@ class YOLOPoseAnalyzer:
         Use SAM3 text prompts to detect skis directly without YOLO.
 
         SAM3 supports text prompts like "ski" to segment objects.
+        Uses SAM3SemanticPredictor with set_image() and text= query.
         Returns list of ski detections with mask, line, and angle info.
         """
-        if self.sam_model is None or self.sam_version != 'sam3':
+        if self.sam3_text_predictor is None or self.sam_version != 'sam3':
             return []
 
         try:
-            # Use text prompt to find skis
-            results = self.sam_model(frame, texts=["ski"], verbose=False)
+            # Set the image for SAM3SemanticPredictor
+            self.sam3_text_predictor.set_image(frame)
+
+            # Query with text prompt "ski"
+            results = self.sam3_text_predictor(text=["ski"])
 
             if not results or len(results) == 0:
                 return []

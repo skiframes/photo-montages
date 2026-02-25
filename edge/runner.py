@@ -747,9 +747,20 @@ class SkiFramesRunner:
             return False
         return len(self.matched_racer_indices) >= len(self.vola_racers)
 
+    def _get_last_racer_end_sec(self) -> float:
+        """Get the latest camera_end_sec across all Vola racers."""
+        if not self.vola_racers:
+            return 0
+        return max(r.get('camera_end_sec', 0) for r in self.vola_racers)
+
     def run_on_videos(self, video_paths: List[str]):
         """Process multiple video files in sequence."""
         print(f"\nProcessing {len(video_paths)} videos...")
+
+        # Compute cutoff: stop processing videos that start after the last racer's window + buffer
+        last_racer_end_sec = self._get_last_racer_end_sec()
+        # 2-minute buffer past last racer to catch late triggers / timing drift
+        past_racers_cutoff_sec = last_racer_end_sec + 120 if last_racer_end_sec > 0 else 0
 
         for i, video_path in enumerate(video_paths):
             # Stop early if all athletes have been matched
@@ -772,12 +783,34 @@ class SkiFramesRunner:
             if video_start_time:
                 print(f"  Video start time (from filename): {video_start_time.strftime('%H:%M:%S')}")
 
+            # Skip videos that start well past the last racer's time window
+            if past_racers_cutoff_sec > 0 and video_start_time:
+                video_start_sec = (video_start_time.hour * 3600 +
+                                   video_start_time.minute * 60 +
+                                   video_start_time.second)
+                if video_start_sec > past_racers_cutoff_sec and self.engine.current_run is None:
+                    def _sec_to_time(s):
+                        return f"{int(s//3600):02d}:{int((s%3600)//60):02d}:{int(s%60):02d}"
+                    print(f"\n⏭️  Stopping — video starts at {_sec_to_time(video_start_sec)} which is past "
+                          f"last racer's window ({_sec_to_time(last_racer_end_sec)}) + 2min buffer. "
+                          f"Matched {len(self.matched_racer_indices)}/{len(self.vola_racers)} racers. "
+                          f"(skipped {len(video_paths) - i} remaining videos)")
+                    break
+
             # Pass video_start_time for accurate timestamp matching with Vola data
             self.engine.run_on_video(video_path, video_start_time=video_start_time)
 
             # Check again after each video in case all matched mid-video
             if self.all_athletes_matched():
                 print(f"\n✅ All {len(self.vola_racers)} athletes matched after video {i+1}")
+
+        # Warn if there's still an incomplete run after all videos processed
+        if self.engine.current_run is not None:
+            incomplete = self.engine.current_run
+            print(f"\n  ⚠️  Run {incomplete.run_number} still incomplete after all videos "
+                  f"(started {incomplete.start_time.strftime('%H:%M:%S')}, {len(incomplete.frames)} frames) "
+                  f"— no END zone trigger found. Discarding.")
+            self.engine.current_run = None
 
         self._print_summary()
 

@@ -304,7 +304,7 @@ def add_logos(image: np.ndarray, selected_logos: Optional[List[str]] = None) -> 
 
     # Logo directory
     logo_dir = Path(__file__).parent.parent / 'logos'
-    logo_files = selected_logos if selected_logos else ['RMST_logo.png', 'Ragged_logo.png', 'Skiframes-com_logo.png']
+    logo_files = selected_logos if selected_logos else ['NHARA_logo.png', 'ProctorLogo.jpg', 'Skiframes-com_logo.png']
 
     # Target logo height - scale with image size (roughly 6% of image height)
     logo_height = int(h * 0.06)

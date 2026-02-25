@@ -77,9 +77,17 @@ rtsp_sessions = {}
 rtsp_sessions_lock = threading.Lock()
 
 # Configuration
-# Use venv python if available (for J40 deployment where packages are in ~/venv/)
+# Use arm64 homebrew python if available, then venv, then system python3
+_arm64_python = Path('/opt/homebrew/bin/python3.11')
 _venv_python = Path.home() / 'venv' / 'bin' / 'python3'
-PYTHON = str(_venv_python) if _venv_python.exists() else 'python3'
+if _arm64_python.exists():
+    PYTHON = str(_arm64_python)
+elif _venv_python.exists():
+    PYTHON = str(_venv_python)
+else:
+    PYTHON = 'python3'
+
+PYTHON_AI = PYTHON  # Same arm64 python for AI tasks
 
 CONFIG_DIR = Path(__file__).parent / 'config' / 'zones'
 STITCH_CONFIG_DIR = Path(__file__).parent / 'config' / 'stitch'
@@ -97,6 +105,22 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # Track pending gate calibrations (not yet saved to disk)
 pending_calibrations = {}
 pending_calibrations_lock = threading.Lock()
+
+
+def _expire_session_config(config_path: str):
+    """Set session_end_time to now so the session no longer shows as active in the UI."""
+    try:
+        cp = Path(config_path)
+        if not cp.exists():
+            return
+        with open(cp) as f:
+            config = json.load(f)
+        config['session_end_time'] = datetime.now().isoformat()
+        with open(cp, 'w') as f:
+            json.dump(config, f, indent=2)
+        print(f"[SESSION] Expired session_end_time in {cp.name}")
+    except Exception as e:
+        print(f"[SESSION] Failed to expire config {config_path}: {e}")
 
 # Camera definitions with time offset percentages for race timing
 # offset_pct: what percentage of run time has elapsed when skier enters this camera's view
@@ -1263,13 +1287,19 @@ def get_all_active_configs():
             is_running = session_id in running_session_ids
 
             # Check if session end_time is in the future
+            # Only use session_end_time for RTSP sessions — video file sessions
+            # are active only while their process is running
             is_active = False
-            try:
-                end_time = parse_iso_datetime(config['session_end_time'])
-                if end_time.replace(tzinfo=None) > now:
-                    is_active = True
-            except (ValueError, KeyError):
-                pass
+            source_type = config.get('source_type', '')
+            has_videos = bool(config.get('vola_videos') or config.get('video_files'))
+            if not has_videos:
+                # RTSP session: active until session_end_time
+                try:
+                    end_time = parse_iso_datetime(config['session_end_time'])
+                    if end_time.replace(tzinfo=None) > now:
+                        is_active = True
+                except (ValueError, KeyError):
+                    pass
 
             if is_active or is_running:
                 session_info = {
@@ -1989,6 +2019,7 @@ def process_video():
                             active_jobs[job_id]['error'] = stderr_output or f'Exit code: {process.returncode}'
                         _end_status = active_jobs[job_id]['status']
                         _started = active_jobs[job_id].get('started_at', '')
+                        _config_path = active_jobs[job_id].get('config_path', '')
                         print(f"\n{'='*70}")
                         print(f"[JOB END] Job {job_id} — {_end_status}")
                         print(f"  Started:  {_started}")
@@ -1996,6 +2027,10 @@ def process_video():
                         if _end_status == 'failed':
                             print(f"  Error:    {active_jobs[job_id].get('error', 'unknown')}")
                         print(f"{'='*70}")
+
+                # Expire session config so it stops showing as active in the UI
+                if _config_path:
+                    _expire_session_config(_config_path)
             except Exception as e:
                 print(f"[DEBUG] Exception in collect_output: {e}")
                 with jobs_lock:
@@ -2196,6 +2231,9 @@ def stop_process(job_id):
         with rtsp_sessions_lock:
             rtsp_sessions[job_id]['status'] = 'stopped'
         print(f"[STOP] In-process RTSP session {session_id} stopped (job {job_id})")
+        # Expire session config
+        config_path = CONFIG_DIR / f'{session_id}.json'
+        _expire_session_config(str(config_path))
         return jsonify({'success': True, 'status': 'stopped'})
 
     # Fall back to subprocess jobs
@@ -2208,6 +2246,7 @@ def stop_process(job_id):
             return jsonify({'error': f"Job is not running (status: {job['status']})"}), 400
 
         process = job['process']
+        config_path = job.get('config_path', '')
 
     # Send SIGTERM to gracefully stop
     try:
@@ -2222,6 +2261,10 @@ def stop_process(job_id):
         with jobs_lock:
             if job_id in active_jobs:
                 active_jobs[job_id]['status'] = 'stopped'
+
+        # Expire session config so it stops showing as active in the UI
+        if config_path:
+            _expire_session_config(config_path)
 
         return jsonify({'success': True, 'status': 'stopped'})
 
@@ -2532,6 +2575,62 @@ def populate_manifest_with_montages():
                     bib_lookup[bib] = []
                 bib_lookup[bib].append((cat_idx, ath_idx, gender_key))
 
+        # Auto-create Forerunners category if any f-prefix files exist on disk
+        # Check all cameras for f{N}_*.jpg or f{N}_*.mp4 files
+        has_forerunner_files = False
+        for cam_dir in sorted(staging_dir.iterdir()):
+            if not cam_dir.is_dir() or not cam_dir.name.startswith('Cam'):
+                continue
+            for run_dir in cam_dir.iterdir():
+                if not run_dir.is_dir() or not run_dir.name.startswith('run'):
+                    continue
+                if list(run_dir.glob('f[0-9]*.*'))[:1]:
+                    has_forerunner_files = True
+                    break
+                frd = run_dir / 'fullres'
+                if frd.is_dir() and list(frd.glob('f[0-9]*.*'))[:1]:
+                    has_forerunner_files = True
+                    break
+            if has_forerunner_files:
+                break
+
+        if has_forerunner_files:
+            # Find or create Forerunners category
+            fr_cat_idx = None
+            for ci, c in enumerate(manifest.get('categories', [])):
+                if c.get('id') == 'Forerunners':
+                    fr_cat_idx = ci
+                    break
+            if fr_cat_idx is None:
+                manifest.setdefault('categories', []).append({
+                    'id': 'Forerunners',
+                    'athletes': [],
+                })
+                fr_cat_idx = len(manifest['categories']) - 1
+
+            fr_cat = manifest['categories'][fr_cat_idx]
+            existing_fr_bibs = {a['bib'] for a in fr_cat['athletes']}
+            for fnum in range(1, 5):  # F1-F4
+                if fnum not in existing_fr_bibs:
+                    fr_cat['athletes'].append({
+                        'bib': fnum,
+                        'first': f'Forerunner',
+                        'last': f'F{fnum}',
+                        'club': '',
+                        'is_forerunner': True,
+                        'montages': {},
+                    })
+            # Ensure all forerunners have montages cleared
+            for a in fr_cat['athletes']:
+                a['montages'] = {}
+
+            # Add forerunners to bib_lookup with gender_key 'forerunners'
+            for ai, a in enumerate(fr_cat['athletes']):
+                fb = a['bib']
+                if fb not in bib_lookup:
+                    bib_lookup[fb] = []
+                bib_lookup[fb].append((fr_cat_idx, ai, 'forerunners'))
+
         # Scan staging directory: {CamX}/{runN}/{bib}[_thumb|_fps].jpg
         updated_count = 0
         cam_ids = set()
@@ -2578,8 +2677,16 @@ def populate_manifest_with_montages():
                         bib_val = td.get('bib')
                         det_id_val = td.get('det_id', 'd000')
                         gender_val = td.get('gender', '')
-                        # Map gender code to char: 'F' -> 'g', 'M' -> 'b'
-                        gc = 'g' if gender_val == 'F' else 'b' if gender_val == 'M' else ''
+                        # Map gender code to file prefix char
+                        # Handles both auto-detect format ('F'/'M') and manual assign format ('g'/'b'/'f')
+                        if gender_val in ('F', 'g'):
+                            gc = 'g'
+                        elif gender_val in ('M', 'b'):
+                            gc = 'b'
+                        elif gender_val == 'f':
+                            gc = 'f'
+                        else:
+                            gc = ''
                         if bib_val is not None:
                             det_timing[(gc, bib_val, det_id_val)] = td
                         # Also populate legacy timing_data
@@ -2612,7 +2719,7 @@ def populate_manifest_with_montages():
 
                     # Extract gender and bib
                     gender_char = ''
-                    if first_part and first_part[0] in ('g', 'b') and first_part[1:].isdigit():
+                    if first_part and first_part[0] in ('g', 'b', 'f') and first_part[1:].isdigit():
                         gender_char = first_part[0]
                         bib = int(first_part[1:])
                     elif first_part.isdigit():
@@ -2732,7 +2839,7 @@ def populate_manifest_with_montages():
 
                     # Find correct athlete entry
                     matches = bib_lookup[bib]
-                    file_gender = 'girls' if gender_char == 'g' else 'boys' if gender_char == 'b' else run_gender
+                    file_gender = 'girls' if gender_char == 'g' else 'boys' if gender_char == 'b' else 'forerunners' if gender_char == 'f' else run_gender
                     if file_gender and len(matches) > 1:
                         gender_matches = [m for m in matches if m[2] == file_gender]
                         if gender_matches:
@@ -3007,8 +3114,12 @@ def list_available_logos():
     User can select which logos to include and in what order (left to right).
     """
     logos = []
+    image_extensions = {'*.png', '*.jpg', '*.jpeg'}
     if LOGOS_DIR.exists():
-        for f in sorted(LOGOS_DIR.glob('*.png')):
+        all_files = []
+        for ext in image_extensions:
+            all_files.extend(LOGOS_DIR.glob(ext))
+        for f in sorted(all_files, key=lambda x: x.name):
             # Skip hidden files
             if f.name.startswith('.'):
                 continue
@@ -3029,12 +3140,13 @@ def list_available_logos():
         'default_order': [
             'US-Ski-Snowboard.png',
             'NHARA_logo.png',
-            'RMST_logo.png',
-            'Ragged_logo.png',
+            'ProctorLogo.jpg',
             'Skiframes-com_logo.png'
         ],
         'excluded_by_default': [
-            'skieast_logo.png'
+            'skieast_logo.png',
+            'Ragged_logo.png',
+            'RMST_logo.png'
         ]
     })
 
@@ -3046,10 +3158,13 @@ def get_logo_preview(filename):
     safe_filename = Path(filename).name
     logo_path = LOGOS_DIR / safe_filename
 
-    if not logo_path.exists() or not logo_path.suffix.lower() == '.png':
+    allowed_extensions = {'.png', '.jpg', '.jpeg'}
+    if not logo_path.exists() or logo_path.suffix.lower() not in allowed_extensions:
         return jsonify({'error': 'Logo not found'}), 404
 
-    return send_file(logo_path, mimetype='image/png')
+    mime_types = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg'}
+    mimetype = mime_types.get(logo_path.suffix.lower(), 'image/png')
+    return send_file(logo_path, mimetype=mimetype)
 
 
 @app.route('/api/stitch/configs')
@@ -4093,15 +4208,15 @@ def ai_analyze():
 
     def run_analysis():
         try:
-            ai_jobs[job_id]['status_msg'] = 'Loading AI model...'
-            from pose_analyzer_yolo import YOLOPoseAnalyzer
+            import subprocess as _sp
+            import re
+
+            ai_jobs[job_id]['status_msg'] = 'Starting AI analysis with SAM3...'
 
             # Get total frames first
             cap = cv2.VideoCapture(str(video_path))
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            fps = cap.get(cv2.CAP_PROP_FPS) or 25
-            frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            cap.release()
             ai_jobs[job_id]['total_frames'] = total_frames
 
             # Compute slope angle from race manifest using camera+gate GPS
@@ -4119,62 +4234,89 @@ def ai_analyze():
             except Exception as e:
                 print(f"[AI] Warning: Could not compute slope angle: {e}")
 
-            ai_jobs[job_id]['status_msg'] = 'Initializing pose analyzer...'
-            analyzer = YOLOPoseAnalyzer(slope_angle_deg=slope_angle_deg, model_size='l')
-            ai_jobs[job_id]['status_msg'] = 'Analyzing frames...'
-
             # Output annotated video alongside original: g10.mp4 → g10_ai.mp4
-            ai_video_name = video_path.stem + '_ai.mp4'
+            ai_video_name = video_path.stem + '_ai_raw.mp4'
             ai_video_path = video_path.parent / ai_video_name
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out_video = cv2.VideoWriter(str(ai_video_path), fourcc, fps, (frame_w, frame_h))
 
-            frame_idx = 0
+            # Run pose_analyzer_yolo.py as subprocess with ARM64 Python for SAM3 support
+            ai_jobs[job_id]['status_msg'] = 'Loading SAM3 model...'
+            edge_dir = Path(__file__).parent
+            cmd = [
+                PYTHON_AI,
+                str(edge_dir / 'pose_analyzer_yolo.py'),
+                str(video_path),
+                str(slope_angle_deg),
+                '--output-video', str(ai_video_path),
+                '--model', 'l',
+            ]
+            print(f"[AI] Running: {' '.join(cmd)}")
+
+            # Run subprocess and capture output for progress tracking
+            process = _sp.Popen(
+                cmd,
+                stdout=_sp.PIPE,
+                stderr=_sp.STDOUT,
+                text=True,
+                bufsize=0,  # Unbuffered for real-time progress
+                cwd=str(edge_dir),
+            )
+
+            ai_jobs[job_id]['status_msg'] = 'Analyzing frames with SAM3...'
             poses_detected = 0
+            progress_pattern = re.compile(r'Progress:\s*([\d.]+)%.*Poses:\s*(\d+)')
 
+            # Read output character by character to handle \r progress updates
+            buffer = ''
             while True:
-                ret, frame = cap.read()
-                if not ret:
+                char = process.stdout.read(1)
+                if not char:
+                    # Process finished
                     break
 
-                frame_idx += 1
-                ai_jobs[job_id]['analyzed_frames'] = frame_idx
-                ai_jobs[job_id]['progress'] = int(frame_idx / max(total_frames, 1) * 100)
+                if char == '\r' or char == '\n':
+                    # End of a progress line - parse it
+                    if buffer:
+                        match = progress_pattern.search(buffer)
+                        if match:
+                            pct = float(match.group(1))
+                            poses_detected = int(match.group(2))
+                            ai_jobs[job_id]['progress'] = int(pct)
+                            ai_jobs[job_id]['analyzed_frames'] = int(pct * total_frames / 100)
 
-                # Analyze every frame for smooth annotated video
-                keypoints, metrics, left_ski, right_ski = analyzer.analyze_frame(frame)
+                        if 'Done!' in buffer:
+                            ai_jobs[job_id]['progress'] = 95
+                            ai_jobs[job_id]['status_msg'] = 'Encoding for browser...'
 
-                if keypoints is not None:
-                    poses_detected += 1
-                    annotated = analyzer.draw_overlay(frame, keypoints, metrics, left_ski, right_ski)
-                    out_video.write(annotated)
+                        buffer = ''
                 else:
-                    # No pose detected — write original frame
-                    out_video.write(frame)
+                    buffer += char
 
-            cap.release()
-            out_video.release()
+            process.wait()
+
+            if process.returncode != 0:
+                raise RuntimeError(f"pose_analyzer_yolo.py failed with code {process.returncode}")
+
+            if not ai_video_path.exists():
+                raise RuntimeError(f"Output video not created: {ai_video_path}")
 
             # Re-encode to H.264 for browser compatibility (OpenCV mp4v = mpeg4, not playable in Safari/Chrome)
             ai_jobs[job_id]['status_msg'] = 'Encoding video for browser...'
-            ai_video_h264 = video_path.parent / (video_path.stem + '_ai_h264.mp4')
-            import subprocess as _sp
+            ai_video_final = video_path.parent / (video_path.stem + '_ai.mp4')
             ffmpeg_cmd = [
                 'ffmpeg', '-y', '-i', str(ai_video_path),
                 '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
                 '-pix_fmt', 'yuv420p',  # Required for Safari
                 '-movflags', '+faststart',  # Enables streaming
-                str(ai_video_h264),
+                str(ai_video_final),
             ]
             _sp.run(ffmpeg_cmd, capture_output=True, check=True)
 
-            # Replace the mpeg4 version with the h264 version
+            # Remove the raw mp4v version
             ai_video_path.unlink()
-            ai_video_h264.rename(ai_video_path)
 
             # Build relative path for serving via /montages/ route
             # e.g. Cam1/run1/g10_ai.mp4
-            rel_path = str(ai_video_path.relative_to(MONTAGES_DIR / race_slug))
+            rel_path = str(ai_video_final.relative_to(MONTAGES_DIR / race_slug))
 
             ai_jobs[job_id]['status'] = 'complete'
             ai_jobs[job_id]['progress'] = 100
@@ -4289,6 +4431,294 @@ def analyze_pose_endpoint():
         return jsonify({'error': 'Analysis timed out (5 min limit)'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ── Unmatched Video Reconciliation ──────────────────────────────────────────
+
+@app.route('/api/unmatched/list', methods=['GET'])
+def list_unmatched():
+    """
+    List unmatched video clips for a race.
+
+    Query params:
+        race  - race slug (e.g. "western-q-2026-02-22")
+        cam   - optional camera filter (e.g. "Cam1")
+        run   - optional run filter (e.g. "run1")
+
+    Returns JSON with unmatched clips grouped by camera, plus counts.
+    """
+    race_slug = request.args.get('race')
+    cam_filter = request.args.get('cam', '')
+    run_filter = request.args.get('run', '')
+
+    if not race_slug:
+        return jsonify({'error': 'race parameter required'}), 400
+
+    staging_dir = MONTAGES_DIR / race_slug
+    if not staging_dir.exists():
+        return jsonify({'error': f'Staging directory not found: {staging_dir}'}), 404
+
+    unmatched = []
+    counts = {}
+
+    # Scan each camera directory
+    for cam_dir in sorted(staging_dir.iterdir()):
+        if not cam_dir.is_dir() or not cam_dir.name.startswith('Cam'):
+            continue
+        cam_id = cam_dir.name
+        if cam_filter and cam_id != cam_filter:
+            continue
+
+        for run_dir in sorted(cam_dir.iterdir()):
+            if not run_dir.is_dir() or not run_dir.name.startswith('run'):
+                continue
+            run_id = run_dir.name
+            if run_filter and run_id != run_filter:
+                continue
+
+            # Find unmatched .mp4 files
+            for mp4 in sorted(run_dir.glob('unmatched_*.mp4')):
+                stem = mp4.stem  # e.g. "unmatched_090540_d001"
+
+                # Read companion timing JSON
+                timing_path = run_dir / f'{stem}_timing.json'
+                timing = {}
+                if timing_path.exists():
+                    try:
+                        with open(timing_path) as f:
+                            timing = json.load(f)
+                    except Exception:
+                        pass
+
+                # Find thumbnail (check thumbnails/ subdir)
+                thumb = ''
+                thumb_dir = run_dir / 'thumbnails'
+                if thumb_dir.is_dir():
+                    thumbs = sorted(thumb_dir.glob(f'{stem}_*_thumb.jpg'))
+                    if thumbs:
+                        # Use middle FPS variant as representative thumb
+                        thumb = f'{cam_id}/{run_id}/thumbnails/{thumbs[len(thumbs)//2].name}'
+
+                # Find fullres montage images (for preview)
+                fullres_dir = run_dir / 'fullres'
+                montage = ''
+                if fullres_dir.is_dir():
+                    montages = sorted(fullres_dir.glob(f'{stem}_*fps.jpg'))
+                    if montages:
+                        montage = f'{cam_id}/{run_id}/fullres/{montages[len(montages)//2].name}'
+
+                # Extract timestamp from filename: unmatched_HHMMSS_d001
+                parts = stem.split('_')
+                ts_str = parts[1] if len(parts) >= 2 else '?'
+                timestamp = f'{ts_str[:2]}:{ts_str[2:4]}:{ts_str[4:6]}' if len(ts_str) == 6 else ts_str
+
+                entry = {
+                    'id': stem,
+                    'cam': cam_id,
+                    'run': run_id,
+                    'timestamp': timestamp,
+                    'trigger_time': timing.get('start_trigger_time', ''),
+                    'duration_sec': timing.get('section_elapsed_sec', 0),
+                    'video': f'{cam_id}/{run_id}/{mp4.name}',
+                    'thumb': thumb,
+                    'montage': montage,
+                }
+                unmatched.append(entry)
+
+                counts[cam_id] = counts.get(cam_id, 0) + 1
+
+    cameras = sorted(counts.keys())
+    return jsonify({
+        'unmatched': unmatched,
+        'cameras': cameras,
+        'counts': counts,
+    })
+
+
+@app.route('/api/unmatched/assign', methods=['POST'])
+def assign_unmatched():
+    """
+    Assign a bib number to an unmatched detection.
+    Renames all associated files from unmatched_{ts}_{det_id}* to {gender}{bib}_{det_id}*
+    and rebuilds the race manifest.
+
+    Request body:
+    {
+        "race": "western-q-2026-02-22",
+        "id": "unmatched_090540_d001",
+        "bib": 7,
+        "gender": "g",
+        "cam": "Cam1",
+        "run": "run1"
+    }
+    """
+    data = request.get_json() or {}
+    race_slug = data.get('race')
+    unmatched_id = data.get('id')        # e.g. "unmatched_090540_d001"
+    bib = data.get('bib')
+    gender = data.get('gender', '')       # "g" or "b"
+    cam = data.get('cam')
+    run = data.get('run')
+
+    if not all([race_slug, unmatched_id, bib, cam, run]):
+        return jsonify({'error': 'Missing required fields: race, id, bib, cam, run'}), 400
+
+    try:
+        bib = int(bib)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'bib must be an integer'}), 400
+
+    staging_dir = MONTAGES_DIR / race_slug
+    run_dir = staging_dir / cam / run
+    if not run_dir.exists():
+        return jsonify({'error': f'Directory not found: {run_dir}'}), 404
+
+    # Build the new prefix: e.g. "g7_d001" or "b12_d001"
+    # Extract det_id from unmatched_id: "unmatched_090540_d001" → "d001"
+    id_parts = unmatched_id.split('_')
+    det_id = id_parts[2] if len(id_parts) >= 3 else 'd001'
+    new_prefix = f'{gender}{bib}_{det_id}'
+
+    renamed_files = 0
+
+    # Rename in run_dir (mp4, timing json)
+    for f in run_dir.glob(f'{unmatched_id}*'):
+        suffix = f.name[len(unmatched_id):]  # e.g. ".mp4", "_timing.json"
+        new_name = new_prefix + suffix
+        new_path = f.parent / new_name
+        if new_path.exists():
+            print(f'[unmatched] WARNING: target exists, skipping: {new_path}')
+            continue
+        f.rename(new_path)
+        renamed_files += 1
+
+    # Rename in thumbnails/ subdir
+    thumb_dir = run_dir / 'thumbnails'
+    if thumb_dir.is_dir():
+        for f in thumb_dir.glob(f'{unmatched_id}*'):
+            suffix = f.name[len(unmatched_id):]
+            new_name = new_prefix + suffix
+            new_path = f.parent / new_name
+            if new_path.exists():
+                print(f'[unmatched] WARNING: target exists, skipping: {new_path}')
+                continue
+            f.rename(new_path)
+            renamed_files += 1
+
+    # Rename in fullres/ subdir
+    fullres_dir = run_dir / 'fullres'
+    if fullres_dir.is_dir():
+        for f in fullres_dir.glob(f'{unmatched_id}*'):
+            suffix = f.name[len(unmatched_id):]
+            new_name = new_prefix + suffix
+            new_path = f.parent / new_name
+            if new_path.exists():
+                print(f'[unmatched] WARNING: target exists, skipping: {new_path}')
+                continue
+            f.rename(new_path)
+            renamed_files += 1
+
+    # Update the timing JSON if it was renamed
+    timing_path = run_dir / f'{new_prefix}_timing.json'
+    if timing_path.exists():
+        try:
+            with open(timing_path) as f:
+                timing = json.load(f)
+            timing['bib'] = bib
+            # Map file prefix to canonical gender code used by detection pipeline
+            gender_code_map = {'g': 'F', 'b': 'M', 'f': 'f'}
+            timing['gender'] = gender_code_map.get(gender, gender)
+            timing['matched'] = True
+            with open(timing_path, 'w') as f:
+                json.dump(timing, f, indent=2)
+        except Exception as e:
+            print(f'[unmatched] Warning: failed to update timing JSON: {e}')
+
+    # Rebuild the race manifest
+    manifest_rebuilt = False
+    try:
+        with app.test_request_context(json={'race_slug': race_slug}):
+            resp = populate_manifest_with_montages()
+            if hasattr(resp, 'status_code') and resp.status_code == 200:
+                manifest_rebuilt = True
+            elif isinstance(resp, tuple) and resp[1] == 200:
+                manifest_rebuilt = True
+            elif not isinstance(resp, tuple):
+                manifest_rebuilt = True
+    except Exception as e:
+        print(f'[unmatched] Warning: manifest rebuild failed: {e}')
+
+    return jsonify({
+        'ok': True,
+        'renamed_files': renamed_files,
+        'new_prefix': new_prefix,
+        'manifest_rebuilt': manifest_rebuilt,
+    })
+
+
+@app.route('/api/unmatched/delete', methods=['POST'])
+def delete_unmatched():
+    """
+    Delete all files for an unmatched detection (video, montages, thumbnails, timing JSON).
+
+    Request body:
+    {
+        "race": "western-q-2026-02-22",
+        "id": "unmatched_090540_d001",
+        "cam": "Cam1",
+        "run": "run1"
+    }
+    """
+    data = request.get_json() or {}
+    race_slug = data.get('race')
+    unmatched_id = data.get('id')
+    cam = data.get('cam')
+    run = data.get('run')
+
+    if not all([race_slug, unmatched_id, cam, run]):
+        return jsonify({'error': 'Missing required fields: race, id, cam, run'}), 400
+
+    staging_dir = MONTAGES_DIR / race_slug
+    run_dir = staging_dir / cam / run
+    if not run_dir.exists():
+        return jsonify({'error': f'Directory not found: {run_dir}'}), 404
+
+    deleted_files = 0
+
+    # Delete from run_dir (mp4, timing json)
+    for f in list(run_dir.glob(f'{unmatched_id}*')):
+        try:
+            f.unlink()
+            deleted_files += 1
+        except Exception as e:
+            print(f'[unmatched] Warning: failed to delete {f}: {e}')
+
+    # Delete from thumbnails/ subdir
+    thumb_dir = run_dir / 'thumbnails'
+    if thumb_dir.is_dir():
+        for f in list(thumb_dir.glob(f'{unmatched_id}*')):
+            try:
+                f.unlink()
+                deleted_files += 1
+            except Exception as e:
+                print(f'[unmatched] Warning: failed to delete {f}: {e}')
+
+    # Delete from fullres/ subdir
+    fullres_dir = run_dir / 'fullres'
+    if fullres_dir.is_dir():
+        for f in list(fullres_dir.glob(f'{unmatched_id}*')):
+            try:
+                f.unlink()
+                deleted_files += 1
+            except Exception as e:
+                print(f'[unmatched] Warning: failed to delete {f}: {e}')
+
+    print(f'[unmatched] Deleted {deleted_files} files for {unmatched_id} in {cam}/{run}')
+
+    return jsonify({
+        'ok': True,
+        'deleted_files': deleted_files,
+    })
 
 
 if __name__ == '__main__':

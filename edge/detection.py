@@ -535,10 +535,14 @@ class DetectionEngine:
         print(f"  Resolution: {width}x{height}")
         print(f"  FPS: {fps:.1f}, Duration: {duration:.1f}s, Frames: {total_frames}")
 
-        # Reset detection state for new video
-        self.prev_frame = None
-        self.current_run = None
+        # Carry over incomplete run from previous video (cross-file detection)
+        if self.current_run is not None:
+            print(f"  ⚡ Carrying over incomplete run {self.current_run.run_number} from previous video "
+                  f"(started {self.current_run.start_time.strftime('%H:%M:%S')}, {len(self.current_run.frames)} frames so far)")
+
+        # Always reset frame-number-based state for new video (frame numbers restart at 0)
         self.last_start_trigger = 0
+        self.prev_frame = None
 
         # Initialize frame buffer
         buffer_seconds = (self.config.pre_buffer_seconds or 0) + 5  # Extra buffer
@@ -587,6 +591,13 @@ class DetectionEngine:
                 print(f"  ... {current_time / 60:.1f} minutes processed")
 
         cap.release()
+
+        # Log if there's an incomplete run at end of video (will carry over to next file)
+        if self.current_run is not None:
+            print(f"  ⚡ Run {self.current_run.run_number} still active at end of video "
+                  f"(started {self.current_run.start_time.strftime('%H:%M:%S')}, {len(self.current_run.frames)} frames) "
+                  f"— will carry over to next video")
+
         print(f"  Finished: {len(runs)} runs detected")
         return runs
 

@@ -1467,11 +1467,11 @@
             <div class="card-title">1. Select Source</div>
             <label for="sourceType">Input Type</label>
             <select id="sourceType">
-                <option value="rtsp">Live Camera (RTSP)</option>
                 <option value="video">Video File</option>
+                <option value="rtsp">Live Camera (RTSP)</option>
             </select>
 
-            <div id="cameraSelect">
+            <div id="cameraSelect" style="display: none;">
                 <label for="camera">Camera</label>
                 <select id="camera">
                     <option value="">Loading cameras...</option>
@@ -1481,7 +1481,7 @@
                 </div>
             </div>
 
-            <div id="videoSelect" style="display: none;">
+            <div id="videoSelect">
                 <!-- Video dropdown hidden — populated automatically by Load Race Videos -->
                 <select id="videoDropdown" style="display: none;">
                     <option value="">Loading videos...</option>
@@ -1662,7 +1662,7 @@
                 <option value="Free Ski">Free Ski</option>
             </select>
 
-            <div id="sessionEndTimeSection">
+            <div id="sessionEndTimeSection" style="display: none;">
                 <label for="endTime">Session End Time</label>
                 <input type="datetime-local" id="endTime">
                 <div class="help-text">Detection stops automatically at this time</div>
@@ -2075,6 +2075,8 @@
             await loadVolaDates();
             setDefaultEndTime();
             setupEventListeners();
+            // Load logos on startup (montage mode is default)
+            loadLogos();
             // Set initial end mode (hides END zone button if in duration mode)
             setEndMode(state.endMode);
             // Only check active session for RTSP mode (check after setup so UI is correct)
@@ -3801,11 +3803,13 @@
 
         async function loadLogos() {
             try {
+                console.log('[Logos] Fetching /api/stitch/logos...');
                 const res = await fetch('/api/stitch/logos');
                 const data = await res.json();
                 const logos = data.logos || [];
                 const defaultOrder = data.default_order || [];
                 const excludedByDefault = data.excluded_by_default || [];
+                console.log(`[Logos] Got ${logos.length} logos, defaultOrder=${defaultOrder.length}`);
 
                 state.availableLogos = logos;
 
@@ -3820,7 +3824,9 @@
                     }
                 });
 
+                console.log(`[Logos] Selected: ${state.selectedLogos.length}, calling renderLogoList()`);
                 renderLogoList();
+                console.log(`[Logos] renderLogoList() done. logoList=${elements.logoList?.innerHTML?.length || 0} chars, montageLogoList=${elements.montageLogoList?.innerHTML?.length || 0} chars`);
             } catch (e) {
                 console.error('Error loading logos:', e);
             }
@@ -3835,7 +3841,7 @@
                          style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: white; border: 1px solid #d1d5db; border-radius: 4px; cursor: grab;">
                         <input type="checkbox" checked onchange="toggleLogo('${filename}')" style="width: 16px; height: 16px;">
                         <img src="/api/stitch/logo/${filename}" alt="${filename}" style="height: 24px; max-width: 60px; object-fit: contain;">
-                        <span style="flex: 1; font-size: 12px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${filename.replace(/_/g, ' ').replace('.png', '')}</span>
+                        <span style="flex: 1; font-size: 12px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${filename.replace(/_/g, ' ').replace(/\.(png|jpg|jpeg)$/i, '')}</span>
                         <span style="color: #94a3b8; font-size: 14px;">☰</span>
                     </div>
                 `;

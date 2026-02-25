@@ -870,8 +870,7 @@ class VideoStitcher:
             default_logos = [
                 'US-Ski-Snowboard.png',
                 'NHARA_logo.png',
-                'RMST_logo.png',
-                'Ragged_logo.png',
+                'ProctorLogo.jpg',
                 'Skiframes-com_logo.png'
             ]
             for logo_file in default_logos:

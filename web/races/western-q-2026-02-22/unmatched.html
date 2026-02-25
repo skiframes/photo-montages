@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unmatched Runs — Western Q 2026</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        header {
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        header h1 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        header .race-slug {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 20px 24px;
+        }
+
+        /* Camera tabs */
+        .cam-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .cam-tab {
+            padding: 7px 18px;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            background: #1e293b;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.15s;
+        }
+
+        .cam-tab:hover { background: #334155; color: #e2e8f0; }
+
+        .cam-tab.active {
+            background: #3b82f6;
+            border-color: #3b82f6;
+            color: #fff;
+        }
+
+        /* Table */
+        .um-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .um-table thead th {
+            text-align: left;
+            padding: 8px 10px;
+            color: #94a3b8;
+            border-bottom: 1px solid #334155;
+            font-weight: 500;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+        }
+
+        .um-table tbody tr { border-bottom: 1px solid #1e293b; }
+        .um-table tbody tr:hover { background: #1e293b; }
+
+        .um-table td {
+            padding: 6px 10px;
+            vertical-align: middle;
+        }
+
+        .mono {
+            font-family: 'SF Mono', Menlo, monospace;
+        }
+
+        .text-muted { color: #94a3b8; }
+
+        /* Thumbnail */
+        .um-thumb {
+            width: 110px;
+            height: auto;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #334155;
+            transition: border-color 0.15s;
+        }
+        .um-thumb:hover { border-color: #3b82f6; }
+
+        .play-btn {
+            padding: 4px 12px;
+            background: #334155;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .play-btn:hover { background: #475569; }
+
+        /* Bib selects — side by side */
+        .bib-selects {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .bib-select {
+            width: 190px;
+            padding: 5px 6px;
+            background: #0f172a;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            font-size: 0.82rem;
+        }
+        .bib-select:focus { border-color: #3b82f6; outline: none; }
+
+        .bib-label {
+            font-size: 0.7rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 2px;
+        }
+
+        .bib-col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Assign button */
+        .assign-btn {
+            padding: 6px 16px;
+            background: #059669;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: background 0.15s;
+            white-space: nowrap;
+        }
+        .assign-btn:hover { background: #047857; }
+        .assign-btn:disabled { background: #475569; cursor: not-allowed; }
+
+        /* Delete button */
+        .delete-btn {
+            padding: 6px 12px;
+            background: transparent;
+            color: #ef4444;
+            border: 1px solid #dc2626;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 500;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .delete-btn:hover { background: #dc2626; color: #fff; }
+        .delete-btn:disabled { background: #475569; color: #94a3b8; border-color: #475569; cursor: not-allowed; }
+
+        .action-btns { display: flex; gap: 6px; }
+
+        /* Status messages */
+        .empty-msg {
+            color: #64748b;
+            padding: 40px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+
+        /* Video lightbox */
+        .vlb-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .vlb-overlay.open { display: flex; }
+
+        .vlb-inner {
+            position: relative;
+            max-width: 90vw;
+            max-height: 90vh;
+        }
+
+        .vlb-inner video {
+            max-width: 90vw;
+            max-height: 85vh;
+            border-radius: 6px;
+        }
+
+        .vlb-close {
+            position: absolute;
+            top: -32px;
+            right: 0;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .vlb-info {
+            text-align: center;
+            margin-top: 8px;
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+
+        /* Montage preview in lightbox */
+        .vlb-montage {
+            max-width: 90vw;
+            max-height: 85vh;
+            border-radius: 6px;
+        }
+
+        /* Tabs for video vs montage preview */
+        .preview-tabs {
+            display: inline-flex;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+
+        .preview-tab {
+            padding: 2px 10px;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            background: #1e293b;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .preview-tab.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Unmatched Runs</h1>
+    <span class="race-slug" id="raceSlug"></span>
+</header>
+
+<div class="container">
+    <div class="status-bar">
+        <span id="totalCount"></span>
+    </div>
+    <div class="cam-tabs" id="camTabs"></div>
+    <div id="listContainer">
+        <div class="empty-msg">Loading...</div>
+    </div>
+</div>
+
+<!-- Video / Montage Lightbox -->
+<div class="vlb-overlay" id="vlbOverlay">
+    <div class="vlb-inner" id="vlbInner">
+        <button class="vlb-close" id="vlbClose">&times;</button>
+        <video id="vlbVideo" controls></video>
+        <img id="vlbMontage" class="vlb-montage" style="display:none;">
+        <div class="vlb-info" id="vlbInfo"></div>
+    </div>
+</div>
+
+<script>
+const EDGE_API = 'http://localhost:5000';
+let manifest = null;
+let unmatchedData = null;
+let activeCam = '';
+let mediaBase = '';
+let raceSlug = '';
+let girlsBibs = [];
+let boysBibs = [];
+
+async function init() {
+    // Load manifest for bib list
+    try {
+        const mResp = await fetch('race_manifest.json?v=' + Date.now());
+        manifest = await mResp.json();
+        raceSlug = manifest.media_base_url.split('/').pop();
+        mediaBase = `${EDGE_API}/montages/${raceSlug}`;
+        document.getElementById('raceSlug').textContent = raceSlug;
+    } catch (e) {
+        document.getElementById('listContainer').innerHTML =
+            `<div class="empty-msg">Failed to load manifest: ${e.message}</div>`;
+        return;
+    }
+
+    // Build Girls / Boys bib lists from manifest categories
+    for (const cat of (manifest.categories || [])) {
+        const isGirls = /girl/i.test(cat.id);
+        const isBoys = /boy/i.test(cat.id);
+        for (const ath of (cat.athletes || [])) {
+            const entry = { bib: ath.bib, name: `${ath.first} ${ath.last}`, catId: cat.id };
+            if (isGirls) girlsBibs.push(entry);
+            else if (isBoys) boysBibs.push(entry);
+        }
+    }
+    girlsBibs.sort((a, b) => a.bib - b.bib);
+    boysBibs.sort((a, b) => a.bib - b.bib);
+
+    // Load unmatched list
+    try {
+        const resp = await fetch(`${EDGE_API}/api/unmatched/list?race=${raceSlug}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        unmatchedData = await resp.json();
+    } catch (e) {
+        document.getElementById('listContainer').innerHTML =
+            `<div class="empty-msg">Failed to load unmatched list: ${e.message}</div>`;
+        return;
+    }
+
+    if (!unmatchedData.unmatched || unmatchedData.unmatched.length === 0) {
+        document.getElementById('listContainer').innerHTML =
+            '<div class="empty-msg">No unmatched runs found.</div>';
+        return;
+    }
+
+    document.getElementById('totalCount').textContent =
+        `${unmatchedData.unmatched.length} unmatched runs total`;
+
+    // Build camera tabs
+    const tabsEl = document.getElementById('camTabs');
+    tabsEl.innerHTML = unmatchedData.cameras.map(cam => {
+        const count = unmatchedData.counts[cam] || 0;
+        return `<button class="cam-tab" data-cam="${cam}">${cam} (${count})</button>`;
+    }).join('');
+
+    activeCam = unmatchedData.cameras[0] || '';
+    tabsEl.querySelectorAll('.cam-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            activeCam = btn.dataset.cam;
+            tabsEl.querySelectorAll('.cam-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderList();
+        });
+    });
+    tabsEl.querySelector('.cam-tab')?.classList.add('active');
+
+    setupLightbox();
+    renderList();
+}
+
+function buildOptions(list, label) {
+    return `<option value="">— ${label} —</option>` +
+        list.map(o => `<option value="${o.bib}">#${o.bib} ${o.name}</option>`).join('');
+}
+
+function renderList() {
+    const el = document.getElementById('listContainer');
+    const items = unmatchedData.unmatched.filter(u => u.cam === activeCam);
+
+    if (items.length === 0) {
+        el.innerHTML = '<div class="empty-msg">No unmatched runs for this camera.</div>';
+        return;
+    }
+
+    const girlsOpts = buildOptions(girlsBibs, 'Girls');
+    const boysOpts = buildOptions(boysBibs, 'Boys');
+    const forerunnerOpts = '<option value="">— FR —</option>' +
+        [1,2,3,4].map(n => `<option value="${n}">F${n}</option>`).join('');
+
+    el.innerHTML = `
+        <table class="um-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Dur</th>
+                    <th>Run</th>
+                    <th>Preview</th>
+                    <th>Girls</th>
+                    <th>Boys</th>
+                    <th>FR</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${items.map(item => {
+                    const rid = `${item.id}-${item.run}`;
+                    return `
+                    <tr id="row-${rid}">
+                        <td class="mono">${item.timestamp}</td>
+                        <td class="mono text-muted">${item.duration_sec ? item.duration_sec.toFixed(2) + 's' : '—'}</td>
+                        <td class="text-muted">${item.run}</td>
+                        <td>
+                            ${item.thumb
+                                ? `<img src="${mediaBase}/${item.thumb}" class="um-thumb"
+                                     onclick="openPreview('${esc(item.video)}', '${esc(item.montage)}', '${item.timestamp}')"
+                                     title="Click to preview">`
+                                : `<button class="play-btn" onclick="openPreview('${esc(item.video)}', '${esc(item.montage)}', '${item.timestamp}')">&#9654;</button>`
+                            }
+                        </td>
+                        <td>
+                            <select class="bib-select" id="girls-${rid}"
+                                    onchange="clearOthers(this, ['boys-${rid}','fr-${rid}'])">
+                                ${girlsOpts}
+                            </select>
+                        </td>
+                        <td>
+                            <select class="bib-select" id="boys-${rid}"
+                                    onchange="clearOthers(this, ['girls-${rid}','fr-${rid}'])">
+                                ${boysOpts}
+                            </select>
+                        </td>
+                        <td>
+                            <select class="bib-select" id="fr-${rid}" style="width:70px"
+                                    onchange="clearOthers(this, ['girls-${rid}','boys-${rid}'])">
+                                ${forerunnerOpts}
+                            </select>
+                        </td>
+                        <td>
+                            <div class="action-btns">
+                                <button class="assign-btn"
+                                        onclick="assignBib('${item.id}', '${item.cam}', '${item.run}')">
+                                    Assign
+                                </button>
+                                <button class="delete-btn"
+                                        onclick="deleteUnmatched('${item.id}', '${item.cam}', '${item.run}')">
+                                    Delete
+                                </button>
+                            </div>
+                        </td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function esc(s) { return (s || '').replace(/'/g, "\\'"); }
+
+// When one dropdown is selected, clear the others
+function clearOthers(selected, otherIds) {
+    if (selected.value) {
+        otherIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    }
+}
+
+async function assignBib(id, cam, run) {
+    const girlsSel = document.getElementById(`girls-${id}-${run}`);
+    const boysSel = document.getElementById(`boys-${id}-${run}`);
+    const frSel = document.getElementById(`fr-${id}-${run}`);
+
+    let bib = null;
+    let gender = '';
+
+    if (girlsSel && girlsSel.value) {
+        bib = parseInt(girlsSel.value);
+        gender = 'g';
+    } else if (boysSel && boysSel.value) {
+        bib = parseInt(boysSel.value);
+        gender = 'b';
+    } else if (frSel && frSel.value) {
+        bib = parseInt(frSel.value);
+        gender = 'f';
+    }
+
+    if (bib === null) {
+        alert('Select an athlete from Girls, Boys, or Forerunners first.');
+        return;
+    }
+
+    const row = document.getElementById(`row-${id}-${run}`);
+    const btn = row?.querySelector('.assign-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Assigning...'; }
+
+    try {
+        const resp = await fetch(`${EDGE_API}/api/unmatched/assign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ race: raceSlug, id, bib, gender, cam, run }),
+        });
+        const result = await resp.json();
+
+        if (result.ok) {
+            // Fade out row
+            if (row) {
+                row.style.transition = 'opacity 0.3s';
+                row.style.opacity = '0';
+                setTimeout(() => row.remove(), 300);
+            }
+
+            // Update counts
+            unmatchedData.unmatched = unmatchedData.unmatched.filter(
+                u => !(u.id === id && u.run === run)
+            );
+            unmatchedData.counts[cam] = (unmatchedData.counts[cam] || 1) - 1;
+
+            document.getElementById('totalCount').textContent =
+                `${unmatchedData.unmatched.length} unmatched runs total`;
+
+            const tab = document.querySelector(`.cam-tab[data-cam="${cam}"]`);
+            if (tab) tab.textContent = `${cam} (${unmatchedData.counts[cam]})`;
+
+            console.log(`Assigned ${id} → ${gender}${bib} (${result.renamed_files} files)`);
+        } else {
+            alert('Failed: ' + (result.error || 'Unknown error'));
+            if (btn) { btn.disabled = false; btn.textContent = 'Assign'; }
+        }
+    } catch (e) {
+        alert('Network error: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Assign'; }
+    }
+}
+
+async function deleteUnmatched(id, cam, run) {
+    if (!confirm(`Delete ${id} and all its montages?`)) return;
+
+    const row = document.getElementById(`row-${id}-${run}`);
+    const btn = row?.querySelector('.delete-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+
+    try {
+        const resp = await fetch(`${EDGE_API}/api/unmatched/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ race: raceSlug, id, cam, run }),
+        });
+        const result = await resp.json();
+
+        if (result.ok) {
+            if (row) {
+                row.style.transition = 'opacity 0.3s';
+                row.style.opacity = '0';
+                setTimeout(() => row.remove(), 300);
+            }
+
+            unmatchedData.unmatched = unmatchedData.unmatched.filter(
+                u => !(u.id === id && u.run === run)
+            );
+            unmatchedData.counts[cam] = (unmatchedData.counts[cam] || 1) - 1;
+
+            document.getElementById('totalCount').textContent =
+                `${unmatchedData.unmatched.length} unmatched runs total`;
+
+            const tab = document.querySelector(`.cam-tab[data-cam="${cam}"]`);
+            if (tab) tab.textContent = `${cam} (${unmatchedData.counts[cam]})`;
+
+            console.log(`Deleted ${id} (${result.deleted_files} files)`);
+        } else {
+            alert('Delete failed: ' + (result.error || 'Unknown error'));
+            if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
+        }
+    } catch (e) {
+        alert('Network error: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
+    }
+}
+
+// ── Lightbox ─────────────────────────────────────────────────────────────
+
+function setupLightbox() {
+    const overlay = document.getElementById('vlbOverlay');
+    document.getElementById('vlbClose').addEventListener('click', closeLightbox);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeLightbox(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+}
+
+function openPreview(videoPath, montagePath, label) {
+    const overlay = document.getElementById('vlbOverlay');
+    const video = document.getElementById('vlbVideo');
+    const montageImg = document.getElementById('vlbMontage');
+    const info = document.getElementById('vlbInfo');
+
+    // Default to video if available, else montage
+    if (videoPath) {
+        video.src = `${mediaBase}/${videoPath}`;
+        video.playbackRate = 0.5;
+        video.load();
+        video.style.display = 'block';
+        montageImg.style.display = 'none';
+    } else if (montagePath) {
+        montageImg.src = `${mediaBase}/${montagePath}`;
+        montageImg.style.display = 'block';
+        video.style.display = 'none';
+        video.src = '';
+    }
+
+    info.textContent = label || '';
+
+    // If both available, add toggle tabs
+    if (videoPath && montagePath) {
+        info.innerHTML = `
+            <div class="preview-tabs">
+                <button class="preview-tab active" onclick="switchPreview('video', '${esc(videoPath)}', '${esc(montagePath)}')">Video</button>
+                <button class="preview-tab" onclick="switchPreview('montage', '${esc(videoPath)}', '${esc(montagePath)}')">Montage</button>
+            </div>
+            <div>${label}</div>
+        `;
+    }
+
+    overlay.classList.add('open');
+}
+
+window.switchPreview = function(mode, videoPath, montagePath) {
+    const video = document.getElementById('vlbVideo');
+    const montageImg = document.getElementById('vlbMontage');
+
+    document.querySelectorAll('.preview-tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+
+    if (mode === 'video') {
+        video.src = `${mediaBase}/${videoPath}`;
+        video.playbackRate = 0.5;
+        video.load();
+        video.style.display = 'block';
+        montageImg.style.display = 'none';
+    } else {
+        montageImg.src = `${mediaBase}/${montagePath}`;
+        montageImg.style.display = 'block';
+        video.style.display = 'none';
+        video.pause();
+    }
+};
+
+function closeLightbox() {
+    const overlay = document.getElementById('vlbOverlay');
+    const video = document.getElementById('vlbVideo');
+    overlay.classList.remove('open');
+    video.pause();
+    video.src = '';
+}
+
+// Expose to onclick handlers
+window.openPreview = openPreview;
+window.clearOthers = clearOthers;
+window.assignBib = assignBib;
+window.deleteUnmatched = deleteUnmatched;
+
+// Boot
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
+</script>
+</body>
+</html>
