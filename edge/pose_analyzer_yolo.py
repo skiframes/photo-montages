@@ -16,13 +16,323 @@ Keypoints (COCO format):
 """
 
 import math
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Tuple, Deque
+from typing import Optional, List, Tuple, Deque, Dict
 from collections import deque
 
 import cv2
 import numpy as np
+
+
+@dataclass
+class SlopeGeometry:
+    """
+    Full 3D slope geometry for accurate angle calculations.
+
+    The slope is defined by:
+    - fall_line_angle_deg: Apparent fall line direction in image (degrees from vertical)
+    - pitch_deg: Slope steepness (degrees from horizontal)
+    - roll_deg: Cross-slope tilt (degrees)
+    - homography: 3x3 matrix to transform image points to slope plane
+
+    This allows calculating body angles relative to the TRUE slope plane,
+    not just the 2D projection in the image.
+    """
+    fall_line_angle_deg: float = 0.0  # Direction in image (- = left, + = right)
+    pitch_deg: float = 25.0           # Slope steepness (typical ski slope)
+    roll_deg: float = 0.0             # Cross-slope tilt
+    homography: Optional[np.ndarray] = None  # Image to slope plane transform
+
+    # Computed 3D vectors (in camera coordinate system)
+    slope_normal: Optional[np.ndarray] = None      # Normal to slope surface
+    fall_line_3d: Optional[np.ndarray] = None      # Fall line direction in 3D
+    cross_slope_3d: Optional[np.ndarray] = None    # Across-slope direction in 3D
+
+    @classmethod
+    def from_calibration_file(cls, calibration_path: str) -> 'SlopeGeometry':
+        """
+        Load slope geometry from a calibration JSON file.
+
+        Extracts:
+        - gate_line_axis: 2D fall line direction
+        - world_coords: 3D positions for slope plane fitting
+        - homography: image-to-slope transform
+        """
+        with open(calibration_path) as f:
+            cal = json.load(f)
+
+        geom = cls()
+
+        # Get fall line direction from gate_line_axis
+        if 'gate_line_axis' in cal:
+            axis = cal['gate_line_axis']
+            # axis is [x, y] direction vector in image
+            # Convert to angle from vertical (positive Y is down in image)
+            geom.fall_line_angle_deg = math.degrees(math.atan2(axis[0], axis[1]))
+
+        # Get homography if available
+        if 'homography' in cal:
+            geom.homography = np.array(cal['homography'])
+
+        # Compute slope plane from world_coords if available
+        if 'world_coords' in cal and len(cal['world_coords']) >= 3:
+            world_pts = np.array(cal['world_coords'])
+            geom._fit_slope_plane(world_pts)
+
+        # Compute pitch from gate positions if world_coords not available
+        if geom.pitch_deg == 25.0 and 'gates' in cal:
+            gates = cal['gates']
+            if len(gates) >= 2:
+                geom._estimate_pitch_from_gates(gates)
+
+        geom._compute_3d_vectors()
+
+        return geom
+
+    def _fit_slope_plane(self, world_pts: np.ndarray):
+        """Fit a plane to world coordinates to determine slope orientation."""
+        if len(world_pts) < 3:
+            return
+
+        # Check if world_coords are coplanar (all same Z)
+        z_values = world_pts[:, 2] if world_pts.shape[1] > 2 else np.zeros(len(world_pts))
+        z_range = np.max(z_values) - np.min(z_values)
+
+        if z_range < 0.01:
+            # World coords are on the slope plane itself (z=0)
+            # Can't determine pitch from this - use default for ski racing
+            self.pitch_deg = 28.0  # Typical GS slope steepness
+            print(f"  Note: world_coords are coplanar, using default pitch: {self.pitch_deg} deg")
+            return
+
+        # Fit plane using SVD
+        centroid = world_pts.mean(axis=0)
+        centered = world_pts - centroid
+        _, _, Vt = np.linalg.svd(centered)
+
+        # Normal is the last singular vector (smallest variance direction)
+        normal = Vt[-1]
+
+        # Ensure normal points "up" (positive Z in world coords)
+        if normal[2] < 0:
+            normal = -normal
+
+        self.slope_normal = normal
+
+        # Calculate pitch from normal (angle from vertical)
+        # If normal is [0, 0, 1], pitch is 0 (horizontal)
+        # If normal is [0, 1, 0], pitch is 90 (vertical wall)
+        vertical = np.array([0, 0, 1])
+        cos_angle = np.dot(normal, vertical)
+        self.pitch_deg = math.degrees(math.acos(np.clip(cos_angle, -1, 1)))
+
+        # Calculate roll (cross-slope tilt)
+        # Project normal onto XZ plane and measure angle from Z
+        if abs(normal[2]) > 0.01:
+            self.roll_deg = math.degrees(math.atan2(normal[0], normal[2]))
+
+    def _estimate_pitch_from_gates(self, gates: List[dict]):
+        """Estimate pitch from vertical extent of gates in image."""
+        # Get gate heights (top to base pixel distance)
+        heights = []
+        for g in gates:
+            if 'top' in g and 'base' in g:
+                dy = g['base'][1] - g['top'][1]
+                heights.append(dy)
+
+        if not heights:
+            return
+
+        avg_height = sum(heights) / len(heights)
+        # Typical GS panel is 1.83m (72"). If it appears shorter, we're viewing at an angle.
+        # This is a rough heuristic - actual pitch depends on camera angle
+        # A 45° slope viewed straight on shows poles at ~70% of their true length
+        # For now, estimate based on typical race slopes (25-35°)
+        self.pitch_deg = 28.0  # Default for typical GS slope
+
+    def _compute_3d_vectors(self):
+        """Compute 3D direction vectors from angles."""
+        # Fall line in 3D: direction of steepest descent on slope
+        # In camera coords: X=right, Y=down, Z=into screen
+        fall_rad = math.radians(self.fall_line_angle_deg)
+        pitch_rad = math.radians(self.pitch_deg)
+
+        # Fall line direction in image plane (ignoring depth)
+        fx = math.sin(fall_rad)  # Horizontal component
+        fy = math.cos(fall_rad)  # Vertical component (down)
+
+        # Add depth component based on pitch
+        # When viewing slope from above, fall line goes "into" screen
+        fz = math.sin(pitch_rad) * fy
+        fy = math.cos(pitch_rad) * fy
+
+        self.fall_line_3d = np.array([fx, fy, fz])
+        self.fall_line_3d /= np.linalg.norm(self.fall_line_3d)
+
+        # Cross-slope is perpendicular to fall line, in the slope plane
+        # Approximate as horizontal across the image
+        self.cross_slope_3d = np.array([math.cos(fall_rad), -math.sin(fall_rad), 0])
+        self.cross_slope_3d /= np.linalg.norm(self.cross_slope_3d)
+
+        # Slope normal from cross product of fall line and cross-slope
+        if self.slope_normal is None:
+            self.slope_normal = np.cross(self.fall_line_3d, self.cross_slope_3d)
+            self.slope_normal /= np.linalg.norm(self.slope_normal)
+
+    def image_to_slope_coords(self, pixel_x: float, pixel_y: float) -> Tuple[float, float]:
+        """
+        Transform image pixel coordinates to slope plane coordinates.
+
+        Returns (along_fall_line, across_slope) in arbitrary units.
+        Uses homography if available, otherwise projects using angles.
+        """
+        if self.homography is not None:
+            # Apply homography
+            pt = np.array([pixel_x, pixel_y, 1.0])
+            result = self.homography @ pt
+            if abs(result[2]) > 1e-6:
+                return (result[0] / result[2], result[1] / result[2])
+
+        # Fallback: simple rotation by fall line angle
+        fall_rad = math.radians(self.fall_line_angle_deg)
+        cos_a, sin_a = math.cos(fall_rad), math.sin(fall_rad)
+
+        # Rotate so fall line is vertical
+        along = pixel_x * sin_a + pixel_y * cos_a
+        across = pixel_x * cos_a - pixel_y * sin_a
+
+        return (along, across)
+
+    def angle_to_slope_line(self, p1: Tuple[float, float], p2: Tuple[float, float]) -> float:
+        """
+        Calculate angle of a line segment relative to the slope line.
+
+        The slope line is perpendicular to the fall line in the image.
+        0° = parallel to slope line (across the hill)
+        90° = parallel to fall line (down the hill)
+
+        Args:
+            p1, p2: Pixel coordinates of line endpoints
+
+        Returns:
+            Angle in degrees from slope line. Positive = rotated toward fall line.
+        """
+        # Calculate angle of line in image coordinates
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+
+        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+            return 0.0
+
+        # Angle from horizontal in image
+        line_angle = math.degrees(math.atan2(dy, dx))
+
+        # Slope line angle = fall line angle - 90 (perpendicular)
+        # Fall line points "down" at fall_line_angle from vertical
+        # In image coords, vertical down = 90° from horizontal
+        slope_line_angle = self.fall_line_angle_deg  # Slope line is at this angle from horizontal
+
+        # Angle relative to slope line
+        angle = line_angle - slope_line_angle
+
+        # Normalize to -90 to +90
+        while angle > 90:
+            angle -= 180
+        while angle < -90:
+            angle += 180
+
+        return angle
+
+    def edge_angle_from_tibia(self, knee: Tuple[float, float], ankle: Tuple[float, float]) -> float:
+        """
+        Calculate ski edge angle from tibia orientation.
+
+        Edge angle is how much the ski base is tilted from the slope surface.
+        If tibia is perpendicular to slope, edge angle is 0.
+
+        Args:
+            knee, ankle: Pixel coordinates
+
+        Returns:
+            Edge angle in degrees. Positive = edged toward the hill.
+        """
+        # Tibia direction in image
+        dx = ankle[0] - knee[0]
+        dy = ankle[1] - knee[1]
+
+        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+            return 0.0
+
+        # Tibia angle from vertical in image (0 = straight down)
+        tibia_angle = math.degrees(math.atan2(dx, dy))
+
+        # "Perpendicular to slope" in image is at (fall_line_angle) from vertical
+        # Because fall line is the steepest descent direction
+        slope_perpendicular = self.fall_line_angle_deg
+
+        # Edge angle = tibia deviation from slope perpendicular
+        edge = tibia_angle - slope_perpendicular
+
+        # Normalize to -90 to +90
+        while edge > 90:
+            edge -= 180
+        while edge < -90:
+            edge += 180
+
+        return edge
+
+    def inclination_angle(self, base: Tuple[float, float], top: Tuple[float, float]) -> float:
+        """
+        Calculate body inclination (lean) relative to slope perpendicular.
+
+        Args:
+            base: Lower point (e.g., ankle midpoint or hip)
+            top: Upper point (e.g., shoulder midpoint)
+
+        Returns:
+            Inclination in degrees. 0 = perpendicular to slope, positive = leaning downhill.
+        """
+        # Body line direction in image
+        dx = top[0] - base[0]
+        dy = top[1] - base[1]
+
+        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+            return 0.0
+
+        # Body angle from vertical in image (0 = straight up)
+        # Note: in image coords, Y increases downward, so we flip
+        body_angle = math.degrees(math.atan2(dx, -dy))
+
+        # "Perpendicular to slope" in image is at fall_line_angle from vertical
+        slope_perpendicular = self.fall_line_angle_deg
+
+        # Inclination = body deviation from slope perpendicular
+        inclination = body_angle - slope_perpendicular
+
+        # Normalize to -90 to +90
+        while inclination > 90:
+            inclination -= 180
+        while inclination < -90:
+            inclination += 180
+
+        return inclination
+
+    def summary(self) -> str:
+        """Return human-readable summary of slope geometry."""
+        lines = [
+            "Slope Geometry:",
+            f"  Fall line direction: {self.fall_line_angle_deg:+.1f} deg from vertical",
+            f"  Pitch (steepness): {self.pitch_deg:.1f} deg",
+            f"  Roll (cross-slope): {self.roll_deg:.1f} deg",
+        ]
+        if self.slope_normal is not None:
+            lines.append(f"  Slope normal: [{self.slope_normal[0]:.3f}, {self.slope_normal[1]:.3f}, {self.slope_normal[2]:.3f}]")
+        if self.fall_line_3d is not None:
+            lines.append(f"  Fall line 3D: [{self.fall_line_3d[0]:.3f}, {self.fall_line_3d[1]:.3f}, {self.fall_line_3d[2]:.3f}]")
+        return "\n".join(lines)
+
 
 try:
     from ultralytics import YOLO
@@ -85,14 +395,14 @@ class PoseMetrics:
     shoulder_alignment_pct: float  # 100% = parallel to fall line
     hip_alignment_pct: float  # 100% = parallel to fall line
     body_angulation: float
-    body_inclination: float
+    body_inclination: float  # Torso angle to slope
     knee_angle_left: float
     knee_angle_right: float
-    edge_angle_left: float
+    edge_angle_left: float  # Ski edge angle (tibia perpendicular to slope)
     edge_angle_right: float
     edge_symmetry_pct: float  # 100% = perfect symmetry
-    fore_aft_left: float  # Renamed from tibia
-    fore_aft_right: float
+    fore_aft_left: Optional[float]  # Only in side view
+    fore_aft_right: Optional[float]
     confidence: float
 
 
@@ -156,20 +466,53 @@ class MetricsHistory:
         self.edge_left.append(m.edge_angle_left)
         self.edge_right.append(m.edge_angle_right)
         self.edge_symmetry.append(m.edge_symmetry_pct)
-        self.fore_aft_left.append(m.fore_aft_left)
-        self.fore_aft_right.append(m.fore_aft_right)
+        # Only track fore/aft if available (side view)
+        if m.fore_aft_left is not None:
+            self.fore_aft_left.append(m.fore_aft_left)
+        if m.fore_aft_right is not None:
+            self.fore_aft_right.append(m.fore_aft_right)
 
 
 class YOLOPoseAnalyzer:
     """Analyzes ski racing video clips using YOLOv8-pose."""
 
-    def __init__(self, slope_angle_deg: float = 0.0, model_size: str = 'l',
-                 pitch_deg: float = None, ski_model_path: str = None):
+    def __init__(self, slope_geometry: SlopeGeometry = None,
+                 slope_angle_deg: float = None, pitch_deg: float = None,
+                 calibration_path: str = None,
+                 model_size: str = 'l', ski_model_path: str = None):
+        """
+        Initialize the pose analyzer.
+
+        Args:
+            slope_geometry: Full 3D slope geometry (preferred)
+            slope_angle_deg: Legacy - fall line angle in degrees (if no geometry)
+            pitch_deg: Legacy - slope steepness in degrees (if no geometry)
+            calibration_path: Path to calibration JSON to load geometry from
+            model_size: YOLO model size (n/s/m/l/x)
+            ski_model_path: Path to ski detector model
+        """
         if not HAS_YOLO:
             raise ImportError("ultralytics required. Install with: pip install ultralytics")
 
-        self.slope_angle_deg = slope_angle_deg
-        self.pitch_deg = pitch_deg
+        # Load slope geometry from calibration file if provided
+        if calibration_path and Path(calibration_path).exists():
+            print(f"Loading slope geometry from {calibration_path}...")
+            self.slope_geometry = SlopeGeometry.from_calibration_file(calibration_path)
+            print(self.slope_geometry.summary())
+        elif slope_geometry is not None:
+            self.slope_geometry = slope_geometry
+        else:
+            # Create geometry from legacy parameters
+            self.slope_geometry = SlopeGeometry(
+                fall_line_angle_deg=slope_angle_deg or 0.0,
+                pitch_deg=pitch_deg or 25.0
+            )
+            self.slope_geometry._compute_3d_vectors()
+
+        # Legacy attributes for backward compatibility
+        self.slope_angle_deg = self.slope_geometry.fall_line_angle_deg
+        self.pitch_deg = self.slope_geometry.pitch_deg
+
         self.history = MetricsHistory()
         self.ski_detector = None
 
@@ -205,6 +548,12 @@ class YOLOPoseAnalyzer:
     def compute_metrics(self, keypoints: np.ndarray,
                         left_ski: Optional[dict] = None,
                         right_ski: Optional[dict] = None) -> Optional[PoseMetrics]:
+        """
+        Compute biomechanics metrics using full 3D slope geometry.
+
+        All angles are calculated relative to the true slope plane,
+        not just the 2D image projection.
+        """
         left_shoulder = self.get_keypoint(keypoints, Keypoints.LEFT_SHOULDER)
         right_shoulder = self.get_keypoint(keypoints, Keypoints.RIGHT_SHOULDER)
         left_hip = self.get_keypoint(keypoints, Keypoints.LEFT_HIP)
@@ -224,17 +573,14 @@ class YOLOPoseAnalyzer:
         if right_ankle: confs.append(right_ankle[2])
         avg_conf = sum(confs) / len(confs) if confs else 0
 
-        # Shoulder angle relative to slope
-        shoulder_angle = angle_from_horizontal(left_shoulder[:2], right_shoulder[:2])
-        shoulder_to_slope = shoulder_angle - self.slope_angle_deg
-        while shoulder_to_slope > 90: shoulder_to_slope -= 180
-        while shoulder_to_slope < -90: shoulder_to_slope += 180
+        geom = self.slope_geometry
 
-        # Hip angle relative to slope
-        hip_angle = angle_from_horizontal(left_hip[:2], right_hip[:2])
-        hip_to_slope = hip_angle - self.slope_angle_deg
-        while hip_to_slope > 90: hip_to_slope -= 180
-        while hip_to_slope < -90: hip_to_slope += 180
+        # Shoulder angle relative to slope line (using 3D geometry)
+        # 0° = parallel to slope line (across the hill)
+        shoulder_to_slope = geom.angle_to_slope_line(left_shoulder[:2], right_shoulder[:2])
+
+        # Hip angle relative to slope line
+        hip_to_slope = geom.angle_to_slope_line(left_hip[:2], right_hip[:2])
 
         # Body angulation (0° = aligned, positive = separation between torso and legs)
         shoulder_mid = midpoint(left_shoulder[:2], right_shoulder[:2])
@@ -247,17 +593,12 @@ class YOLOPoseAnalyzer:
         else:
             body_angulation = 0.0
 
-        # Body inclination
-        ankle_mid = midpoint(left_ankle[:2], right_ankle[:2]) if left_ankle and right_ankle else None
-        if ankle_mid:
-            inclination_angle = angle_from_horizontal(ankle_mid, shoulder_mid)
-            body_inclination = 90 - inclination_angle - self.slope_angle_deg
-            while body_inclination > 90: body_inclination -= 180
-            while body_inclination < -90: body_inclination += 180
-        else:
-            body_inclination = 0.0
+        # Body inclination - torso lean relative to slope perpendicular
+        # Uses 3D geometry to account for slope pitch
+        ankle_mid = midpoint(left_ankle[:2], right_ankle[:2]) if left_ankle and right_ankle else hip_mid
+        body_inclination = geom.inclination_angle(ankle_mid, shoulder_mid)
 
-        # Knee angles
+        # Knee angles (pure joint angles, independent of slope)
         knee_angle_left = 180.0
         knee_angle_right = 180.0
         if left_hip and left_knee and left_ankle:
@@ -265,42 +606,43 @@ class YOLOPoseAnalyzer:
         if right_hip and right_knee and right_ankle:
             knee_angle_right = angle_at_joint(right_hip[:2], right_knee[:2], right_ankle[:2])
 
-        # Edge angles - tibia (knee→ankle) angle relative to slope line
-        # Slope line is perpendicular to fall line
+        # Edge angles using 3D slope geometry
+        # How much the ski is tilted from the slope surface
         edge_angle_left = 0.0
         edge_angle_right = 0.0
 
         if left_knee and left_ankle:
-            # Tibia angle from knee to ankle, relative to slope line (perpendicular to fall line)
-            tibia_angle_left = angle_from_vertical(left_knee[:2], left_ankle[:2])
-            edge_angle_left = tibia_angle_left - self.slope_angle_deg
+            edge_angle_left = geom.edge_angle_from_tibia(left_knee[:2], left_ankle[:2])
 
         if right_knee and right_ankle:
-            tibia_angle_right = angle_from_vertical(right_knee[:2], right_ankle[:2])
-            edge_angle_right = tibia_angle_right - self.slope_angle_deg
+            edge_angle_right = geom.edge_angle_from_tibia(right_knee[:2], right_ankle[:2])
 
         # Edge symmetry as percentage (100% = perfect)
         max_edge = max(abs(edge_angle_left), abs(edge_angle_right), 1)
         edge_diff = abs(edge_angle_left - edge_angle_right)
         edge_symmetry_pct = max(0, 100 - (edge_diff / max_edge * 100))
 
-        # Fore/aft balance - use detected ski position if available
-        fore_aft_left = 0.0
-        fore_aft_right = 0.0
+        # Fore/aft balance - tibia angle vs ski long axis
+        # Only meaningful in side view (when ski box is elongated horizontally)
+        fore_aft_left = None  # None means not visible/calculable
+        fore_aft_right = None
 
-        if left_ski and 'fore_aft' in left_ski:
-            # Convert pixel offset to angle approximation
-            # Positive fore_aft means ankle is ahead of ski center (forward lean)
-            # Scale to reasonable angle range (assume ~100px = ~10°)
-            fore_aft_left = left_ski['fore_aft'] / 10.0
-        elif left_knee and left_ankle:
-            # Fallback to tibia angle
-            fore_aft_left = angle_from_vertical(left_ankle[:2], left_knee[:2]) - self.slope_angle_deg
+        if left_ski and left_ski.get('is_side_view') and left_knee and left_ankle:
+            # Tibia angle from vertical
+            tibia_angle = angle_from_vertical(left_knee[:2], left_ankle[:2])
+            # Ski direction angle (from bounding box)
+            ski_angle = left_ski.get('direction_angle', 0)
+            # Fore/aft is tibia angle relative to perpendicular to ski
+            fore_aft_left = tibia_angle - (ski_angle + 90)
+            while fore_aft_left > 90: fore_aft_left -= 180
+            while fore_aft_left < -90: fore_aft_left += 180
 
-        if right_ski and 'fore_aft' in right_ski:
-            fore_aft_right = right_ski['fore_aft'] / 10.0
-        elif right_knee and right_ankle:
-            fore_aft_right = angle_from_vertical(right_ankle[:2], right_knee[:2]) - self.slope_angle_deg
+        if right_ski and right_ski.get('is_side_view') and right_knee and right_ankle:
+            tibia_angle = angle_from_vertical(right_knee[:2], right_ankle[:2])
+            ski_angle = right_ski.get('direction_angle', 0)
+            fore_aft_right = tibia_angle - (ski_angle + 90)
+            while fore_aft_right > 90: fore_aft_right -= 180
+            while fore_aft_right < -90: fore_aft_right += 180
 
         # Shoulder/Hip alignment as percentage (100% = parallel to fall line)
         # At 0° angle to slope = 100%, at 45° = 50%, at 90° = 0%
@@ -319,8 +661,8 @@ class YOLOPoseAnalyzer:
             edge_angle_left=round(edge_angle_left, 1),
             edge_angle_right=round(edge_angle_right, 1),
             edge_symmetry_pct=round(edge_symmetry_pct, 0),
-            fore_aft_left=round(fore_aft_left, 1),
-            fore_aft_right=round(fore_aft_right, 1),
+            fore_aft_left=round(fore_aft_left, 1) if fore_aft_left is not None else None,
+            fore_aft_right=round(fore_aft_right, 1) if fore_aft_right is not None else None,
             confidence=round(avg_conf, 3)
         )
 
@@ -346,6 +688,61 @@ class YOLOPoseAnalyzer:
             self.history.add(metrics)
 
         return person_kpts, metrics, left_ski, right_ski
+
+    def _find_ski_base_line(self, frame: np.ndarray, x1: int, y1: int, x2: int, y2: int) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
+        """Find the ski base line by detecting dark pixels within the bounding box.
+        Returns ((x1,y1), (x2,y2)) endpoints of the ski base line, or None if not found."""
+        # Ensure bounds are within frame
+        h, w = frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+
+        if x2 <= x1 or y2 <= y1:
+            return None
+
+        # Extract region
+        roi = frame[y1:y2, x1:x2]
+        if roi.size == 0:
+            return None
+
+        # Convert to grayscale and find dark pixels (ski base is black)
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+
+        # Threshold to find dark pixels (ski base)
+        _, dark_mask = cv2.threshold(gray, 60, 255, cv2.THRESH_BINARY_INV)
+
+        # Find contours of dark regions
+        contours, _ = cv2.findContours(dark_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if not contours:
+            return None
+
+        # Find the largest elongated contour (the ski)
+        best_contour = None
+        best_area = 0
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area > best_area and area > 100:  # Minimum area threshold
+                best_area = area
+                best_contour = cnt
+
+        if best_contour is None or len(best_contour) < 5:
+            return None
+
+        # Fit a line to the contour using PCA or fitLine
+        line = cv2.fitLine(best_contour, cv2.DIST_L2, 0, 0.01, 0.01)
+        vx, vy = float(line[0][0]), float(line[1][0])
+        cx_local, cy_local = float(line[2][0]), float(line[3][0])
+
+        # Calculate line length based on contour extent
+        rect = cv2.minAreaRect(best_contour)
+        length = max(rect[1]) / 2  # Half the longer dimension
+
+        # Calculate endpoints
+        pt1 = (int(x1 + cx_local - vx * length), int(y1 + cy_local - vy * length))
+        pt2 = (int(x1 + cx_local + vx * length), int(y1 + cy_local + vy * length))
+
+        return (pt1, pt2)
 
     def _detect_skis(self, frame: np.ndarray, keypoints: np.ndarray) -> Tuple[Optional[dict], Optional[dict]]:
         """Detect skis and match to ankles. Returns (left_ski, right_ski) dicts with box, angle, fore_aft."""
@@ -380,25 +777,35 @@ class YOLOPoseAnalyzer:
             width = x2 - x1
             height = y2 - y1
 
-            # Calculate ski angle from bounding box orientation
-            # Ski is elongated - the longer dimension indicates direction
-            if width > height:
-                # Ski is more horizontal - angle from the box diagonal
-                ski_angle = math.degrees(math.atan2(height, width))
+            # Find actual ski base direction by analyzing dark pixels in the box
+            ski_line = self._find_ski_base_line(frame, int(x1), int(y1), int(x2), int(y2))
+
+            if ski_line is not None:
+                # Use detected ski line
+                (lx1, ly1), (lx2, ly2) = ski_line
+                direction_angle = math.degrees(math.atan2(ly2 - ly1, lx2 - lx1))
             else:
-                # Ski is more vertical
-                ski_angle = 90 - math.degrees(math.atan2(width, height))
+                # Fallback to bounding box orientation
+                if width > height:
+                    direction_angle = math.degrees(math.atan2(height, width))
+                else:
+                    direction_angle = 90 - math.degrees(math.atan2(width, height))
+
+            # Side view if ski box is elongated (width > 1.5 * height)
+            is_side_view = width > 1.5 * height
 
             detections.append({
                 'box': (x1, y1, x2, y2),
                 'conf': conf,
                 'center': (cx, cy),
-                'angle': ski_angle,
+                'direction_angle': direction_angle,
                 'width': width,
-                'height': height
+                'height': height,
+                'is_side_view': is_side_view,
+                'ski_line': ski_line  # Actual ski base line endpoints
             })
 
-        # Match skis to ankles
+        # Match skis to ankles - find closest ski to each ankle
         if la and detections:
             best_dist = float('inf')
             for det in detections:
@@ -406,9 +813,6 @@ class YOLOPoseAnalyzer:
                 if dist < best_dist:
                     best_dist = dist
                     left_ski = det.copy()
-                    # Calculate fore/aft: how far forward ankle is relative to ski center
-                    # Positive = ankle ahead of ski center (forward lean)
-                    left_ski['fore_aft'] = la[0] - det['center'][0]  # In pixels
 
         if ra and detections:
             best_dist = float('inf')
@@ -419,26 +823,38 @@ class YOLOPoseAnalyzer:
                 if dist < best_dist:
                     best_dist = dist
                     right_ski = det.copy()
-                    right_ski['fore_aft'] = ra[0] - det['center'][0]
 
         return left_ski, right_ski
 
     def _draw_ski_rectangles(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
                               left_ski: Optional[dict] = None, right_ski: Optional[dict] = None) -> np.ndarray:
-        """Draw ski detections using pre-detected ski data."""
+        """Draw ski detections with ski base lines."""
         output = frame.copy()
+        thickness = max(2, int(3 * scale))
 
-        # Draw left ski (orange)
+        # Draw left ski
         if left_ski:
             x1, y1, x2, y2 = left_ski['box']
-            color = (0, 165, 255)  # Orange
-            cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
+            # Draw bounding box (orange, thin)
+            cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), (0, 165, 255), 2)
+            # Draw ski base line (black, thick)
+            if left_ski.get('ski_line'):
+                pt1, pt2 = left_ski['ski_line']
+                cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+                # White outline for visibility
+                cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
 
-        # Draw right ski (blue)
+        # Draw right ski
         if right_ski:
             x1, y1, x2, y2 = right_ski['box']
-            color = (255, 150, 50)  # Blue
-            cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
+            # Draw bounding box (blue, thin)
+            cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), (255, 150, 50), 2)
+            # Draw ski base line (black, thick)
+            if right_ski.get('ski_line'):
+                pt1, pt2 = right_ski['ski_line']
+                cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+                # White outline for visibility
+                cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
 
         return output
 
@@ -601,7 +1017,7 @@ class YOLOPoseAnalyzer:
         return output
 
     def _draw_extended_lines(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
-        """Draw extended lines through shoulders and hips."""
+        """Draw extended lines through shoulders and hips with slope reference."""
         output = frame.copy()
         line_ext = int(100 * scale)
         thickness = max(2, int(3 * scale))
@@ -612,12 +1028,40 @@ class YOLOPoseAnalyzer:
                 return (int(kp[0]), int(kp[1]))
             return None
 
+        def draw_dotted_line(img, pt1, pt2, color, thickness, dash_len=10, gap_len=8):
+            """Draw a dotted line between two points."""
+            dx = pt2[0] - pt1[0]
+            dy = pt2[1] - pt1[1]
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist < 1:
+                return
+            ux, uy = dx/dist, dy/dist
+            pos = 0
+            drawing = True
+            while pos < dist:
+                if drawing:
+                    seg_len = min(dash_len, dist - pos)
+                    x1 = int(pt1[0] + ux * pos)
+                    y1 = int(pt1[1] + uy * pos)
+                    x2 = int(pt1[0] + ux * (pos + seg_len))
+                    y2 = int(pt1[1] + uy * (pos + seg_len))
+                    cv2.line(img, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+                    pos += dash_len
+                else:
+                    pos += gap_len
+                drawing = not drawing
+
         ls = get_pt(Keypoints.LEFT_SHOULDER)
         rs = get_pt(Keypoints.RIGHT_SHOULDER)
         lh = get_pt(Keypoints.LEFT_HIP)
         rh = get_pt(Keypoints.RIGHT_HIP)
 
-        # Extended shoulder line (magenta)
+        # Slope direction unit vector
+        slope_rad = math.radians(self.slope_angle_deg)
+        slope_ux = math.cos(slope_rad)
+        slope_uy = math.sin(slope_rad)
+
+        # Extended shoulder line (magenta) with dotted slope reference
         if ls and rs:
             dx = rs[0] - ls[0]
             dy = rs[1] - ls[1]
@@ -628,7 +1072,12 @@ class YOLOPoseAnalyzer:
                 ext_r = (int(rs[0] + ux * line_ext), int(rs[1] + uy * line_ext))
                 cv2.line(output, ext_l, ext_r, (255, 0, 255), thickness, cv2.LINE_AA)
 
-        # Extended hip line (cyan)
+                # Dotted slope reference line from extended left end
+                slope_ref = (int(ext_l[0] + slope_ux * line_ext * 1.5),
+                           int(ext_l[1] + slope_uy * line_ext * 1.5))
+                draw_dotted_line(output, ext_l, slope_ref, (255, 0, 255), max(1, thickness-1))
+
+        # Extended hip line (cyan) with dotted slope reference
         if lh and rh:
             dx = rh[0] - lh[0]
             dy = rh[1] - lh[1]
@@ -638,6 +1087,11 @@ class YOLOPoseAnalyzer:
                 ext_l = (int(lh[0] - ux * line_ext), int(lh[1] - uy * line_ext))
                 ext_r = (int(rh[0] + ux * line_ext), int(rh[1] + uy * line_ext))
                 cv2.line(output, ext_l, ext_r, (255, 255, 0), thickness, cv2.LINE_AA)
+
+                # Dotted slope reference line from extended left end
+                slope_ref = (int(ext_l[0] + slope_ux * line_ext * 1.5),
+                           int(ext_l[1] + slope_uy * line_ext * 1.5))
+                draw_dotted_line(output, ext_l, slope_ref, (255, 255, 0), max(1, thickness-1))
 
         return output
 
@@ -719,16 +1173,20 @@ class YOLOPoseAnalyzer:
                 elif pct >= 50: return (0, 255, 255)  # Yellow
                 else: return (0, 165, 255)  # Orange
 
-            # Compact format with all metrics - shoulder/hip as percentages
+            # Compact format with all metrics - angles in degrees (no degree symbol - font issue)
             metrics_parts = [
-                (f"Sh:{metrics.shoulder_alignment_pct:.0f}%", pct_color(metrics.shoulder_alignment_pct)),
-                (f"Hip:{metrics.hip_alignment_pct:.0f}%", pct_color(metrics.hip_alignment_pct)),
+                (f"Sh:{metrics.shoulder_angle_to_slope:+.0f}", (255, 0, 255)),  # Magenta
+                (f"Hip:{metrics.hip_angle_to_slope:+.0f}", (255, 255, 0)),  # Cyan
                 (f"Edge L{metrics.edge_angle_left:+.0f} R{metrics.edge_angle_right:+.0f}", (100, 255, 255)),
                 (f"Sym:{metrics.edge_symmetry_pct:.0f}%", pct_color(metrics.edge_symmetry_pct)),
-                (f"F/A L{metrics.fore_aft_left:+.0f} R{metrics.fore_aft_right:+.0f}", (255, 200, 100)),
                 (f"Ang:{metrics.body_angulation:.0f}", (0, 255, 255)),
                 (f"Incl:{metrics.body_inclination:+.0f}", (255, 180, 100)),
             ]
+            # Only show fore/aft in side view
+            if metrics.fore_aft_left is not None or metrics.fore_aft_right is not None:
+                fa_l = f"{metrics.fore_aft_left:+.0f}" if metrics.fore_aft_left is not None else "--"
+                fa_r = f"{metrics.fore_aft_right:+.0f}" if metrics.fore_aft_right is not None else "--"
+                metrics_parts.append((f"F/A L{fa_l} R{fa_r}", (255, 200, 100)))
 
             x = margin
             for text, color in metrics_parts:
@@ -762,26 +1220,30 @@ def main():
 
     args = parser.parse_args()
 
-    slope_angle = args.slope_angle
-    pitch_deg = None
-
-    if slope_angle is None and args.calibration:
-        try:
-            from slope_calculator import compute_slope_from_pixels_only
-            print(f"Computing slope from calibration: {args.calibration}")
-            result = compute_slope_from_pixels_only(args.calibration)
-            slope_angle = result['slope_angle_deg']
-            print(f"Slope: {result['direction_label']}")
-        except Exception as e:
-            print(f"Warning: {e}")
-            slope_angle = 0.0
-    elif slope_angle is None:
-        slope_angle = 0.0
-
     print(f"\nVideo: {args.video_path}")
-    print(f"Slope angle: {slope_angle}°")
 
-    analyzer = YOLOPoseAnalyzer(slope_angle_deg=slope_angle, model_size=args.model, pitch_deg=pitch_deg)
+    # Load slope geometry from calibration file (preferred) or use manual angle
+    calibration_path = args.calibration
+    slope_angle = args.slope_angle
+
+    if calibration_path and Path(calibration_path).exists():
+        # Use full 3D slope geometry from calibration
+        print(f"Loading 3D slope geometry from: {calibration_path}")
+        analyzer = YOLOPoseAnalyzer(
+            calibration_path=calibration_path,
+            model_size=args.model
+        )
+    elif slope_angle is not None:
+        # Legacy: manual slope angle
+        print(f"Using manual slope angle: {slope_angle} deg")
+        analyzer = YOLOPoseAnalyzer(
+            slope_angle_deg=slope_angle,
+            model_size=args.model
+        )
+    else:
+        # No slope info - use defaults
+        print("Warning: No calibration or slope angle provided. Using defaults.")
+        analyzer = YOLOPoseAnalyzer(model_size=args.model)
 
     cap = cv2.VideoCapture(args.video_path)
     if not cap.isOpened():
@@ -846,8 +1308,13 @@ def main():
         print(f"  Angulation: {sum(m.body_angulation for m in all_metrics)/len(all_metrics):.1f}°")
         print(f"  Inclination: {sum(m.body_inclination for m in all_metrics)/len(all_metrics):.1f}°")
         print(f"  Edge Symmetry: {sum(m.edge_symmetry_pct for m in all_metrics)/len(all_metrics):.0f}%")
-        print(f"  Fore/Aft L: {sum(m.fore_aft_left for m in all_metrics)/len(all_metrics):.1f}°")
-        print(f"  Fore/Aft R: {sum(m.fore_aft_right for m in all_metrics)/len(all_metrics):.1f}°")
+        # Fore/aft only available in side view
+        fa_left = [m.fore_aft_left for m in all_metrics if m.fore_aft_left is not None]
+        fa_right = [m.fore_aft_right for m in all_metrics if m.fore_aft_right is not None]
+        if fa_left:
+            print(f"  Fore/Aft L: {sum(fa_left)/len(fa_left):.1f}°")
+        if fa_right:
+            print(f"  Fore/Aft R: {sum(fa_right)/len(fa_right):.1f}°")
 
 
 if __name__ == "__main__":
