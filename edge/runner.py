@@ -404,22 +404,30 @@ class SkiFramesRunner:
 
         # Staging mode: output to {staging_dir}/{CamX}/{runN}/ with bib-based filenames
         # Include gender prefix to avoid collisions (boys/girls share bib numbers)
+        # Always generate montages even for unmatched runs (coaches, timing mismatches)
+        # — better to have too many and delete than miss athletes
         merged_results = {}
-        if self.staging_output_dir and racer:
-            bib = racer.get('bib', run.run_number)
-            # Determine gender prefix from racer data (preferred) or vola_race filename (legacy)
-            racer_gender = racer.get('gender', '').lower()
-            if 'women' in racer_gender or 'girl' in racer_gender or 'female' in racer_gender:
-                gender_prefix = 'g'
-            elif 'men' in racer_gender or 'boy' in racer_gender or 'male' in racer_gender:
-                gender_prefix = 'b'
-            elif 'girl' in self.vola_race.lower():
-                gender_prefix = 'g'
-            elif 'boy' in self.vola_race.lower():
-                gender_prefix = 'b'
+        if self.staging_output_dir:
+            if racer:
+                bib = racer.get('bib', run.run_number)
+                # Determine gender prefix from racer data (preferred) or vola_race filename (legacy)
+                racer_gender = racer.get('gender', '').lower()
+                if 'women' in racer_gender or 'girl' in racer_gender or 'female' in racer_gender:
+                    gender_prefix = 'g'
+                elif 'men' in racer_gender or 'boy' in racer_gender or 'male' in racer_gender:
+                    gender_prefix = 'b'
+                elif self.vola_race and 'girl' in self.vola_race.lower():
+                    gender_prefix = 'g'
+                elif self.vola_race and 'boy' in self.vola_race.lower():
+                    gender_prefix = 'b'
+                else:
+                    gender_prefix = ''
+                staging_filename = f"{gender_prefix}{bib}" if gender_prefix else str(bib)
             else:
-                gender_prefix = ''
-            staging_filename = f"{gender_prefix}{bib}" if gender_prefix else str(bib)
+                # Unmatched run — use timestamp-based filename so it's still generated
+                ts = run.start_time.strftime('%H%M%S') if run.start_time else f"{run.run_number:03d}"
+                staging_filename = f"unmatched_{ts}"
+                print(f"  ⚠️  Generating montage for unmatched run (filename: {staging_filename})")
 
             for fps_val in self.montage_fps_list:
                 fps_suffix = f"_{fps_val:.1f}fps"
@@ -455,8 +463,9 @@ class SkiFramesRunner:
             timing_filename = f"{staging_filename}_timing.json"
             timing_path = os.path.join(self.staging_output_dir, timing_filename)
             timing_data = {
-                'bib': bib,
-                'gender': 'F' if gender_prefix == 'g' else 'M' if gender_prefix == 'b' else '',
+                'bib': racer.get('bib', None) if racer else None,
+                'gender': ('F' if gender_prefix == 'g' else 'M' if gender_prefix == 'b' else '') if racer else '',
+                'matched': racer is not None,
                 'section_elapsed_sec': round(run.duration, 2) if run.end_time else None,
                 'start_trigger_time': run.start_time.isoformat() if run.start_time else None,
                 'end_trigger_time': run.end_time.isoformat() if run.end_time else None,
