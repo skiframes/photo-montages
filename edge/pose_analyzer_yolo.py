@@ -1343,17 +1343,17 @@ class YOLOPoseAnalyzer:
         graph_height = int(80 * scale)
         output = self._draw_metrics_graph(output, scale, graph_height)
 
-        # Draw compact metrics bar at BOTTOM
+        # Draw metrics panel at BOTTOM (two lines)
         if metrics:
             font = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = 0.7 * scale
-            bar_height = int(40 * scale)
+            bar_height = int(70 * scale)  # Taller for two lines
 
             overlay = output.copy()
             cv2.rectangle(overlay, (0, h - bar_height), (w, h), (0, 0, 0), -1)
             cv2.addWeighted(overlay, 0.7, output, 0.3, 0, output)
 
-            y = h - int(12 * scale)
+            y = h - int(42 * scale)  # First line position
             margin = int(10 * scale)
             text_thickness = max(1, int(2 * scale))
 
@@ -1363,24 +1363,37 @@ class YOLOPoseAnalyzer:
                 elif pct >= 50: return (0, 255, 255)  # Yellow
                 else: return (0, 165, 255)  # Orange
 
-            # Compact format with all metrics - angles in degrees (no degree symbol - font issue)
-            metrics_parts = [
-                (f"Sh:{metrics.shoulder_angle_to_slope:+.0f}", (255, 0, 255)),  # Magenta
-                (f"Hip:{metrics.hip_angle_to_slope:+.0f}", (255, 255, 0)),  # Cyan
-                (f"Edge L{metrics.edge_angle_left:+.0f} R{metrics.edge_angle_right:+.0f}", (100, 255, 255)),
-                (f"Sym:{metrics.edge_symmetry_pct:.0f}%", pct_color(metrics.edge_symmetry_pct)),
-                (f"Ang:{metrics.body_angulation:.0f}", (0, 255, 255)),
-                (f"Incl:{metrics.body_inclination:+.0f}", (255, 180, 100)),
+            # Two-line layout for clearer labels
+            # Line 1: Body angles
+            line1_parts = [
+                (f"Shoulders/Slope:{metrics.shoulder_angle_to_slope:+.0f}", (255, 0, 255)),  # Magenta
+                (f"Hip/Slope:{metrics.hip_angle_to_slope:+.0f}", (255, 255, 0)),  # Cyan
+                (f"Angulation:{metrics.body_angulation:.0f}", (0, 255, 255)),
+                (f"Inclination:{metrics.body_inclination:+.0f}", (255, 180, 100)),
             ]
-            # Only show fore/aft in side view
+            # Line 2: Ski angles
+            line2_parts = [
+                (f"Ski/Slope: L{metrics.edge_angle_left:+.0f} R{metrics.edge_angle_right:+.0f}", (100, 255, 255)),
+                (f"Sym:{metrics.edge_symmetry_pct:.0f}%", pct_color(metrics.edge_symmetry_pct)),
+            ]
+            # Fore/aft is tibia angle relative to ski direction (boots have ~130deg forward lean)
             if metrics.fore_aft_left is not None or metrics.fore_aft_right is not None:
                 fa_l = f"{metrics.fore_aft_left:+.0f}" if metrics.fore_aft_left is not None else "--"
                 fa_r = f"{metrics.fore_aft_right:+.0f}" if metrics.fore_aft_right is not None else "--"
-                metrics_parts.append((f"F/A L{fa_l} R{fa_r}", (255, 200, 100)))
+                line2_parts.append((f"Tibia/Ski: L{fa_l} R{fa_r}", (255, 200, 100)))
 
+            # Draw line 1 (body angles)
             x = margin
-            for text, color in metrics_parts:
+            for text, color in line1_parts:
                 cv2.putText(output, text, (x, y), font, font_scale, color, text_thickness, cv2.LINE_AA)
+                (tw, _), _ = cv2.getTextSize(text, font, font_scale, text_thickness)
+                x += tw + int(15 * scale)
+
+            # Draw line 2 (ski angles) below line 1
+            y2 = y + int(35 * scale)
+            x = margin
+            for text, color in line2_parts:
+                cv2.putText(output, text, (x, y2), font, font_scale, color, text_thickness, cv2.LINE_AA)
                 (tw, _), _ = cv2.getTextSize(text, font, font_scale, text_thickness)
                 x += tw + int(15 * scale)
 
