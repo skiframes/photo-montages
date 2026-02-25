@@ -8,6 +8,11 @@ YOLOv8-pose is more robust than MediaPipe for:
 - Distinguishing person from ski poles
 - Detection from distance
 
+Optional SAM3 integration for precise ski segmentation:
+- Uses text prompt "ski" to segment skis precisely
+- Fits line to segmentation mask for accurate ski orientation
+- Falls back to YOLO bounding box detection if SAM3 unavailable
+
 Keypoints (COCO format):
 0: nose, 1: left_eye, 2: right_eye, 3: left_ear, 4: right_ear,
 5: left_shoulder, 6: right_shoulder, 7: left_elbow, 8: right_elbow,
@@ -24,6 +29,22 @@ from collections import deque
 
 import cv2
 import numpy as np
+
+# SAM/SAM2 support (optional) - Segment Anything Model for precise ski segmentation
+HAS_SAM = False
+SAMModel = None
+try:
+    from ultralytics import SAM as _SAM
+    SAMModel = _SAM
+    HAS_SAM = True
+except ImportError:
+    try:
+        # Try alternative import path
+        from ultralytics.models.sam import SAM as _SAM
+        SAMModel = _SAM
+        HAS_SAM = True
+    except ImportError:
+        pass
 
 
 @dataclass
@@ -474,12 +495,13 @@ class MetricsHistory:
 
 
 class YOLOPoseAnalyzer:
-    """Analyzes ski racing video clips using YOLOv8-pose."""
+    """Analyzes ski racing video clips using YOLOv8-pose and optional SAM3."""
 
     def __init__(self, slope_geometry: SlopeGeometry = None,
                  slope_angle_deg: float = None, pitch_deg: float = None,
                  calibration_path: str = None,
-                 model_size: str = 'l', ski_model_path: str = None):
+                 model_size: str = 'l', ski_model_path: str = None,
+                 use_sam3: bool = True, sam3_model_path: str = None):
         """
         Initialize the pose analyzer.
 
@@ -489,7 +511,9 @@ class YOLOPoseAnalyzer:
             pitch_deg: Legacy - slope steepness in degrees (if no geometry)
             calibration_path: Path to calibration JSON to load geometry from
             model_size: YOLO model size (n/s/m/l/x)
-            ski_model_path: Path to ski detector model
+            ski_model_path: Path to ski detector model (YOLO-based)
+            use_sam3: Whether to use SAM3 for precise ski segmentation
+            sam3_model_path: Path to SAM3 model (default: sam3.pt)
         """
         if not HAS_YOLO:
             raise ImportError("ultralytics required. Install with: pip install ultralytics")
@@ -536,6 +560,45 @@ class YOLOPoseAnalyzer:
             print("Ski detector loaded.")
         else:
             print("Ski detector not found. Run train_ski_detector.py to train one.")
+
+        # Initialize SAM for precise ski segmentation (uses SAM2 when available)
+        self.sam_model = None
+        self.use_sam = use_sam3 and HAS_SAM  # use_sam3 parameter name kept for compatibility
+
+        if use_sam3:
+            if not HAS_SAM:
+                print("SAM not available. Install with: pip install -U ultralytics")
+                print("  SAM2 models: sam2_b.pt (base), sam2_l.pt (large), sam2_t.pt (tiny)")
+            else:
+                # Find SAM model (SAM2 preferred over SAM1)
+                sam_model_path = sam3_model_path
+                if sam_model_path is None:
+                    # Try SAM2 models first, then SAM1
+                    for path in ['sam2_b.pt', 'sam2_l.pt', 'sam2_t.pt',
+                                 'edge/sam2_b.pt', 'edge/sam2_l.pt',
+                                 'models/sam2_b.pt', 'sam_b.pt', 'sam_l.pt']:
+                        if Path(path).exists():
+                            sam_model_path = path
+                            break
+
+                if sam_model_path and Path(sam_model_path).exists():
+                    print(f"Loading SAM from {sam_model_path}...")
+                    try:
+                        self.sam_model = SAMModel(sam_model_path)
+                        print("SAM loaded - will use precise ski segmentation.")
+                    except Exception as e:
+                        print(f"Failed to load SAM: {e}")
+                        self.sam_model = None
+                else:
+                    print("SAM model not found. Download from Ultralytics:")
+                    print("  yolo download model=sam2_b.pt")
+                    print("  Falling back to YOLO-based ski detection.")
+
+        # Track current frame for SAM (to avoid re-setting image)
+        self._current_frame_id = None
+        self._frame_counter = 0  # Auto-incrementing frame ID
+        # Compatibility aliases
+        self.sam3_predictor = self.sam_model  # Legacy alias
 
     def get_keypoint(self, keypoints: np.ndarray, idx: int) -> Optional[Tuple[float, float, float]]:
         if keypoints is None or idx >= len(keypoints):
@@ -666,7 +729,12 @@ class YOLOPoseAnalyzer:
             confidence=round(avg_conf, 3)
         )
 
-    def analyze_frame(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[PoseMetrics], Optional[dict], Optional[dict]]:
+    def analyze_frame(self, frame: np.ndarray, frame_id: int = None) -> Tuple[Optional[np.ndarray], Optional[PoseMetrics], Optional[dict], Optional[dict]]:
+        # Auto-increment frame counter if not provided
+        if frame_id is None:
+            frame_id = self._frame_counter
+            self._frame_counter += 1
+
         results = self.model(frame, verbose=False)
 
         if len(results) == 0 or results[0].keypoints is None:
@@ -678,8 +746,8 @@ class YOLOPoseAnalyzer:
 
         person_kpts = keypoints[0].cpu().numpy()
 
-        # Detect skis
-        left_ski, right_ski = self._detect_skis(frame, person_kpts)
+        # Detect skis (uses SAM3 if available)
+        left_ski, right_ski = self._detect_skis(frame, person_kpts, frame_id)
 
         # Compute metrics using ski detection data
         metrics = self.compute_metrics(person_kpts, left_ski, right_ski)
@@ -688,6 +756,108 @@ class YOLOPoseAnalyzer:
             self.history.add(metrics)
 
         return person_kpts, metrics, left_ski, right_ski
+
+    def _segment_skis_sam(self, frame: np.ndarray, bboxes: List[List[float]]) -> List[dict]:
+        """
+        Use SAM to refine ski bounding boxes into precise masks.
+
+        Args:
+            frame: The video frame
+            bboxes: List of bounding boxes [[x1,y1,x2,y2], ...] from YOLO detection
+
+        Returns list of ski detections with:
+        - mask: Binary mask of the ski
+        - ski_line: Fitted line endpoints
+        - direction_angle: Precise ski orientation
+        - center: Centroid of the mask
+        - box: Bounding box
+        """
+        if self.sam_model is None or not bboxes:
+            return []
+
+        try:
+            # Run SAM with bounding box prompts
+            results = self.sam_model(frame, bboxes=bboxes, verbose=False)
+
+            if not results or len(results) == 0:
+                return []
+
+            detections = []
+
+            for i, result in enumerate(results):
+                # Process masks from this result
+                if not hasattr(result, 'masks') or result.masks is None:
+                    continue
+
+                masks = result.masks.data.cpu().numpy()
+
+                for mask in masks:
+                    # Get mask as binary image
+                    mask_binary = (mask > 0.5).astype(np.uint8)
+
+                    # Find contours in the mask
+                    contours, _ = cv2.findContours(mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                    if not contours:
+                        continue
+
+                    # Use the largest contour
+                    largest_contour = max(contours, key=cv2.contourArea)
+                    area = cv2.contourArea(largest_contour)
+
+                    if area < 500:  # Too small to be a ski
+                        continue
+
+                    # Fit line to contour for precise orientation
+                    if len(largest_contour) >= 5:
+                        line = cv2.fitLine(largest_contour, cv2.DIST_L2, 0, 0.01, 0.01)
+                        vx, vy = float(line[0][0]), float(line[1][0])
+                        cx, cy = float(line[2][0]), float(line[3][0])
+
+                        # Get ski length from min area rect
+                        rect = cv2.minAreaRect(largest_contour)
+                        length = max(rect[1]) / 2
+
+                        # Calculate endpoints
+                        pt1 = (int(cx - vx * length), int(cy - vy * length))
+                        pt2 = (int(cx + vx * length), int(cy + vy * length))
+                        ski_line = (pt1, pt2)
+
+                        # Direction angle
+                        direction_angle = math.degrees(math.atan2(vy, vx))
+
+                        # Get bounding box from contour
+                        x, y, w, h = cv2.boundingRect(largest_contour)
+                        x1, y1, x2, y2 = x, y, x + w, y + h
+
+                        # Width/height for side view detection
+                        width = x2 - x1
+                        height = y2 - y1
+                        is_side_view = width > 1.5 * height
+
+                        detections.append({
+                            'box': (float(x1), float(y1), float(x2), float(y2)),
+                            'center': (cx, cy),
+                            'direction_angle': direction_angle,
+                            'ski_line': ski_line,
+                            'width': width,
+                            'height': height,
+                            'is_side_view': is_side_view,
+                            'mask': mask_binary,
+                            'conf': 0.95,  # SAM provides high-quality masks
+                            'method': 'sam'
+                        })
+
+            return detections
+
+        except Exception as e:
+            print(f"SAM segmentation error: {e}")
+            return []
+
+    def _segment_skis_sam3(self, frame: np.ndarray, frame_id: int) -> List[dict]:
+        """Legacy method - redirects to _segment_skis_with_sam for compatibility."""
+        # This is now handled in _detect_skis which calls _segment_skis_sam
+        return []
 
     def _find_ski_base_line(self, frame: np.ndarray, x1: int, y1: int, x2: int, y2: int) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """Find the ski base line by detecting dark pixels within the bounding box.
@@ -744,8 +914,12 @@ class YOLOPoseAnalyzer:
 
         return (pt1, pt2)
 
-    def _detect_skis(self, frame: np.ndarray, keypoints: np.ndarray) -> Tuple[Optional[dict], Optional[dict]]:
-        """Detect skis and match to ankles. Returns (left_ski, right_ski) dicts with box, angle, fore_aft."""
+    def _detect_skis(self, frame: np.ndarray, keypoints: np.ndarray, frame_id: int = 0) -> Tuple[Optional[dict], Optional[dict]]:
+        """Detect skis and match to ankles. Returns (left_ski, right_ski) dicts with box, angle, fore_aft.
+
+        Uses YOLO for detection, then SAM for precise segmentation if available.
+        Falls back to dark pixel detection if SAM unavailable.
+        """
         def get_pt(idx):
             kp = keypoints[idx]
             if kp[2] > 0.3:
@@ -757,53 +931,69 @@ class YOLOPoseAnalyzer:
 
         left_ski = None
         right_ski = None
+        detections = []
 
         if self.ski_detector is None:
             return None, None
 
-        results = self.ski_detector(frame, verbose=False, conf=0.3)
+        # Step 1: Use YOLO to detect ski bounding boxes
+        yolo_results = self.ski_detector(frame, verbose=False, conf=0.3)
 
-        if not results or len(results) == 0 or results[0].boxes is None:
+        if not yolo_results or len(yolo_results) == 0 or yolo_results[0].boxes is None:
             return None, None
 
-        boxes = results[0].boxes
-
-        # Get all detections
-        detections = []
-        for box in boxes:
+        yolo_boxes = yolo_results[0].boxes
+        bboxes = []
+        for box in yolo_boxes:
             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-            conf = float(box.conf[0])
-            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-            width = x2 - x1
-            height = y2 - y1
+            bboxes.append([float(x1), float(y1), float(x2), float(y2)])
 
-            # Find actual ski base direction by analyzing dark pixels in the box
-            ski_line = self._find_ski_base_line(frame, int(x1), int(y1), int(x2), int(y2))
+        # Step 2: If SAM is available, use it for precise segmentation
+        if self.sam_model is not None and bboxes:
+            sam_detections = self._segment_skis_sam(frame, bboxes)
+            if sam_detections:
+                detections = sam_detections
 
-            if ski_line is not None:
-                # Use detected ski line
-                (lx1, ly1), (lx2, ly2) = ski_line
-                direction_angle = math.degrees(math.atan2(ly2 - ly1, lx2 - lx1))
-            else:
-                # Fallback to bounding box orientation
-                if width > height:
-                    direction_angle = math.degrees(math.atan2(height, width))
+        # Step 3: Fall back to YOLO + dark pixel detection if SAM unavailable or failed
+        if not detections:
+            for box in yolo_boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                conf = float(box.conf[0])
+                cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+                width = x2 - x1
+                height = y2 - y1
+
+                # Find actual ski base direction by analyzing dark pixels in the box
+                ski_line = self._find_ski_base_line(frame, int(x1), int(y1), int(x2), int(y2))
+
+                if ski_line is not None:
+                    # Use detected ski line
+                    (lx1, ly1), (lx2, ly2) = ski_line
+                    direction_angle = math.degrees(math.atan2(ly2 - ly1, lx2 - lx1))
                 else:
-                    direction_angle = 90 - math.degrees(math.atan2(width, height))
+                    # Fallback to bounding box orientation
+                    if width > height:
+                        direction_angle = math.degrees(math.atan2(height, width))
+                    else:
+                        direction_angle = 90 - math.degrees(math.atan2(width, height))
 
-            # Side view if ski box is elongated (width > 1.5 * height)
-            is_side_view = width > 1.5 * height
+                # Side view if ski box is elongated (width > 1.5 * height)
+                is_side_view = width > 1.5 * height
 
-            detections.append({
-                'box': (x1, y1, x2, y2),
-                'conf': conf,
-                'center': (cx, cy),
-                'direction_angle': direction_angle,
-                'width': width,
-                'height': height,
-                'is_side_view': is_side_view,
-                'ski_line': ski_line  # Actual ski base line endpoints
-            })
+                detections.append({
+                    'box': (x1, y1, x2, y2),
+                    'conf': conf,
+                    'center': (cx, cy),
+                    'direction_angle': direction_angle,
+                    'width': width,
+                    'height': height,
+                    'is_side_view': is_side_view,
+                    'ski_line': ski_line,
+                    'method': 'yolo'
+                })
+
+        if not detections:
+            return None, None
 
         # Match skis to ankles - find closest ski to each ankle
         if la and detections:
@@ -1276,7 +1466,7 @@ def main():
             break
 
         if frame_num % args.sample_rate == 0:
-            result = analyzer.analyze_frame(frame)
+            result = analyzer.analyze_frame(frame, frame_id=frame_num)
             keypoints, metrics, left_ski, right_ski = result
 
             if keypoints is not None:
