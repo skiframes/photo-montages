@@ -264,13 +264,23 @@ class YOLOPoseAnalyzer:
         if right_hip and right_knee and right_ankle:
             knee_angle_right = angle_at_joint(right_hip[:2], right_knee[:2], right_ankle[:2])
 
-        # Edge angles
+        # Edge angles - use detected ski angle if available, otherwise fall back to leg angle
         edge_angle_left = 0.0
         edge_angle_right = 0.0
-        if left_knee and left_ankle:
+
+        if left_ski and 'angle' in left_ski:
+            # Use actual ski angle from detection
+            edge_angle_left = left_ski['angle'] - self.slope_angle_deg
+        elif left_knee and left_ankle:
+            # Fallback to leg angle
             leg_angle_left = angle_from_vertical(left_knee[:2], left_ankle[:2])
             edge_angle_left = leg_angle_left - self.slope_angle_deg
-        if right_knee and right_ankle:
+
+        if right_ski and 'angle' in right_ski:
+            # Use actual ski angle from detection
+            edge_angle_right = right_ski['angle'] - self.slope_angle_deg
+        elif right_knee and right_ankle:
+            # Fallback to leg angle
             leg_angle_right = angle_from_vertical(right_knee[:2], right_ankle[:2])
             edge_angle_right = leg_angle_right - self.slope_angle_deg
 
@@ -279,12 +289,22 @@ class YOLOPoseAnalyzer:
         edge_diff = abs(edge_angle_left - edge_angle_right)
         edge_symmetry_pct = max(0, 100 - (edge_diff / max_edge * 100))
 
-        # Fore/aft balance (tibia angle)
+        # Fore/aft balance - use detected ski position if available
         fore_aft_left = 0.0
         fore_aft_right = 0.0
-        if left_knee and left_ankle:
+
+        if left_ski and 'fore_aft' in left_ski:
+            # Convert pixel offset to angle approximation
+            # Positive fore_aft means ankle is ahead of ski center (forward lean)
+            # Scale to reasonable angle range (assume ~100px = ~10°)
+            fore_aft_left = left_ski['fore_aft'] / 10.0
+        elif left_knee and left_ankle:
+            # Fallback to tibia angle
             fore_aft_left = angle_from_vertical(left_ankle[:2], left_knee[:2]) - self.slope_angle_deg
-        if right_knee and right_ankle:
+
+        if right_ski and 'fore_aft' in right_ski:
+            fore_aft_right = right_ski['fore_aft'] / 10.0
+        elif right_knee and right_ankle:
             fore_aft_right = angle_from_vertical(right_ankle[:2], right_knee[:2]) - self.slope_angle_deg
 
         # Shoulder/Hip alignment as percentage (100% = parallel to fall line)
@@ -309,23 +329,28 @@ class YOLOPoseAnalyzer:
             confidence=round(avg_conf, 3)
         )
 
-    def analyze_frame(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[PoseMetrics]]:
+    def analyze_frame(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[PoseMetrics], Optional[dict], Optional[dict]]:
         results = self.model(frame, verbose=False)
 
         if len(results) == 0 or results[0].keypoints is None:
-            return None, None
+            return None, None, None, None
 
         keypoints = results[0].keypoints.data
         if len(keypoints) == 0:
-            return None, None
+            return None, None, None, None
 
         person_kpts = keypoints[0].cpu().numpy()
-        metrics = self.compute_metrics(person_kpts)
+
+        # Detect skis
+        left_ski, right_ski = self._detect_skis(frame, person_kpts)
+
+        # Compute metrics using ski detection data
+        metrics = self.compute_metrics(person_kpts, left_ski, right_ski)
 
         if metrics:
             self.history.add(metrics)
 
-        return person_kpts, metrics
+        return person_kpts, metrics, left_ski, right_ski
 
     def _detect_skis(self, frame: np.ndarray, keypoints: np.ndarray) -> Tuple[Optional[dict], Optional[dict]]:
         """Detect skis and match to ankles. Returns (left_ski, right_ski) dicts with box, angle, fore_aft."""
@@ -558,6 +583,8 @@ class YOLOPoseAnalyzer:
 
     def draw_overlay(self, frame: np.ndarray, keypoints: np.ndarray,
                      metrics: Optional[PoseMetrics] = None,
+                     left_ski: Optional[dict] = None,
+                     right_ski: Optional[dict] = None,
                      show_debug_angles: bool = True) -> np.ndarray:
         """Draw pose skeleton and metrics on frame."""
         output = frame.copy()
@@ -600,7 +627,7 @@ class YOLOPoseAnalyzer:
                 cv2.circle(output, pt, point_radius + 1, (255, 255, 255), 1)
 
         # Draw ski rectangles
-        output = self._draw_ski_rectangles(output, keypoints, scale)
+        output = self._draw_ski_rectangles(output, keypoints, scale, left_ski, right_ski)
 
         # Draw fall line from snow level
         output = self._draw_fall_line(output, keypoints, scale)
@@ -724,13 +751,14 @@ def main():
             break
 
         if frame_num % args.sample_rate == 0:
-            keypoints, metrics = analyzer.analyze_frame(frame)
+            result = analyzer.analyze_frame(frame)
+            keypoints, metrics, left_ski, right_ski = result
 
             if keypoints is not None:
                 poses_detected += 1
                 if metrics:
                     all_metrics.append(metrics)
-                annotated = analyzer.draw_overlay(frame, keypoints, metrics)
+                annotated = analyzer.draw_overlay(frame, keypoints, metrics, left_ski, right_ski)
                 if out_video:
                     out_video.write(annotated)
                 if args.output_frames:
