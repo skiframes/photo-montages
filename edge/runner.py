@@ -385,6 +385,7 @@ class SkiFramesRunner:
 
         if racer:
             print(f"  Matched to racer: Bib {racer.get('bib')} ({racer.get('team', 'no team')})")
+            print(f"  Matched so far: {len(self.matched_racer_indices)}/{len(self.vola_racers)} racers")
 
         # Get run duration for overlay display
         run_duration = run.duration if run.end_time else self.raw_config.get('run_duration_seconds')
@@ -740,12 +741,24 @@ class SkiFramesRunner:
         self.engine.run_on_video(video_path, video_start_time=video_start_time)
         self._print_summary()
 
+    def all_athletes_matched(self) -> bool:
+        """Check if all expected athletes have been matched."""
+        if not self.vola_racers:
+            return False
+        return len(self.matched_racer_indices) >= len(self.vola_racers)
+
     def run_on_videos(self, video_paths: List[str]):
         """Process multiple video files in sequence."""
         print(f"\nProcessing {len(video_paths)} videos...")
 
-        for video_path in video_paths:
-            print(f"\nProcessing video: {video_path}")
+        for i, video_path in enumerate(video_paths):
+            # Stop early if all athletes have been matched
+            if self.all_athletes_matched():
+                print(f"\n✅ All {len(self.vola_racers)} athletes matched — stopping early "
+                      f"(skipped {len(video_paths) - i} remaining videos)")
+                break
+
+            print(f"\nProcessing video {i+1}/{len(video_paths)}: {video_path}")
 
             # Get video FPS for montage generation
             import cv2
@@ -761,6 +774,10 @@ class SkiFramesRunner:
 
             # Pass video_start_time for accurate timestamp matching with Vola data
             self.engine.run_on_video(video_path, video_start_time=video_start_time)
+
+            # Check again after each video in case all matched mid-video
+            if self.all_athletes_matched():
+                print(f"\n✅ All {len(self.vola_racers)} athletes matched after video {i+1}")
 
         self._print_summary()
 

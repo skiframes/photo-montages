@@ -1753,6 +1753,7 @@
                 </div>
                 <div style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">
                     Runs detected: <span id="processingRuns">0</span>
+                    &nbsp;|&nbsp; Athletes matched: <span id="processingMatched">0</span>/<span id="processingTotalAthletes">0</span>
                 </div>
             </div>
         </div>
@@ -3523,6 +3524,11 @@
 
                     const newRuns = data.runs_detected || 0;
                     elements.processingRuns.textContent = newRuns;
+                    // Update matched athletes count
+                    const matched = data.matched_count || 0;
+                    const totalAth = data.total_athletes || 0;
+                    document.getElementById('processingMatched').textContent = matched;
+                    document.getElementById('processingTotalAthletes').textContent = totalAth;
                     // Refresh gallery when new runs detected
                     if (newRuns > 0 && state.mode === 'gallery') { loadGalleryMontages(); }
 
@@ -3531,13 +3537,13 @@
                         state.statusPollInterval = null;
                         state.currentJobId = null;
                         resetProcessingUI();
-                        showStatus(`Processing complete! ${data.runs_detected} runs detected. Output: ${data.output_dir}`, 'success');
+                        showStatus(`Processing complete! ${data.runs_detected} runs, ${matched}/${totalAth} athletes matched.`, 'success');
                     } else if (data.status === 'stopped') {
                         clearInterval(state.statusPollInterval);
                         state.statusPollInterval = null;
                         state.currentJobId = null;
                         resetProcessingUI();
-                        showStatus(`Processing stopped. ${data.runs_detected} runs detected before stopping.`, 'info');
+                        showStatus(`Processing stopped. ${data.runs_detected} runs, ${matched}/${totalAth} athletes matched.`, 'info');
                     } else if (data.status === 'failed') {
                         clearInterval(state.statusPollInterval);
                         state.statusPollInterval = null;

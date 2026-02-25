@@ -1987,7 +1987,15 @@ def process_video():
                         else:
                             active_jobs[job_id]['status'] = 'failed'
                             active_jobs[job_id]['error'] = stderr_output or f'Exit code: {process.returncode}'
-                        print(f"[DEBUG] Job {job_id} finished with status: {active_jobs[job_id]['status']}")
+                        _end_status = active_jobs[job_id]['status']
+                        _started = active_jobs[job_id].get('started_at', '')
+                        print(f"\n{'='*70}")
+                        print(f"[JOB END] Job {job_id} — {_end_status}")
+                        print(f"  Started:  {_started}")
+                        print(f"  Finished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                        if _end_status == 'failed':
+                            print(f"  Error:    {active_jobs[job_id].get('error', 'unknown')}")
+                        print(f"{'='*70}")
             except Exception as e:
                 print(f"[DEBUG] Exception in collect_output: {e}")
                 with jobs_lock:
@@ -2121,6 +2129,8 @@ def process_status(job_id):
 
         # Parse output for progress info
         runs_detected = 0
+        matched_count = 0
+        total_athletes = 0
         output_dir = ''
         for line in output.split('\n'):
             # Count completed runs in real-time from "[RUN X] Completed" messages
@@ -2130,6 +2140,14 @@ def process_status(job_id):
             if 'Runs detected:' in line:
                 try:
                     runs_detected = int(line.split(':')[1].strip())
+                except:
+                    pass
+            # Parse "Matched so far: X/Y racers"
+            if 'Matched so far:' in line:
+                try:
+                    parts = line.split('Matched so far:')[1].strip().split('/')
+                    matched_count = int(parts[0])
+                    total_athletes = int(parts[1].split()[0])
                 except:
                     pass
             if 'Output directory:' in line:
@@ -2155,11 +2173,13 @@ def process_status(job_id):
             'job_id': job_id,
             'status': actual_status,
             'runs_detected': runs_detected,
+            'matched_count': matched_count,
+            'total_athletes': total_athletes,
             'output_dir': output_dir,
             'output': output,
             'error': job.get('error', ''),
         }
-        print(f"[DEBUG] Status for {job_id}: status={actual_status}, runs={runs_detected}")
+        print(f"[DEBUG] Status for {job_id}: status={actual_status}, runs={runs_detected}, matched={matched_count}/{total_athletes}")
         return jsonify(response)
 
 
@@ -2569,7 +2589,10 @@ def populate_manifest_with_montages():
                 #   Old:          {bib}_{fps}fps.jpg                (no prefix)
                 #   Unmatched:    unmatched_{ts}[_{det_id}]_{fps}fps.jpg
                 detection_variants = {}  # (gender_char, bib, det_id) -> list of {fps, filename}
-                for img_file in sorted(run_dir.glob('*.jpg')):
+                # Scan for full-res images: check both run_dir/*.jpg and run_dir/fullres/*.jpg
+                fullres_dir = run_dir / 'fullres'
+                scan_dir = fullres_dir if fullres_dir.is_dir() else run_dir
+                for img_file in sorted(scan_dir.glob('*.jpg')):
                     filename = img_file.stem  # e.g., "g10_d001_5.0fps" or "g4_4.0fps"
 
                     # Skip thumbnails and unmatched
@@ -2623,11 +2646,19 @@ def populate_manifest_with_montages():
                     default_variant = variants[len(variants) // 2]
                     default_filename = default_variant['filename']
 
-                    # Build paths
-                    full_path = f"{cam_id}/{run_key}/{default_filename}.jpg"
-                    thumb_name = f"{default_filename}_thumb.jpg"
-                    thumb_file = run_dir / thumb_name
-                    thumb_path = f"{cam_id}/{run_key}/{thumb_name}" if thumb_file.exists() else full_path
+                    # Build paths (handle both flat and fullres/thumbnails subdirectory layouts)
+                    has_subdirs = fullres_dir.is_dir()
+                    thumb_dir = run_dir / 'thumbnails'
+                    if has_subdirs:
+                        full_path = f"{cam_id}/{run_key}/fullres/{default_filename}.jpg"
+                        thumb_name = f"{default_filename}_thumb.jpg"
+                        thumb_file = thumb_dir / thumb_name
+                        thumb_path = f"{cam_id}/{run_key}/thumbnails/{thumb_name}" if thumb_file.exists() else full_path
+                    else:
+                        full_path = f"{cam_id}/{run_key}/{default_filename}.jpg"
+                        thumb_name = f"{default_filename}_thumb.jpg"
+                        thumb_file = run_dir / thumb_name
+                        thumb_path = f"{cam_id}/{run_key}/{thumb_name}" if thumb_file.exists() else full_path
 
                     # Get timing from det_timing or legacy
                     gender_code = 'F' if gender_char == 'g' else 'M' if gender_char == 'b' else ''
@@ -2645,10 +2676,16 @@ def populate_manifest_with_montages():
                     fps_variants = []
                     for v in variants:
                         vf = v['filename']
-                        v_full = f"{cam_id}/{run_key}/{vf}.jpg"
-                        v_thumb_name = f"{vf}_thumb.jpg"
-                        v_thumb_file = run_dir / v_thumb_name
-                        v_thumb = f"{cam_id}/{run_key}/{v_thumb_name}" if v_thumb_file.exists() else v_full
+                        if has_subdirs:
+                            v_full = f"{cam_id}/{run_key}/fullres/{vf}.jpg"
+                            v_thumb_name = f"{vf}_thumb.jpg"
+                            v_thumb_file = thumb_dir / v_thumb_name
+                            v_thumb = f"{cam_id}/{run_key}/thumbnails/{v_thumb_name}" if v_thumb_file.exists() else v_full
+                        else:
+                            v_full = f"{cam_id}/{run_key}/{vf}.jpg"
+                            v_thumb_name = f"{vf}_thumb.jpg"
+                            v_thumb_file = run_dir / v_thumb_name
+                            v_thumb = f"{cam_id}/{run_key}/{v_thumb_name}" if v_thumb_file.exists() else v_full
                         fps_variants.append({
                             'fps': v['fps'],
                             'thumb': v_thumb,
