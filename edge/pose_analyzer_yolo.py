@@ -1017,12 +1017,16 @@ class YOLOPoseAnalyzer:
         return left_ski, right_ski
 
     def _draw_ski_rectangles(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
-                              left_ski: Optional[dict] = None, right_ski: Optional[dict] = None) -> np.ndarray:
-        """Draw ski detections with ski base lines."""
+                              left_ski: Optional[dict] = None, right_ski: Optional[dict] = None,
+                              metrics: Optional[PoseMetrics] = None) -> np.ndarray:
+        """Draw ski detections with ski base lines and metrics labels above each ski."""
         output = frame.copy()
         thickness = max(2, int(3 * scale))
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5 * scale
+        text_thickness = max(1, int(2 * scale))
 
-        # Draw left ski
+        # Draw left ski with metrics
         if left_ski:
             x1, y1, x2, y2 = left_ski['box']
             # Draw bounding box (orange, thin)
@@ -1034,7 +1038,19 @@ class YOLOPoseAnalyzer:
                 # White outline for visibility
                 cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
 
-        # Draw right ski
+            # Draw metrics label above left ski
+            if metrics:
+                edge_l = abs(metrics.edge_angle_left)
+                label = f"L:{edge_l:.0f}"
+                if metrics.fore_aft_left is not None:
+                    fa = 90 + metrics.fore_aft_left
+                    label += f" F/A:{fa:.0f}"
+                label_pos = (int(x1), int(y1) - int(10 * scale))
+                # Black outline for visibility
+                cv2.putText(output, label, label_pos, font, font_scale, (0, 0, 0), text_thickness + 2, cv2.LINE_AA)
+                cv2.putText(output, label, label_pos, font, font_scale, (0, 165, 255), text_thickness, cv2.LINE_AA)
+
+        # Draw right ski with metrics
         if right_ski:
             x1, y1, x2, y2 = right_ski['box']
             # Draw bounding box (blue, thin)
@@ -1045,6 +1061,18 @@ class YOLOPoseAnalyzer:
                 cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
                 # White outline for visibility
                 cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
+
+            # Draw metrics label above right ski
+            if metrics:
+                edge_r = abs(metrics.edge_angle_right)
+                label = f"R:{edge_r:.0f}"
+                if metrics.fore_aft_right is not None:
+                    fa = 90 + metrics.fore_aft_right
+                    label += f" F/A:{fa:.0f}"
+                label_pos = (int(x1), int(y1) - int(10 * scale))
+                # Black outline for visibility
+                cv2.putText(output, label, label_pos, font, font_scale, (0, 0, 0), text_thickness + 2, cv2.LINE_AA)
+                cv2.putText(output, label, label_pos, font, font_scale, (255, 150, 50), text_thickness, cv2.LINE_AA)
 
         return output
 
@@ -1330,8 +1358,8 @@ class YOLOPoseAnalyzer:
                 cv2.circle(output, pt, point_radius, color, -1)
                 cv2.circle(output, pt, point_radius + 1, (255, 255, 255), 1)
 
-        # Draw ski rectangles
-        output = self._draw_ski_rectangles(output, keypoints, scale, left_ski, right_ski)
+        # Draw ski rectangles with metrics labels
+        output = self._draw_ski_rectangles(output, keypoints, scale, left_ski, right_ski, metrics)
 
         # Draw slope line (dotted, perpendicular to fall line)
         output = self._draw_slope_line(output, keypoints, scale)
@@ -1363,24 +1391,33 @@ class YOLOPoseAnalyzer:
                 elif pct >= 50: return (0, 255, 255)  # Yellow
                 else: return (0, 165, 255)  # Orange
 
-            # Two-line layout for clearer labels
-            # Line 1: Body angles
+            # Two-line layout - no +/- signs, use absolute values
+            # Line 1: Edge/ski angles (most important for technique)
+            edge_l = abs(metrics.edge_angle_left)
+            edge_r = abs(metrics.edge_angle_right)
             line1_parts = [
-                (f"Shoulders/Slope:{metrics.shoulder_angle_to_slope:+.0f}", (255, 0, 255)),  # Magenta
-                (f"Hip/Slope:{metrics.hip_angle_to_slope:+.0f}", (255, 255, 0)),  # Cyan
-                (f"Angulation:{metrics.body_angulation:.0f}", (0, 255, 255)),
-                (f"Inclination:{metrics.body_inclination:+.0f}", (255, 180, 100)),
-            ]
-            # Line 2: Ski angles
-            line2_parts = [
-                (f"Ski/Slope: L{metrics.edge_angle_left:+.0f} R{metrics.edge_angle_right:+.0f}", (100, 255, 255)),
+                (f"Edge angles: L{edge_l:.0f} R{edge_r:.0f}", (100, 255, 255)),
                 (f"Sym:{metrics.edge_symmetry_pct:.0f}%", pct_color(metrics.edge_symmetry_pct)),
             ]
-            # Fore/aft is tibia angle relative to ski direction (boots have ~130deg forward lean)
+            # Fore/aft shows actual boot angle (90° + deviation = angle from ski base)
             if metrics.fore_aft_left is not None or metrics.fore_aft_right is not None:
-                fa_l = f"{metrics.fore_aft_left:+.0f}" if metrics.fore_aft_left is not None else "--"
-                fa_r = f"{metrics.fore_aft_right:+.0f}" if metrics.fore_aft_right is not None else "--"
-                line2_parts.append((f"Tibia/Ski: L{fa_l} R{fa_r}", (255, 200, 100)))
+                # Convert from deviation to actual angle (perpendicular = 90°)
+                fa_l = f"{90 + metrics.fore_aft_left:.0f}" if metrics.fore_aft_left is not None else "--"
+                fa_r = f"{90 + metrics.fore_aft_right:.0f}" if metrics.fore_aft_right is not None else "--"
+                line1_parts.append((f"Fore/Aft: L{fa_l} R{fa_r}", (255, 200, 100)))
+
+            # Line 2: Body angles + slope gradient
+            sh = abs(metrics.shoulder_angle_to_slope)
+            hip = abs(metrics.hip_angle_to_slope)
+            ang = abs(metrics.body_angulation)
+            incl = abs(metrics.body_inclination)
+            line2_parts = [
+                (f"Shoulders/Slope:{sh:.0f}", (255, 0, 255)),  # Magenta
+                (f"Hip/Slope:{hip:.0f}", (255, 255, 0)),  # Cyan
+                (f"Angulation:{ang:.0f}", (0, 255, 255)),
+                (f"Inclination:{incl:.0f}", (255, 180, 100)),
+                (f"Slope:{abs(self.pitch_deg):.0f}", (0, 200, 255)),  # Orange - slope gradient
+            ]
 
             # Draw line 1 (body angles)
             x = margin
