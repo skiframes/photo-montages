@@ -502,35 +502,126 @@ def draw_pose_overlay(frame: np.ndarray, keypoints: dict, metrics: PoseMetrics =
 # Example usage and testing
 if __name__ == '__main__':
     import sys
+    import argparse
 
-    if len(sys.argv) < 2:
-        print("Usage: python pose_analyzer.py <video_path> [slope_angle_deg]")
-        print("  Example: python pose_analyzer.py run_001.mp4 25")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='Analyze ski racing video for body position metrics')
+    parser.add_argument('video_path', help='Path to video file')
+    parser.add_argument('slope_angle', nargs='?', type=float, default=0.0, help='Slope angle in degrees (default: 0)')
+    parser.add_argument('--output-frames', '-o', metavar='DIR', help='Save annotated frames to directory')
+    parser.add_argument('--output-video', '-v', metavar='FILE', help='Save annotated video to file')
+    parser.add_argument('--sample-rate', '-s', type=int, default=3, help='Analyze every Nth frame (default: 3)')
+    parser.add_argument('--all-frames', '-a', action='store_true', help='Save all frames, not just those with pose detected')
 
-    video_path = sys.argv[1]
-    slope_angle = float(sys.argv[2]) if len(sys.argv) > 2 else 0.0
+    args = parser.parse_args()
+
+    video_path = args.video_path
+    slope_angle = args.slope_angle
+    output_frames_dir = args.output_frames
+    output_video_path = args.output_video
+    sample_rate = args.sample_rate
+    save_all_frames = args.all_frames
 
     print(f"Analyzing video: {video_path}")
     print(f"Slope angle: {slope_angle}°")
 
+    # Create output directory if needed
+    if output_frames_dir:
+        output_dir = Path(output_frames_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Saving annotated frames to: {output_dir}")
+
     analyzer = PoseAnalyzer(slope_angle_deg=slope_angle)
 
-    def progress(current, total):
-        pct = current / total * 100
-        print(f"\rProgress: {pct:.1f}% ({current}/{total})", end='', flush=True)
+    # For saving frames/video, we need to process differently
+    if output_frames_dir or output_video_path:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Error: Cannot open video {video_path}")
+            sys.exit(1)
 
-    result = analyzer.analyze_video(video_path, sample_rate=3, progress_callback=progress)
-    print()
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    print(f"\nResults:")
-    print(f"  Total frames: {result.total_frames}")
-    print(f"  Analyzed frames: {result.analyzed_frames}")
-    print(f"  Frames with pose detected: {result.summary['frames_with_pose']}")
-    print(f"  Detection rate: {result.summary['detection_rate']:.0%}")
-    print()
-    print(f"Summary (averages):")
-    print(f"  Shoulder angle to slope: {result.summary['avg_shoulder_angle']}°")
-    print(f"  Hip angle to slope: {result.summary['avg_hip_angle']}°")
-    print(f"  Body angulation: {result.summary['avg_angulation']}°")
-    print(f"  Body inclination: {result.summary['avg_inclination']}°")
+        # Setup video writer if needed
+        video_writer = None
+        if output_video_path:
+            fourcc = cv2.VideoWriter_fourcc(*'avc1')  # H.264 codec for macOS
+            video_writer = cv2.VideoWriter(output_video_path, fourcc, fps / sample_rate, (width, height))
+            if not video_writer.isOpened():
+                print(f"Warning: Could not open video writer with avc1, trying MJPG")
+                output_video_path = output_video_path.replace('.mp4', '.avi')
+                fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+                video_writer = cv2.VideoWriter(output_video_path, fourcc, fps / sample_rate, (width, height))
+            print(f"Saving annotated video to: {output_video_path}")
+
+        frame_num = 0
+        saved_count = 0
+        pose_count = 0
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            if frame_num % sample_rate == 0:
+                timestamp_sec = frame_num / fps if fps > 0 else 0.0
+                analysis = analyzer.analyze_frame(frame)
+
+                # Draw overlay if pose detected or saving all frames
+                if analysis.pose_detected or save_all_frames:
+                    if analysis.pose_detected and analysis.keypoints:
+                        annotated = draw_pose_overlay(frame, analysis.keypoints, analysis.metrics)
+                        pose_count += 1
+                    else:
+                        annotated = frame.copy()
+                        # Add "No pose detected" text
+                        cv2.putText(annotated, "No pose detected", (10, 30),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+                    # Add frame info
+                    cv2.putText(annotated, f"Frame {frame_num} | {timestamp_sec:.2f}s",
+                                (10, height - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+                    # Save frame image
+                    if output_frames_dir:
+                        frame_path = output_dir / f"frame_{frame_num:05d}.jpg"
+                        cv2.imwrite(str(frame_path), annotated)
+                        saved_count += 1
+
+                    # Write to video
+                    if video_writer:
+                        video_writer.write(annotated)
+
+                pct = (frame_num + 1) / total_frames * 100
+                print(f"\rProgress: {pct:.1f}% | Saved: {saved_count} | Poses: {pose_count}", end='', flush=True)
+
+            frame_num += 1
+
+        cap.release()
+        if video_writer:
+            video_writer.release()
+
+        print(f"\n\nDone! Saved {saved_count} annotated frames, {pose_count} with pose detected.")
+
+    else:
+        # Standard analysis without saving frames
+        def progress(current, total):
+            pct = current / total * 100
+            print(f"\rProgress: {pct:.1f}% ({current}/{total})", end='', flush=True)
+
+        result = analyzer.analyze_video(video_path, sample_rate=sample_rate, progress_callback=progress)
+        print()
+
+        print(f"\nResults:")
+        print(f"  Total frames: {result.total_frames}")
+        print(f"  Analyzed frames: {result.analyzed_frames}")
+        print(f"  Frames with pose detected: {result.summary['frames_with_pose']}")
+        print(f"  Detection rate: {result.summary['detection_rate']:.0%}")
+        print()
+        print(f"Summary (averages):")
+        print(f"  Shoulder angle to slope: {result.summary['avg_shoulder_angle']}°")
+        print(f"  Hip angle to slope: {result.summary['avg_hip_angle']}°")
+        print(f"  Body angulation: {result.summary['avg_angulation']}°")
+        print(f"  Body inclination: {result.summary['avg_inclination']}°")

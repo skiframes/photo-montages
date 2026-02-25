@@ -44,18 +44,9 @@ def _detect_encoder() -> str:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
-    # Check for macOS VideoToolbox
-    if platform.system() == 'Darwin':
-        try:
-            result = subprocess.run(
-                ['ffmpeg', '-hide_banner', '-encoders'],
-                capture_output=True, text=True, timeout=5
-            )
-            if 'h264_videotoolbox' in result.stdout:
-                logger.info("Using h264_videotoolbox encoder")
-                return 'h264_videotoolbox'
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
+    # Skip macOS VideoToolbox for stdin-piped raw frames — it crashes with
+    # BrokenPipeError. VideoToolbox works for file-to-file encoding but not
+    # for raw frame piping. Use libx264 instead (CPU, reliable).
 
     # Fallback to CPU encoder
     logger.info("Using libx264 encoder (CPU)")

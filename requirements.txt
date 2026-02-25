@@ -6,3 +6,5 @@ python-dotenv>=1.0.0
 huggingface-hub>=0.16.0,<0.28.0
 sentence-transformers>=2.2.0,<3.0.0
 Pillow>=9.0.0
+# Optional: trajectory (TR) feature - falls back to motion detection without it
+# ultralytics>=8.0.0

@@ -174,7 +174,8 @@ def resize_for_thumbnail(image: np.ndarray, max_width: int = 800) -> np.ndarray:
 def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str = "",
                 duration_sec: Optional[float] = None, race_title: str = "",
                 race_info: Optional[Dict] = None, source_fps: float = 30.0,
-                elapsed_time: Optional[float] = None) -> np.ndarray:
+                elapsed_time: Optional[float] = None,
+                selected_logos: Optional[List[str]] = None) -> np.ndarray:
     """Add overlay with race info and capture details.
 
     Top-left: Elapsed time (e.g. "4.23s") if available
@@ -265,7 +266,7 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
     cv2.putText(img, line2, (w - line2_w - padding, y_line2), font, font_scale, (50, 50, 50), thickness)
 
     # Add logos at bottom-left
-    img = add_logos(img)
+    img = add_logos(img, selected_logos=selected_logos)
 
     # Add elapsed time overlay at top-left
     if elapsed_time is not None:
@@ -290,14 +291,20 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
     return img
 
 
-def add_logos(image: np.ndarray) -> np.ndarray:
-    """Add sponsor logos at bottom-left corner."""
+def add_logos(image: np.ndarray, selected_logos: Optional[List[str]] = None) -> np.ndarray:
+    """Add sponsor logos at bottom-left corner.
+
+    Args:
+        image: The image to add logos to.
+        selected_logos: Optional list of logo filenames in order (e.g., ['NHARA_logo.png', 'RMST_logo.png']).
+                       If None, uses default logos.
+    """
     img = image.copy()
     h, w = img.shape[:2]
 
     # Logo directory
     logo_dir = Path(__file__).parent.parent / 'logos'
-    logo_files = ['RMST_logo.png', 'Ragged_logo.png', 'Skiframes-com_logo.png']
+    logo_files = selected_logos if selected_logos else ['RMST_logo.png', 'Ragged_logo.png', 'Skiframes-com_logo.png']
 
     # Target logo height - scale with image size (roughly 6% of image height)
     logo_height = int(h * 0.06)
@@ -356,6 +363,7 @@ class MontageResultPair:
     elapsed_time: Optional[float] = None  # Seconds from start to end trigger zone
     embedding: Optional[list] = None  # 512-dim CLIP embedding for athlete re-identification
     video_clip_path: Optional[str] = None  # Path to MP4 video clip of this run
+    trajectory_path: Optional[str] = None  # Path to trajectory (TR) overlay video
 
 
 def generate_montage(frames: List[np.ndarray],
@@ -378,7 +386,8 @@ def generate_montage(frames: List[np.ndarray],
                      run_duration_sec: Optional[float] = None,
                      race_title: str = "",
                      race_info: Optional[Dict] = None,
-                     elapsed_time: Optional[float] = None) -> Optional[MontageResultPair]:
+                     elapsed_time: Optional[float] = None,
+                     selected_logos: Optional[List[str]] = None) -> Optional[MontageResultPair]:
     """
     Generate A and B montage pairs from run frames.
 
@@ -460,7 +469,7 @@ def generate_montage(frames: List[np.ndarray],
 
         # Add branding overlay with variant label and race title/info
         if add_branding:
-            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title, race_info, source_fps=source_fps, elapsed_time=elapsed_time)
+            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title, race_info, source_fps=source_fps, elapsed_time=elapsed_time, selected_logos=selected_logos)
 
         # Output paths - use file_suffix for naming, include FPS in filename
         fps_tag = f"_{montage_fps:.1f}fps"

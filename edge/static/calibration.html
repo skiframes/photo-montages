@@ -419,6 +419,26 @@
             text-overflow: ellipsis;
         }
 
+        .montage-thumb .montage-tr-badge {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            background: #f59e0b;
+            color: #000;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            z-index: 2;
+            letter-spacing: 0.5px;
+        }
+
+        .montage-thumb .montage-tr-badge:hover {
+            background: #fbbf24;
+            transform: scale(1.1);
+        }
+
         /* Montage fullscreen overlay */
         .montage-overlay {
             display: none;
@@ -436,6 +456,60 @@
 
         .montage-overlay.visible {
             display: flex;
+        }
+
+        /* Trajectory video overlay */
+        .trajectory-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 10001;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .trajectory-overlay.visible {
+            display: flex;
+        }
+
+        .trajectory-overlay video {
+            max-width: 95vw;
+            max-height: 85vh;
+            border-radius: 8px;
+        }
+
+        .trajectory-overlay .tr-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.15);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .trajectory-overlay .tr-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .trajectory-overlay .tr-label {
+            color: #f59e0b;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
         }
 
         .montage-overlay img {
@@ -1408,8 +1482,8 @@
             </div>
 
             <div id="videoSelect" style="display: none;">
-                <label for="videoDropdown">Select Video</label>
-                <select id="videoDropdown">
+                <!-- Video dropdown hidden — populated automatically by Load Race Videos -->
+                <select id="videoDropdown" style="display: none;">
                     <option value="">Loading videos...</option>
                 </select>
                 <div id="videoInfo" style="display: none;">
@@ -1422,11 +1496,17 @@
                 <div id="volaSelect" style="margin-top: 16px; padding: 12px; background: #f0f9ff; border-radius: 8px; border: 1px solid #bfdbfe;">
                     <label style="font-weight: 600; color: #1e40af; margin-bottom: 8px; display: block;">Race Timing (Vola)</label>
 
-                    <label for="volaFile" style="font-size: 13px;">Vola Timing File (CSV)</label>
-                    <select id="volaFile">
-                        <option value="">-- None (manual detection) --</option>
+                    <label for="volaRaceDate" style="font-size: 13px;">Race Date</label>
+                    <select id="volaRaceDate">
+                        <option value="">Loading dates...</option>
                     </select>
-                    <div class="help-text">Select CSV file for the specific run (e.g., girls-run1.csv)</div>
+                    <div class="help-text">Select the race date (boys + girls combined)</div>
+
+                    <label style="margin-top: 8px; font-size: 13px;">Run</label>
+                    <div id="volaRunToggle" style="display: flex; gap: 0; margin-top: 2px;">
+                        <button id="volaRun1" class="btn btn-sm" style="flex: 1; border-radius: 6px 0 0 6px; background: #2563eb; color: white; border: 1px solid #2563eb; font-weight: 600;">Run 1</button>
+                        <button id="volaRun2" class="btn btn-sm" style="flex: 1; border-radius: 0 6px 6px 0; background: white; color: #2563eb; border: 1px solid #2563eb; font-weight: 500;">Run 2</button>
+                    </div>
 
                     <label for="volaCamera" style="margin-top: 8px; font-size: 13px;">Camera Position</label>
                     <select id="volaCamera">
@@ -1443,17 +1523,13 @@
                     </div>
                     <div class="help-text">For filename: Name_bib_runX_ViewY</div>
 
-                    <label for="raceDate" style="margin-top: 8px; font-size: 13px;">Race Date</label>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <input type="date" id="raceDate" style="flex: 1;">
-                        <button id="loadRecordingDates" class="btn btn-outline btn-sm" style="white-space: nowrap; padding: 4px 8px; font-size: 11px;" title="Show dates with available recordings">Available dates</button>
-                    </div>
-                    <div class="help-text">Auto-detected from Vola file path. Override to select a different day's recordings.</div>
+                    <!-- Hidden date input for manual override / recording dates lookup -->
+                    <input type="hidden" id="raceDate">
                     <div id="availableDates" style="display: none; margin-top: 4px; padding: 6px; background: white; border-radius: 4px; font-size: 12px;"></div>
 
-                    <label for="numAthletes" style="margin-top: 8px; font-size: 13px;">Number of Athletes</label>
-                    <input type="number" id="numAthletes" min="0" max="100" value="5" style="width: 80px;">
-                    <div class="help-text">Athletes to process (0 or blank = all)</div>
+                    <label for="numAthletes" style="margin-top: 10px; font-size: 13px;">Max Athletes to Process</label>
+                    <input type="number" id="numAthletes" min="0" max="200" value="10" style="width: 80px;">
+                    <div class="help-text">0 = process all athletes</div>
 
                     <button id="loadVolaData" class="btn btn-outline btn-sm" style="margin-top: 10px;">
                         Load Race Videos
@@ -1474,6 +1550,15 @@
                         Update Race Manifest
                     </button>
                     <div id="populateManifestResult" style="display: none; margin-top: 8px; padding: 8px; background: #ecfdf5; border: 1px solid #86efac; border-radius: 6px; font-size: 12px;">
+                    </div>
+
+                    <!-- Logo Selection for montage mode -->
+                    <div style="margin-top: 12px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                        <div style="font-weight: 600; margin-bottom: 8px; color: #334155;">Logo Selection</div>
+                        <div class="help-text" style="margin-bottom: 8px;">Drag to reorder. Uncheck to hide.</div>
+                        <div id="montageLogoList" style="display: flex; flex-direction: column; gap: 4px;">
+                            <!-- Logos will be populated dynamically by renderLogoList() -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1609,23 +1694,13 @@
             </div>
         </div>
 
-        <!-- Output Destination -->
+        <!-- Output path display (always uses staging) -->
         <div id="outputDestSection" class="card" style="display: none;">
-            <div class="card-title">Output Destination</div>
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
-                <input type="checkbox" id="outputToStaging" checked style="width: 18px; height: 18px;">
-                <span style="font-size: 14px; font-weight: 600;">Save to race staging folder</span>
-            </label>
+            <div class="card-title">Output</div>
             <div id="outputStagingDetails" style="padding: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 12px;">
                 <div id="outputStagingPath" style="font-family: monospace; color: #16a34a;">
-                    /Volumes/OWC_48/data/montages/...
+                    /tmp/montages/...
                 </div>
-                <div id="outputStagingWarning" style="color: #dc2626; margin-top: 4px; display: none;">
-                    Section info missing — select Vola file and camera first
-                </div>
-            </div>
-            <div id="outputDefaultDetails" style="padding: 8px; background: #fef9c3; border: 1px solid #fde68a; border-radius: 6px; font-size: 12px; display: none;">
-                <span style="color: #92400e;">Output goes to: <code>edge/output/</code> (local, not staged for website)</span>
             </div>
         </div>
 
@@ -1634,6 +1709,39 @@
             <button id="saveConfig" class="btn btn-success">
                 Start Live Session
             </button>
+        </div>
+
+        <!-- Batch Processing (Local vs Remote Server) -->
+        <div id="montageBatchCard" class="card" style="display: none;">
+            <div class="card-title">Batch Processing</div>
+
+            <label for="montageProcessLocation">Processing Location</label>
+            <select id="montageProcessLocation" style="margin-bottom: 12px;">
+                <option value="local" selected>Local (this machine)</option>
+                <option value="server">Remote Server (4T - Tesla GPU)</option>
+            </select>
+
+            <div id="montageLocalControls">
+                <p style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">
+                    Use the "Process Video" button above to process locally.
+                </p>
+            </div>
+
+            <div id="montageServerControls" style="display: none;">
+                <p style="color: #6b7280; font-size: 14px; margin-bottom: 12px;">
+                    Generate command to run batch montage processing on Tesla GPU server (4T). Copy and paste into terminal.
+                </p>
+                <button id="montageGenerateCommand" class="btn btn-primary" style="font-size: 16px; padding: 14px;">
+                    Generate Server Command
+                </button>
+                <div id="montageServerCommandOutput" style="display: none; margin-top: 12px;">
+                    <label>SSH Command (copy this):</label>
+                    <textarea id="montageServerCommandText" readonly style="width: 100%; height: 80px; font-family: monospace; font-size: 12px; background: #1e293b; color: #22c55e; padding: 10px; border-radius: 6px; border: none;"></textarea>
+                    <button id="montageCopyServerCommand" class="btn" style="margin-top: 8px; background: #475569; color: white;">
+                        Copy to Clipboard
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Processing Status -->
@@ -1674,6 +1782,15 @@
     <!-- Montage Fullscreen Overlay -->
     <div class="montage-overlay" id="montageOverlay">
         <img id="montageOverlayImg" src="">
+    </div>
+
+    <!-- Trajectory Video Overlay -->
+    <div class="trajectory-overlay" id="trajectoryOverlay">
+        <button class="tr-close" id="trajectoryClose">&times;</button>
+        <div class="tr-label">Trajectory (TR)</div>
+        <video id="trajectoryVideo" controls autoplay loop playsinline>
+            <source id="trajectoryVideoSrc" src="" type="video/mp4">
+        </video>
     </div>
 
     <!-- Drawing Indicator -->
@@ -1738,7 +1855,7 @@
             stitchPollInterval: null,
             volaRace: '',  // Deprecated - race determined by CSV filename
             volaCamera: '',  // Selected camera for Vola timing
-            numAthletes: 5,  // Number of athletes to process (0 = all)
+            selectedRun: 'run1',  // Selected run number (run1 or run2)
             raceDate: '',  // Date extracted from Vola file
             // Section/staging info (from race_manifest.json)
             sectionId: '',       // e.g., "Cam1" - website camera ID
@@ -1817,11 +1934,8 @@
             saveSection: document.getElementById('saveSection'),
             saveConfig: document.getElementById('saveConfig'),
             outputDestSection: document.getElementById('outputDestSection'),
-            outputToStaging: document.getElementById('outputToStaging'),
             outputStagingDetails: document.getElementById('outputStagingDetails'),
             outputStagingPath: document.getElementById('outputStagingPath'),
-            outputStagingWarning: document.getElementById('outputStagingWarning'),
-            outputDefaultDetails: document.getElementById('outputDefaultDetails'),
             status: document.getElementById('status'),
             calibrationBadge: document.getElementById('calibrationBadge'),
             calibrationBadgeInfo: document.getElementById('calibrationBadgeInfo'),
@@ -1844,8 +1958,11 @@
             processingStatusText: document.getElementById('processingStatusText'),
             processingRuns: document.getElementById('processingRuns'),
             // Vola elements
+            numAthletes: document.getElementById('numAthletes'),
             volaSelect: document.getElementById('volaSelect'),
-            volaFile: document.getElementById('volaFile'),
+            volaRaceDate: document.getElementById('volaRaceDate'),
+            volaRun1: document.getElementById('volaRun1'),
+            volaRun2: document.getElementById('volaRun2'),
             volaCamera: document.getElementById('volaCamera'),
             volaCameraOffsetInfo: document.getElementById('volaCameraOffsetInfo'),
             volaSectionInfo: document.getElementById('volaSectionInfo'),
@@ -1862,9 +1979,7 @@
             populateManifestResult: document.getElementById('populateManifestResult'),
             cameraOffsetInfo: document.getElementById('cameraOffsetInfo'),
             cameraOffsetPct: document.getElementById('cameraOffsetPct'),
-            numAthletes: document.getElementById('numAthletes'),
             raceDate: document.getElementById('raceDate'),
-            loadRecordingDates: document.getElementById('loadRecordingDates'),
             availableDates: document.getElementById('availableDates'),
             volaVideoCount: document.getElementById('volaVideoCount'),
             volaTimeRange: document.getElementById('volaTimeRange'),
@@ -1897,6 +2012,16 @@
             raceInfoGates: document.getElementById('raceInfoGates'),
             raceInfoSnow: document.getElementById('raceInfoSnow'),
             logoList: document.getElementById('logoList'),
+            montageLogoList: document.getElementById('montageLogoList'),
+            // Montage batch processing
+            montageBatchCard: document.getElementById('montageBatchCard'),
+            montageProcessLocation: document.getElementById('montageProcessLocation'),
+            montageLocalControls: document.getElementById('montageLocalControls'),
+            montageServerControls: document.getElementById('montageServerControls'),
+            montageGenerateCommand: document.getElementById('montageGenerateCommand'),
+            montageServerCommandOutput: document.getElementById('montageServerCommandOutput'),
+            montageServerCommandText: document.getElementById('montageServerCommandText'),
+            montageCopyServerCommand: document.getElementById('montageCopyServerCommand'),
             stitchGenerateComparison: document.getElementById('stitchGenerateComparison'),
             stitchTestCount: document.getElementById('stitchTestCount'),
             stitchPreBuffer: document.getElementById('stitchPreBuffer'),
@@ -1946,8 +2071,7 @@
         // Initialize
         async function init() {
             await loadCameras();
-            await loadVideos();
-            await loadVolaFiles();
+            await loadVolaDates();
             setDefaultEndTime();
             setupEventListeners();
             // Set initial end mode (hides END zone button if in duration mode)
@@ -2045,16 +2169,16 @@
 
         async function updateSectionInfo() {
             // Fetch camera→section mapping from race_manifest.json
-            const volaFile = elements.volaFile.value;
+            const raceDate = elements.volaRaceDate.value;
             const cameraId = elements.volaCamera.value;
 
-            if (!volaFile || !cameraId) {
+            if (!raceDate || !cameraId) {
                 elements.volaSectionInfo.style.display = 'none';
                 return;
             }
 
             try {
-                const res = await fetch(`/api/race-manifest/cameras?vola_file=${encodeURIComponent(volaFile)}`);
+                const res = await fetch(`/api/race-manifest/cameras?race_date=${encodeURIComponent(raceDate)}`);
                 const data = await res.json();
 
                 state.manifestCameras = data.cameras || [];
@@ -2064,10 +2188,8 @@
                 // Find which section this camera maps to
                 const match = state.manifestCameras.find(c => c.edge_camera === cameraId);
 
-                // Derive run number from CSV filename (e.g., "girls-run1.csv" → "run1")
-                const volaFilename = volaFile.split('/').pop();
-                const runMatch = volaFilename.match(/run(\d+)/i);
-                state.runNumber = runMatch ? `run${runMatch[1]}` : 'run1';
+                // Use run number from toggle
+                state.runNumber = getSelectedRun();
 
                 if (match) {
                     state.sectionId = match.id;
@@ -2100,93 +2222,79 @@
         }
 
         function updateOutputDestDisplay() {
-            const useStaging = elements.outputToStaging.checked;
-            if (useStaging) {
-                elements.outputStagingDetails.style.display = 'block';
-                elements.outputDefaultDetails.style.display = 'none';
-                if (state.sectionId && state.stagingDir && state.runNumber) {
-                    elements.outputStagingPath.textContent =
-                        `${state.stagingDir}/${state.sectionId}/${state.runNumber}/`;
-                    elements.outputStagingWarning.style.display = 'none';
-                    elements.outputStagingDetails.style.borderColor = '#bbf7d0';
-                    elements.outputStagingDetails.style.background = '#f0fdf4';
-                } else {
-                    elements.outputStagingPath.textContent =
-                        '/tmp/montages/<race>/<section>/<run>/';
-                    elements.outputStagingWarning.style.display = 'block';
-                    elements.outputStagingDetails.style.borderColor = '#fde68a';
-                    elements.outputStagingDetails.style.background = '#fef9c3';
-                }
+            if (state.sectionId && state.stagingDir && state.runNumber) {
+                elements.outputStagingPath.textContent =
+                    `${state.stagingDir}/${state.sectionId}/${state.runNumber}/`;
             } else {
-                elements.outputStagingDetails.style.display = 'none';
-                elements.outputDefaultDetails.style.display = 'block';
+                elements.outputStagingPath.textContent =
+                    '/tmp/montages/<race>/<section>/<run>/';
             }
         }
 
-        async function loadVolaFiles() {
+        async function loadVolaDates() {
             try {
-                // Load Vola Excel files
-                const res = await fetch('/api/vola/files');
-                const files = await res.json();
-                if (files.length === 0) {
-                    elements.volaFile.innerHTML = '<option value="">No Vola files found</option>';
-                } else {
-                    elements.volaFile.innerHTML = files.map(f =>
-                        `<option value="${f.path}">${f.name}</option>`
-                    ).join('');
-                }
-
-                // Auto-detect section info and race date for the first file
-                await updateSectionInfo();
-                autoDetectRaceDate();
-            } catch (e) {
-                elements.volaFile.innerHTML = '<option value="">Failed to load files</option>';
-            }
-        }
-
-        function autoDetectRaceDate() {
-            // Extract date from Vola file path (e.g., "U12_U14_02-22-2026" -> "2026-02-22")
-            const filePath = elements.volaFile.value;
-            if (!filePath) return;
-            const match = filePath.match(/(\d{2})-(\d{2})-(\d{4})/);
-            if (match) {
-                const isoDate = `${match[3]}-${match[1]}-${match[2]}`;
-                elements.raceDate.value = isoDate;
-            }
-        }
-
-        async function loadAvailableDates() {
-            try {
-                elements.loadRecordingDates.innerHTML = '<span class="spinner"></span>';
-                elements.loadRecordingDates.disabled = true;
-                const res = await fetch('/api/recordings/dates');
-                const data = await res.json();
-                const dates = data.dates || [];
+                const res = await fetch('/api/vola/dates');
+                const dates = await res.json();
                 if (dates.length === 0) {
-                    elements.availableDates.textContent = 'No recording dates found';
+                    elements.volaRaceDate.innerHTML = '<option value="">No race dates found</option>';
                 } else {
-                    elements.availableDates.innerHTML = dates.map(d => {
-                        const label = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-                        return `<a href="#" style="color: #2563eb; text-decoration: underline; margin-right: 10px;" onclick="event.preventDefault(); document.getElementById('raceDate').value='${d}';">${label}</a>`;
+                    elements.volaRaceDate.innerHTML = dates.map(d => {
+                        const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', {
+                            weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+                        });
+                        const runs = d.runs.join(', ');
+                        return `<option value="${d.date}" data-runs="${d.runs.join(',')}" data-path="${d.path}">${label} (${runs})</option>`;
                     }).join('');
+
+                    // Default to 2026-02-22 if available, otherwise first date
+                    const defaultOpt = elements.volaRaceDate.querySelector('option[value="2026-02-22"]');
+                    if (defaultOpt) defaultOpt.selected = true;
                 }
-                elements.availableDates.style.display = 'block';
+
+                // Sync hidden raceDate input and update section info
+                syncRaceDate();
+                await updateSectionInfo();
             } catch (e) {
-                elements.availableDates.textContent = 'Failed to load dates';
-                elements.availableDates.style.display = 'block';
-            } finally {
-                elements.loadRecordingDates.innerHTML = 'Available dates';
-                elements.loadRecordingDates.disabled = false;
+                elements.volaRaceDate.innerHTML = '<option value="">Failed to load dates</option>';
+            }
+        }
+
+        function syncRaceDate() {
+            // Keep hidden raceDate input in sync with dropdown
+            elements.raceDate.value = elements.volaRaceDate.value || '';
+        }
+
+        function getSelectedRun() {
+            return state.selectedRun || 'run1';
+        }
+
+        function setRunToggle(run) {
+            state.selectedRun = run;
+            state.runNumber = run;
+            if (run === 'run1') {
+                elements.volaRun1.style.background = '#2563eb';
+                elements.volaRun1.style.color = 'white';
+                elements.volaRun1.style.fontWeight = '600';
+                elements.volaRun2.style.background = 'white';
+                elements.volaRun2.style.color = '#2563eb';
+                elements.volaRun2.style.fontWeight = '500';
+            } else {
+                elements.volaRun2.style.background = '#2563eb';
+                elements.volaRun2.style.color = 'white';
+                elements.volaRun2.style.fontWeight = '600';
+                elements.volaRun1.style.background = 'white';
+                elements.volaRun1.style.color = '#2563eb';
+                elements.volaRun1.style.fontWeight = '500';
             }
         }
 
         async function loadVolaData() {
-            const filePath = elements.volaFile.value;
+            const raceDate = elements.volaRaceDate.value;
+            const runNumber = getSelectedRun();
             const cameraId = elements.volaCamera.value;
-            const numAthletes = parseInt(elements.numAthletes.value) || 0;
 
-            if (!filePath) {
-                showStatus('Please select a Vola timing file', 'error');
+            if (!raceDate) {
+                showStatus('Please select a race date', 'error');
                 return;
             }
 
@@ -2197,15 +2305,14 @@
             elements.loadVolaData.disabled = true;
 
             try {
-                // Use the API that returns both racers and matching videos
+                // Use simplified race_date + run_number mode (merges boys + girls)
                 const res = await fetch('/api/recordings/videos-for-race', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        vola_file: filePath,
+                        race_date: raceDate,
+                        run_number: runNumber,
                         camera_id: cameraId,
-                        num_athletes: numAthletes,
-                        race_date: elements.raceDate.value || null,
                     })
                 });
 
@@ -2218,10 +2325,10 @@
                 // Store data in state
                 state.volaRacers = data.racers;
                 state.volaVideos = data.videos;
-                state.volaRace = filePath;  // Use filename as race identifier
+                state.volaRace = raceDate;  // Use date as race identifier
                 state.volaCamera = cameraId;
-                state.numAthletes = numAthletes;
                 state.raceDate = data.date;
+                state.runNumber = runNumber;
 
                 // Update UI
                 elements.volaRacersInfo.style.display = 'block';
@@ -2426,17 +2533,21 @@
                 updateSectionInfo();
             });
 
-            // Output destination toggle
-            elements.outputToStaging.addEventListener('change', updateOutputDestDisplay);
-
-            // Vola file change - update section info and auto-detect date
-            elements.volaFile.addEventListener('change', () => {
+            // Race date dropdown change - update section info and sync hidden date input
+            elements.volaRaceDate.addEventListener('change', () => {
+                syncRaceDate();
                 updateSectionInfo();
-                autoDetectRaceDate();
             });
 
-            // Race date: "Available dates" button
-            elements.loadRecordingDates.addEventListener('click', loadAvailableDates);
+            // Run toggle buttons
+            elements.volaRun1.addEventListener('click', () => {
+                setRunToggle('run1');
+                updateSectionInfo();
+            });
+            elements.volaRun2.addEventListener('click', () => {
+                setRunToggle('run2');
+                updateSectionInfo();
+            });
 
             // Load Vola data button
             elements.loadVolaData.addEventListener('click', loadVolaData);
@@ -2674,6 +2785,7 @@
                 elements.configCard.style.display = 'block';
                 elements.saveSection.style.display = 'block';
                 elements.outputDestSection.style.display = 'block';
+                elements.montageBatchCard.style.display = 'block';
                 updateOutputDestDisplay();
 
                 // Setup drawing handlers
@@ -3030,6 +3142,10 @@
                     run_duration_seconds: state.endMode === 'duration' ? state.runDurationSeconds : null,
                     // Montage settings
                     montage_fps_list: state.montageFpsList,
+                    // Limit number of athletes (0 = all)
+                    num_athletes: parseInt(elements.numAthletes.value) || 0,
+                    // Logo selection
+                    selected_logos: state.selectedLogos.length > 0 ? state.selectedLogos : null,
                 };
 
                 // For video files, include the video path and Vola racer data for processing
@@ -3042,21 +3158,20 @@
                         config.vola_videos = state.volaVideos;  // Videos to process
                         config.vola_race = state.volaRace;
                         config.vola_camera = state.volaCamera;
-                        config.num_athletes = state.numAthletes;
                     }
 
                     // Use date from Vola data or parse from filename
-                    config.race_date = state.raceDate || new Date().toISOString().split('T')[0];
+                    config.race_date = state.raceDate || elements.volaRaceDate.value || new Date().toISOString().split('T')[0];
 
                     // Always refresh section info before saving
-                    if (elements.volaFile.value && elements.volaCamera.value) {
+                    if (elements.volaRaceDate.value && elements.volaCamera.value) {
                         await updateSectionInfo();
                     }
 
                     // Direct fallback: if section info still missing, fetch it inline
-                    if (!state.sectionId && elements.volaFile.value) {
+                    if (!state.sectionId && elements.volaRaceDate.value) {
                         try {
-                            const camRes = await fetch(`/api/race-manifest/cameras?vola_file=${encodeURIComponent(elements.volaFile.value)}`);
+                            const camRes = await fetch(`/api/race-manifest/cameras?race_date=${encodeURIComponent(elements.volaRaceDate.value)}`);
                             const camData = await camRes.json();
                             const camId = elements.volaCamera.value || cameraId;
                             const match = (camData.cameras || []).find(c => c.edge_camera === camId);
@@ -3064,9 +3179,7 @@
                                 state.sectionId = match.id;
                                 state.raceSlug = camData.race_slug || '';
                                 state.stagingDir = camData.staging_dir || '';
-                                const volaFilename = elements.volaFile.value.split('/').pop();
-                                const runMatch = volaFilename.match(/run(\d+)/i);
-                                state.runNumber = runMatch ? `run${runMatch[1]}` : 'run1';
+                                state.runNumber = getSelectedRun();
                                 console.log('Staging info resolved via fallback:', state.sectionId, state.raceSlug, state.runNumber);
                             }
                         } catch (e) {
@@ -3074,23 +3187,12 @@
                         }
                     }
 
-                    console.log('Staging check:', {
-                        outputToStaging: elements.outputToStaging.checked,
-                        sectionId: state.sectionId,
-                        raceSlug: state.raceSlug,
-                        stagingDir: state.stagingDir,
-                        runNumber: state.runNumber
-                    });
-
-                    // Section/staging info for batch processing (when checkbox is checked)
-                    if (elements.outputToStaging.checked && state.sectionId) {
+                    // Always include staging info when available
+                    if (state.sectionId) {
                         config.section_id = state.sectionId;       // e.g., "Cam1"
                         config.race_slug = state.raceSlug;         // e.g., "western-q-2026-02-22"
-                        config.staging_dir = state.stagingDir;     // e.g., "/Volumes/OWC_48/data/montages/western-q-2026-02-22"
+                        config.staging_dir = state.stagingDir;     // e.g., "/tmp/montages/western-q-2026-02-22"
                         config.run_number = state.runNumber;       // e.g., "run1"
-                    } else if (elements.outputToStaging.checked && !state.sectionId) {
-                        console.warn('⚠️ Output to staging checked but section info missing! Output will go to edge/output/');
-                        showStatus('Warning: Section info not found — output will go to edge/output/ instead of staging. Select a Vola file and camera first.', 'error');
                     }
                 }
 
@@ -3232,6 +3334,11 @@
                 }
                 try {
                     const res = await fetch(`/api/detection/metrics/${state.currentJobId}`);
+                    if (!res.ok) {
+                        // Job not found (404) — stop metrics polling (status poll will handle reset)
+                        stopMetricsPolling();
+                        return;
+                    }
                     const data = await res.json();
                     if (data.entries && data.entries.length > 0) {
                         drawMetricsChart(data.entries);
@@ -3402,8 +3509,15 @@
                     const res = await fetch(`/api/process/status/${state.currentJobId}`);
                     const data = await res.json();
 
-                    if (data.error) {
-                        console.error('Status poll error:', data.error);
+                    if (!res.ok || data.error) {
+                        // Job not found (404) means server restarted or job expired — stop polling
+                        console.error('Status poll error:', data.error || res.statusText);
+                        clearInterval(state.statusPollInterval);
+                        state.statusPollInterval = null;
+                        state.currentJobId = null;
+                        stopMetricsPolling();
+                        resetProcessingUI();
+                        showStatus('Processing session lost (server may have restarted). Please re-run.', 'error');
                         return;
                     }
 
@@ -3518,8 +3632,10 @@
             grid.innerHTML = filtered.map(m => {
                 const label = m.filename.replace('.jpg', '').replace(/_/g, ' ');
                 const fpsTag = m.fps !== null ? `<span class="montage-fps-tag">${m.fps % 1 === 0 ? m.fps.toFixed(0) : m.fps.toFixed(1)} fps</span>` : '';
+                const trBadge = m.trajectory_url ? `<span class="montage-tr-badge" onclick="event.stopPropagation(); showTrajectoryVideo('/api/trajectory/video/${m.trajectory_url}')">TR</span>` : '';
                 return `<div class="montage-thumb" onclick="showMontageFullscreen('/api/montages/image/${m.path}')">
                     <img src="/api/montages/image/${m.path}" loading="lazy">
+                    ${trBadge}
                     ${fpsTag}
                     <div class="montage-label">${label}</div>
                 </div>`;
@@ -3533,9 +3649,37 @@
             overlay.classList.add('visible');
         }
 
+        function showTrajectoryVideo(src) {
+            const overlay = document.getElementById('trajectoryOverlay');
+            const video = document.getElementById('trajectoryVideo');
+            const videoSrc = document.getElementById('trajectoryVideoSrc');
+            videoSrc.src = src;
+            video.load();
+            video.play();
+            overlay.classList.add('visible');
+        }
+
+        function closeTrajectoryVideo() {
+            const overlay = document.getElementById('trajectoryOverlay');
+            const video = document.getElementById('trajectoryVideo');
+            video.pause();
+            overlay.classList.remove('visible');
+        }
+
         // Close fullscreen on click
         document.getElementById('montageOverlay').addEventListener('click', () => {
             document.getElementById('montageOverlay').classList.remove('visible');
+        });
+
+        // Close trajectory overlay
+        document.getElementById('trajectoryClose').addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeTrajectoryVideo();
+        });
+        document.getElementById('trajectoryOverlay').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('trajectoryOverlay')) {
+                closeTrajectoryVideo();
+            }
         });
 
         function startGalleryPolling() {
@@ -3581,6 +3725,8 @@
                 elements.modeCalibration.classList.remove('btn-outline');
                 // Initialize the active sub-mode
                 switchSubMode(state.montageSubMode || 'freeski');
+                // Load logos (shared state with stitch mode)
+                loadLogos();
             } else if (mode === 'gallery') {
                 elements.galleryMode.style.display = 'block';
                 elements.modeGallery.classList.add('btn-primary');
@@ -3675,8 +3821,8 @@
         }
 
         function renderLogoList() {
-            const container = elements.logoList;
-            container.innerHTML = state.selectedLogos.map((filename, index) => {
+            // Build HTML for logo list (reused for both stitch and montage containers)
+            const selectedHtml = state.selectedLogos.map((filename, index) => {
                 const logo = state.availableLogos.find(l => l.filename === filename);
                 return `
                     <div class="logo-item" draggable="true" data-filename="${filename}" data-index="${index}"
@@ -3691,8 +3837,9 @@
 
             // Also show unselected logos
             const unselected = state.availableLogos.filter(l => !state.selectedLogos.includes(l.filename));
+            let unselectedHtml = '';
             if (unselected.length > 0) {
-                container.innerHTML += unselected.map(logo => `
+                unselectedHtml = unselected.map(logo => `
                     <div class="logo-item" data-filename="${logo.filename}"
                          style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; opacity: 0.6;">
                         <input type="checkbox" onchange="toggleLogo('${logo.filename}')" style="width: 16px; height: 16px;">
@@ -3701,6 +3848,14 @@
                     </div>
                 `).join('');
             }
+
+            const fullHtml = selectedHtml + unselectedHtml;
+
+            // Render into both stitch and montage logo containers
+            const containers = [elements.logoList, elements.montageLogoList].filter(c => c);
+            containers.forEach(container => {
+                container.innerHTML = fullHtml;
+            });
 
             // Add drag and drop handlers
             setupLogoDragDrop();
@@ -4230,6 +4385,21 @@
                 this.textContent = 'Copied!';
                 setTimeout(() => { this.textContent = 'Copy to Clipboard'; }, 2000);
             });
+
+            // Montage batch processing controls
+            elements.montageProcessLocation.addEventListener('change', function() {
+                const isLocal = this.value === 'local';
+                elements.montageLocalControls.style.display = isLocal ? 'block' : 'none';
+                elements.montageServerControls.style.display = isLocal ? 'none' : 'block';
+            });
+
+            elements.montageGenerateCommand.addEventListener('click', generateMontageServerCommand);
+            elements.montageCopyServerCommand.addEventListener('click', function() {
+                elements.montageServerCommandText.select();
+                document.execCommand('copy');
+                this.textContent = 'Copied!';
+                setTimeout(() => { this.textContent = 'Copy to Clipboard'; }, 2000);
+            });
         }
 
         // Generate command for server processing
@@ -4284,6 +4454,59 @@
                 const data = await res.json();
                 elements.serverCommandText.value = data.ssh_command;
                 elements.serverCommandOutput.style.display = 'block';
+            } catch (e) {
+                showStatus('Error generating command: ' + e.message, 'error');
+            }
+        }
+
+        // Generate command for montage batch processing on server
+        async function generateMontageServerCommand() {
+            // Collect current montage config from UI
+            const raceDate = elements.volaRaceDate.value;
+            const runNumber = getSelectedRun();  // 'run1' or 'run2'
+            const cameraId = elements.volaCamera.value;
+
+            if (!raceDate) {
+                showStatus('Select a race date first', 'error');
+                return;
+            }
+
+            // Convert race date format (YYYY-MM-DD -> YYYYMMDD)
+            const dateCompact = raceDate.replace(/-/g, '');
+
+            // Build config data for the server command endpoint
+            const configData = {
+                race_date: raceDate,
+                run_number: runNumber,
+                camera_id: cameraId,
+                // Trigger zones and crop zone
+                start_zone: state.startZone,
+                end_zone: state.endMode === 'zone' ? state.endZone : null,
+                crop_zone: state.cropZone || null,
+                // Detection settings
+                detection_threshold: parseInt(elements.threshold.value),
+                min_pixel_change_pct: parseFloat(elements.minPixels.value),
+                min_brightness: parseInt(elements.minBrightness.value),
+                // Montage settings
+                montage_fps_list: state.montageFpsList,
+                // Logos
+                selected_logos: state.selectedLogos,
+                // Race info
+                race_info: state.raceInfo || {},
+                // Test count (0 = all)
+                num_athletes: parseInt(elements.numAthletes.value) || 0,
+            };
+
+            try {
+                const res = await fetch('/api/montage/server-command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(configData)
+                });
+
+                const data = await res.json();
+                elements.montageServerCommandText.value = data.ssh_command;
+                elements.montageServerCommandOutput.style.display = 'block';
             } catch (e) {
                 showStatus('Error generating command: ' + e.message, 'error');
             }
@@ -5104,6 +5327,7 @@
                 elements.configCard.style.display = 'block';
                 elements.saveSection.style.display = 'block';
                 elements.outputDestSection.style.display = 'block';
+                elements.montageBatchCard.style.display = 'block';
                 updateOutputDestDisplay();
 
                 // Setup drawing handlers and reset zones

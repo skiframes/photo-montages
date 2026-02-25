@@ -16,6 +16,7 @@ from typing import Optional, List, Dict
 from detection import DetectionEngine, DetectionConfig, Run
 from montage import generate_montage, MontageResult, MontageResultPair, DEFAULT_FPS
 from video_clip import generate_video_clip
+from trajectory import generate_trajectory_video
 
 
 def parse_reolink_video_start_time(video_path: str, race_date: str) -> Optional[datetime]:
@@ -83,9 +84,6 @@ class SkiFramesRunner:
                 self.montage_fps_list = [float(single)]
         self.montage_fps = self.montage_fps_list[0]  # Keep for backward compat
 
-        # Create output directories
-        os.makedirs(self.session_dir, exist_ok=True)
-
         # Track generated montages (A/B pairs)
         self.montage_pairs: list[MontageResultPair] = []
 
@@ -94,6 +92,12 @@ class SkiFramesRunner:
 
         # Vola racer data for naming montages
         self.vola_racers: List[Dict] = self.raw_config.get('vola_racers', [])
+
+        # Limit number of athletes to process (0 = all)
+        num_athletes = self.raw_config.get('num_athletes', 0)
+        if num_athletes and num_athletes > 0 and self.vola_racers:
+            print(f"  Limiting to first {num_athletes} athletes (of {len(self.vola_racers)})")
+            self.vola_racers = self.vola_racers[:num_athletes]
         self.vola_race: str = self.raw_config.get('vola_race', '')
         self.vola_camera: str = self.raw_config.get('vola_camera', '')
         self.race_date: str = self.raw_config.get('race_date', datetime.now().strftime('%Y-%m-%d'))
@@ -104,25 +108,25 @@ class SkiFramesRunner:
         # Section/staging config for batch processing recorded videos
         self.section_id: str = self.raw_config.get('section_id', '')     # e.g., "Cam1"
         self.run_number: str = self.raw_config.get('run_number', '')     # e.g., "run1"
-        self.staging_dir: str = self.raw_config.get('staging_dir', '')   # e.g., "/Volumes/OWC_48/data/montages/western-q-2026-02-22"
+        self.staging_dir: str = self.raw_config.get('staging_dir', '')   # e.g., "/tmp/montages/western-q-2026-02-22"
         self.race_slug: str = self.raw_config.get('race_slug', '')       # e.g., "western-q-2026-02-22"
 
         # Videos to process (from Vola API)
         self.vola_videos: List[Dict] = self.raw_config.get('vola_videos', [])
 
+        # Selected logos for overlay (from UI logo selection)
+        self.selected_logos: Optional[List[str]] = self.raw_config.get('selected_logos') or None
+
         # Track which racers have been matched (prevent duplicate matches)
         self.matched_racer_indices: set = set()
 
-        # Create detection engine with callback and vola_racers for offset calculation
-        self.engine = DetectionEngine(self.config, on_run_complete=self._on_run_complete,
-                                       vola_racers=self.vola_racers)
-        # Set metrics path for live detection chart
-        self.engine.metrics_path = os.path.join(self.session_dir, 'detection_metrics.json')
-
-        # If staging mode (batch processing), create staging output dir
+        # If staging mode (batch processing), redirect ALL output to staging dir
+        # so everything is in one location (important for 4T server batch processing)
         if self.section_id and self.staging_dir and self.run_number:
             self.staging_output_dir = os.path.join(self.staging_dir, self.section_id, self.run_number)
             os.makedirs(self.staging_output_dir, exist_ok=True)
+            # Redirect session_dir to staging dir so metrics/manifest go there too
+            self.session_dir = self.staging_output_dir
             # Write metadata for populate-manifest to know gender context
             gender = 'girls' if 'girl' in self.vola_race.lower() else 'boys' if 'boy' in self.vola_race.lower() else ''
             meta = {
@@ -138,6 +142,14 @@ class SkiFramesRunner:
                 _json.dump(meta, mf, indent=2)
         else:
             self.staging_output_dir = None
+            # Normal mode: create session output directory
+            os.makedirs(self.session_dir, exist_ok=True)
+
+        # Create detection engine with callback and vola_racers for offset calculation
+        self.engine = DetectionEngine(self.config, on_run_complete=self._on_run_complete,
+                                       vola_racers=self.vola_racers)
+        # Set metrics path for live detection chart
+        self.engine.metrics_path = os.path.join(self.session_dir, 'detection_metrics.json')
 
         print(f"SkiFrames Runner initialized")
         print(f"  Session: {self.config.session_id}")
@@ -395,7 +407,18 @@ class SkiFramesRunner:
         merged_results = {}
         if self.staging_output_dir and racer:
             bib = racer.get('bib', run.run_number)
-            gender_prefix = 'g' if 'girl' in self.vola_race.lower() else 'b' if 'boy' in self.vola_race.lower() else ''
+            # Determine gender prefix from racer data (preferred) or vola_race filename (legacy)
+            racer_gender = racer.get('gender', '').lower()
+            if 'women' in racer_gender or 'girl' in racer_gender or 'female' in racer_gender:
+                gender_prefix = 'g'
+            elif 'men' in racer_gender or 'boy' in racer_gender or 'male' in racer_gender:
+                gender_prefix = 'b'
+            elif 'girl' in self.vola_race.lower():
+                gender_prefix = 'g'
+            elif 'boy' in self.vola_race.lower():
+                gender_prefix = 'b'
+            else:
+                gender_prefix = ''
             staging_filename = f"{gender_prefix}{bib}" if gender_prefix else str(bib)
 
             for fps_val in self.montage_fps_list:
@@ -419,6 +442,7 @@ class SkiFramesRunner:
                     race_title=race_title,
                     race_info=self.race_info,
                     elapsed_time=elapsed_time,
+                    selected_logos=self.selected_logos,
                 )
 
                 if result:
@@ -472,6 +496,20 @@ class SkiFramesRunner:
             except Exception as e:
                 print(f"  Video clip skipped: {e}")
 
+            # Trajectory generation disabled for now
+            # try:
+            #     tr_filename = f"{staging_filename}_TR.mp4"
+            #     tr_out_path = os.path.join(self.staging_output_dir, tr_filename)
+            #     tr_path = generate_trajectory_video(
+            #         frames=run.frames, output_path=tr_out_path,
+            #         source_fps=self.source_fps, crop_region=vid_crop_region,
+            #     )
+            #     if tr_path:
+            #         size_kb = os.path.getsize(tr_path) / 1024
+            #         print(f"  Trajectory: {tr_filename} ({size_kb:.0f} KB)")
+            # except Exception as e:
+            #     print(f"  Trajectory skipped: {e}")
+
             print(f"  Staged: {self.staging_output_dir}/{staging_filename}*.jpg")
         else:
             # Normal mode: output to session dir with name/bib filenames
@@ -499,6 +537,7 @@ class SkiFramesRunner:
                     race_title=race_title,
                     race_info=self.race_info,
                     elapsed_time=elapsed_time,
+                    selected_logos=self.selected_logos,
                 )
 
             if result:
@@ -572,6 +611,22 @@ class SkiFramesRunner:
             except Exception as e:
                 print(f"  Video clip skipped: {e}")
 
+            # Trajectory generation disabled for now
+            trajectory_path = None
+            # try:
+            #     tr_dir = os.path.join(self.session_dir, 'trajectories')
+            #     tr_filename = f"run_{run.run_number:03d}_{run.start_time.strftime('%H%M%S')}_TR.mp4"
+            #     tr_out_path = os.path.join(tr_dir, tr_filename)
+            #     trajectory_path = generate_trajectory_video(
+            #         frames=run.frames, output_path=tr_out_path,
+            #         source_fps=self.source_fps, crop_region=vid_crop_region,
+            #     )
+            #     if trajectory_path:
+            #         size_kb = os.path.getsize(trajectory_path) / 1024
+            #         print(f"  Trajectory: {tr_filename} ({size_kb:.0f} KB)")
+            # except Exception as e:
+            #     print(f"  Trajectory skipped: {e}")
+
             merged_pair = MontageResultPair(
                 run_number=run.run_number,
                 timestamp=run.start_time,
@@ -579,6 +634,7 @@ class SkiFramesRunner:
                 elapsed_time=elapsed_time,
                 embedding=embedding,
                 video_clip_path=video_clip_path,
+                trajectory_path=trajectory_path,
             )
             if racer:
                 merged_pair.racer_bib = racer.get('bib')
@@ -603,6 +659,12 @@ class SkiFramesRunner:
                     run_entry["video_url"] = os.path.relpath(pair.video_clip_path, self.session_dir)
                 except ValueError:
                     run_entry["video_url"] = os.path.basename(pair.video_clip_path)
+            # Add trajectory video URL if available
+            if pair.trajectory_path:
+                try:
+                    run_entry["trajectory_url"] = os.path.relpath(pair.trajectory_path, self.session_dir)
+                except ValueError:
+                    run_entry["trajectory_url"] = os.path.basename(pair.trajectory_path)
             for variant, m in pair.results.items():
                 # Use relative paths from session dir (e.g., "thumbnails/run_001_thumb.jpg")
                 # to preserve subdirectory structure for S3 upload

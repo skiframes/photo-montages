@@ -1,6 +1,6 @@
 /**
  * Race Gallery – NHARA Western Division Qualifier GS, Feb 22, 2026
- * 3D terrain + 2D map + results table
+ * 3D terrain + 2D course + results table
  */
 
 // ── State ────────────────────────────────────────────────────────────────
@@ -1827,6 +1827,22 @@ function initLeaflet() {
     document.getElementById('show-measurements-2d').addEventListener('change', (e) => {
         showMeasurements = e.target.checked;
         toggleMeasurements2D();
+    });
+
+    // Fix leaflet-rotate marker drift: force re-render after zoom ends
+    leafletMap.on('zoomend', () => {
+        // Nudge all divIcon markers to force position recalculation
+        const allLayers = [
+            ...leafletLayers.gates,
+            ...leafletLayers.cameras,
+            ...leafletLayers.measurements
+        ];
+        allLayers.forEach(l => {
+            if (l instanceof L.Marker && leafletMap.hasLayer(l)) {
+                const pos = l.getLatLng();
+                l.setLatLng(pos);
+            }
+        });
     });
 
     // Fit bounds with all course points including start and finish

@@ -183,39 +183,113 @@ def list_vola_files():
     return jsonify(sorted(files, key=lambda x: x['name']))
 
 
+@app.route('/api/vola/dates')
+def list_vola_dates():
+    """List available race dates from Vola subdirectories.
+
+    Scans VOLA_DIR for subdirectories with date patterns (MM-DD-YYYY)
+    and reports which runs have CSV files available.
+
+    Returns: [{"date": "2026-02-22", "folder": "U12_U14_02-22-2026", "runs": ["run1", "run2"]}, ...]
+    """
+    dates = []
+    if VOLA_DIR.exists():
+        for d in sorted(VOLA_DIR.iterdir(), reverse=True):
+            if not d.is_dir():
+                continue
+            # Extract date from folder name like "U12_U14_02-22-2026"
+            date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', d.name)
+            if not date_match:
+                continue
+            iso_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+            # Check which runs have CSV files
+            runs = []
+            for run_num in ['run1', 'run2']:
+                # Look for any CSV matching *-runN.csv (e.g., boys-run1.csv, girls-run1.csv)
+                csvs = list(d.glob(f'*-{run_num}.csv'))
+                if csvs:
+                    runs.append(run_num)
+            if runs:
+                dates.append({
+                    'date': iso_date,
+                    'folder': d.name,
+                    'path': str(d),
+                    'runs': runs,
+                })
+    return jsonify(dates)
+
+
+def find_vola_dir_for_date(race_date: str) -> 'Path | None':
+    """Find the Vola subdirectory for a given ISO date (YYYY-MM-DD).
+
+    Returns the Path to the subdirectory, or None if not found.
+    """
+    if not VOLA_DIR.exists():
+        return None
+    # Convert ISO date to MM-DD-YYYY for folder matching
+    match = re.match(r'(\d{4})-(\d{2})-(\d{2})', race_date)
+    if not match:
+        return None
+    folder_date = f"{match.group(2)}-{match.group(3)}-{match.group(1)}"
+    for d in VOLA_DIR.iterdir():
+        if d.is_dir() and folder_date in d.name:
+            return d
+    return None
+
+
 @app.route('/api/race-manifest/cameras')
 def get_race_manifest_cameras():
     """
-    Get camera→section mapping from race_manifest.json for a given Vola file.
-    Query param: vola_file - path to Vola CSV (used to find matching race manifest)
+    Get camera→section mapping from race_manifest.json for a given Vola file or race date.
+    Query params:
+        vola_file - path to Vola CSV (used to find matching race manifest)
+        race_date - ISO date (YYYY-MM-DD) as alternative to vola_file
 
     Returns camera mapping with section info, gate coverage, and edge camera IDs.
     """
     vola_file = request.args.get('vola_file', '')
-    if not vola_file:
-        return jsonify({'error': 'vola_file required'}), 400
+    race_date_param = request.args.get('race_date', '')
 
-    # Find race manifest by matching date from Vola path
+    if not vola_file and not race_date_param:
+        return jsonify({'error': 'vola_file or race_date required'}), 400
+
+    # Find race manifest by matching date from Vola path or race_date param
     manifest_path = None
-    vola_path = Path(vola_file)
-    vola_dir = vola_path.parent
 
-    # Check same directory as Vola CSV
-    candidate = vola_dir / 'race_manifest.json'
-    if candidate.exists():
-        manifest_path = candidate
+    if vola_file:
+        vola_path = Path(vola_file)
+        vola_dir = vola_path.parent
+    elif race_date_param:
+        vola_dir = find_vola_dir_for_date(race_date_param)
     else:
-        # Extract date from Vola directory name and search web/races/
-        date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', vola_dir.name)
-        if date_match:
-            race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
-            if WEB_RACES_DIR.exists():
-                for race_dir in WEB_RACES_DIR.iterdir():
-                    if race_date in race_dir.name:
-                        candidate = race_dir / 'race_manifest.json'
-                        if candidate.exists():
-                            manifest_path = candidate
-                            break
+        vola_dir = None
+
+    if vola_dir and Path(vola_dir).is_dir():
+        # Check same directory as Vola CSV
+        candidate = Path(vola_dir) / 'race_manifest.json'
+        if candidate.exists():
+            manifest_path = candidate
+        else:
+            # Extract date from Vola directory name and search web/races/
+            date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', Path(vola_dir).name)
+            if date_match:
+                race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+                if WEB_RACES_DIR.exists():
+                    for race_dir in WEB_RACES_DIR.iterdir():
+                        if race_date in race_dir.name:
+                            candidate = race_dir / 'race_manifest.json'
+                            if candidate.exists():
+                                manifest_path = candidate
+                                break
+    elif race_date_param:
+        # Direct search in web/races/ by date
+        if WEB_RACES_DIR.exists():
+            for race_dir in WEB_RACES_DIR.iterdir():
+                if race_date_param in race_dir.name:
+                    candidate = race_dir / 'race_manifest.json'
+                    if candidate.exists():
+                        manifest_path = candidate
+                        break
 
     if not manifest_path:
         return jsonify({'cameras': [], 'race_slug': None})
@@ -1593,11 +1667,18 @@ def get_videos_for_race():
     """
     Get videos that cover a specific race's timing window.
 
-    Request body:
+    Request body (new simplified mode — race_date + run_number):
+    {
+        "race_date": "2026-02-22",
+        "run_number": "run1",
+        "camera_id": "R1"
+    }
+
+    Request body (legacy mode — single vola_file):
     {
         "vola_file": "/path/to/girls-run1.csv",
         "camera_id": "R1",
-        "num_athletes": 5  // Number of athletes to process (0 or null = all)
+        "num_athletes": 5
     }
 
     Returns list of videos needed and the racers they cover (with names/teams from race_manifest.json).
@@ -1605,29 +1686,89 @@ def get_videos_for_race():
     data = request.get_json() or {}
     vola_file = data.get('vola_file')
     camera_id = data.get('camera_id', 'R1')
-    num_athletes = data.get('num_athletes', 0)  # 0 = all
-    race_date_override = data.get('race_date')  # Optional: YYYY-MM-DD from UI date picker
-
-    # Load athlete names/teams from race_manifest.json
-    bib_to_racer = load_race_manifest(vola_file) if vola_file else {}
-
-    if not vola_file or not Path(vola_file).exists():
-        return jsonify({'error': 'Invalid vola_file'}), 400
+    num_athletes = data.get('num_athletes', 0)  # 0 = all (legacy)
+    race_date_override = data.get('race_date')  # YYYY-MM-DD
+    run_number = data.get('run_number')  # "run1" or "run2"
 
     try:
-        start_times = parse_vola_csv(vola_file)
-        racers = build_racers_from_start_times(start_times, camera_id)
+        # === New simplified mode: race_date + run_number (merges boys + girls) ===
+        if race_date_override and run_number and not vola_file:
+            vola_dir = find_vola_dir_for_date(race_date_override)
+            if not vola_dir:
+                return jsonify({'error': f'No Vola data found for date {race_date_override}'}), 400
 
-        # Enrich racers with name/team/gender from start list
-        for racer in racers:
-            racer_info = bib_to_racer.get(racer['bib'], {})
-            racer['name'] = racer_info.get('name', '')
-            racer['team'] = racer_info.get('team', '')
-            racer['gender'] = racer_info.get('gender', '')
+            # Find boys and girls CSVs for this run
+            boys_csv = list(vola_dir.glob(f'boys-{run_number}.csv'))
+            girls_csv = list(vola_dir.glob(f'girls-{run_number}.csv'))
 
-        # Limit to num_athletes if specified
-        if num_athletes and num_athletes > 0:
-            racers = racers[:num_athletes]
+            if not boys_csv and not girls_csv:
+                return jsonify({'error': f'No CSV files found for {run_number} in {vola_dir.name}'}), 400
+
+            # Parse boys and girls separately — bibs overlap between genders!
+            # (e.g., boys bib 10 and girls bib 10 are different athletes)
+            racers = []
+
+            if boys_csv:
+                boys_times = parse_vola_csv(str(boys_csv[0]))
+                bib_to_racer_boys = load_race_manifest(str(boys_csv[0]))
+                boys_racers = build_racers_from_start_times(boys_times, camera_id)
+                for racer in boys_racers:
+                    racer_info = bib_to_racer_boys.get(racer['bib'], {})
+                    racer['name'] = racer_info.get('name', '')
+                    racer['team'] = racer_info.get('team', '')
+                    racer['gender'] = 'Men'
+                racers.extend(boys_racers)
+
+            if girls_csv:
+                girls_times = parse_vola_csv(str(girls_csv[0]))
+                bib_to_racer_girls = load_race_manifest(str(girls_csv[0]))
+                girls_racers = build_racers_from_start_times(girls_times, camera_id)
+                for racer in girls_racers:
+                    racer_info = bib_to_racer_girls.get(racer['bib'], {})
+                    racer['name'] = racer_info.get('name', '')
+                    racer['team'] = racer_info.get('team', '')
+                    racer['gender'] = 'Women'
+                racers.extend(girls_racers)
+
+            # Sort all racers by start time (interleaved boys + girls)
+            racers.sort(key=lambda r: r['start_time_sec'])
+
+            race_date = race_date_override
+
+        # === Legacy mode: single vola_file ===
+        else:
+            if not vola_file or not Path(vola_file).exists():
+                return jsonify({'error': 'Invalid vola_file'}), 400
+
+            bib_to_racer = load_race_manifest(vola_file)
+            start_times = parse_vola_csv(vola_file)
+            racers = build_racers_from_start_times(start_times, camera_id)
+
+            # Enrich racers with name/team/gender from start list
+            for racer in racers:
+                racer_info = bib_to_racer.get(racer['bib'], {})
+                racer['name'] = racer_info.get('name', '')
+                racer['team'] = racer_info.get('team', '')
+                racer['gender'] = racer_info.get('gender', '')
+
+            # Limit to num_athletes if specified (legacy)
+            if num_athletes and num_athletes > 0:
+                racers = racers[:num_athletes]
+
+            # Determine race date
+            race_date = None
+            if race_date_override and re.match(r'\d{4}-\d{2}-\d{2}$', race_date_override):
+                race_date = race_date_override
+            else:
+                vola_path = Path(vola_file)
+                for name_to_check in [vola_path.parent.name, vola_path.stem]:
+                    date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', name_to_check)
+                    if date_match:
+                        race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+                        break
+
+            if not race_date:
+                return jsonify({'error': 'Could not determine race date. Please select a date in the Race Date picker.'}), 400
 
         if not racers:
             return jsonify({'error': 'No racers found', 'videos': [], 'racers': []})
@@ -1639,23 +1780,6 @@ def get_videos_for_race():
         # Add some buffer (30 seconds before and after)
         filter_start = first_camera_time - 30
         filter_end = last_camera_time + 30
-
-        # Use date override from UI if provided, otherwise extract from Vola file path
-        race_date = None
-        if race_date_override and re.match(r'\d{4}-\d{2}-\d{2}$', race_date_override):
-            race_date = race_date_override
-        else:
-            # Extract date from Vola file's parent directory or filename
-            # Supports: folder name like "U12_U14_02-02-2026" or filename like "Vola_export_02-01-2026.xlsx"
-            vola_path = Path(vola_file)
-            for name_to_check in [vola_path.parent.name, vola_path.stem]:
-                date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', name_to_check)
-                if date_match:
-                    race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
-                    break
-
-        if not race_date:
-            return jsonify({'error': 'Could not determine race date. Please select a date in the Race Date picker.'}), 400
 
         # Build path to videos - try multiple directory structures
         camera_folders = {'R1': 'sd_R1', 'R2': 'sd_R2', 'R3': 'sd_R3', 'Axis': 'sd_Axis'}
@@ -1708,6 +1832,7 @@ def get_videos_for_race():
 
         return jsonify({
             'file': vola_file,
+            'run_number': run_number,
             'camera_id': camera_id,
             'date': race_date,
             'num_athletes': len(racers),
@@ -2062,6 +2187,22 @@ def montages_latest():
             fps_match = _re.search(r'_(\d+\.?\d*)fps', fullres_file.name)
             fps_val = float(fps_match.group(1)) if fps_match else None
 
+            # Check for matching trajectory video
+            # Match by run number pattern (e.g., run_001_093523 -> run_001_093523_TR.mp4)
+            base_stem = fullres_file.stem  # e.g., "run_001_093523_4.0fps"
+            # Extract run identifier (before fps tag)
+            import re as _re2
+            run_id_match = _re2.match(r'(.+?)_[\d.]+fps', base_stem)
+            trajectory_url = None
+            if run_id_match:
+                run_id = run_id_match.group(1)
+                # Look in trajectories/ dir
+                tr_dir = session_dir / 'trajectories'
+                if tr_dir.exists():
+                    tr_candidates = list(tr_dir.glob(f'{run_id}*_TR.mp4'))
+                    if tr_candidates:
+                        trajectory_url = str(tr_candidates[0].relative_to(output_dir))
+
             montages.append({
                 'filename': fullres_file.name,
                 'path': str(rel_path),
@@ -2069,6 +2210,7 @@ def montages_latest():
                 'size_kb': int(stat.st_size / 1024),
                 'modified': stat.st_mtime,
                 'fps': fps_val,
+                'trajectory_url': trajectory_url,
             })
 
     # Sort by modification time, newest first
@@ -2096,6 +2238,159 @@ def montages_image(image_path):
         return jsonify({'error': 'Image not found'}), 404
 
     return send_file(str(full_path), mimetype='image/jpeg')
+
+
+# =============================================================================
+# TRAJECTORY (TR) ENDPOINTS
+# =============================================================================
+
+@app.route('/api/trajectory/latest')
+def trajectory_latest():
+    """List recent trajectory videos across all sessions, newest first."""
+    output_dir = Path(__file__).resolve().parent.parent / 'output'
+    if not output_dir.exists():
+        return jsonify({'trajectories': []})
+
+    trajectories = []
+    for session_dir in output_dir.iterdir():
+        if not session_dir.is_dir():
+            continue
+        session_id = session_dir.name
+        # Find trajectory videos in trajectories/ subdirs
+        for tr_file in session_dir.rglob('trajectories/*_TR.mp4'):
+            stat = tr_file.stat()
+            rel_path = tr_file.relative_to(output_dir)
+            trajectories.append({
+                'filename': tr_file.name,
+                'path': str(rel_path),
+                'session_id': session_id,
+                'size_kb': int(stat.st_size / 1024),
+                'modified': stat.st_mtime,
+            })
+        # Also check staging dirs for TR videos
+        for tr_file in session_dir.rglob('*_TR.mp4'):
+            if 'trajectories' in str(tr_file):
+                continue  # Already found above
+            stat = tr_file.stat()
+            rel_path = tr_file.relative_to(output_dir)
+            trajectories.append({
+                'filename': tr_file.name,
+                'path': str(rel_path),
+                'session_id': session_id,
+                'size_kb': int(stat.st_size / 1024),
+                'modified': stat.st_mtime,
+            })
+
+    trajectories.sort(key=lambda t: t['modified'], reverse=True)
+    trajectories = trajectories[:10]
+
+    return jsonify({'trajectories': trajectories})
+
+
+@app.route('/api/trajectory/video/<path:video_path>')
+def trajectory_video(video_path):
+    """Serve a trajectory video from the output directory."""
+    output_dir = Path(__file__).resolve().parent.parent / 'output'
+    full_path = output_dir / video_path
+
+    # Security: ensure path doesn't escape output directory
+    try:
+        full_path.resolve().relative_to(output_dir.resolve())
+    except ValueError:
+        return jsonify({'error': 'Invalid path'}), 403
+
+    if not full_path.exists():
+        return jsonify({'error': 'Video not found'}), 404
+
+    return send_file(str(full_path), mimetype='video/mp4')
+
+
+@app.route('/api/trajectory/generate', methods=['POST'])
+def trajectory_generate():
+    """
+    Generate a trajectory video for a specific montage/run.
+
+    Request body:
+    {
+        "session_id": "2026-02-02_0900_u14_training",
+        "run_number": 1,
+        "video_path": "/path/to/source/video.mp4",  (optional, for re-generation)
+    }
+
+    Looks for frames from existing video clip or cached run data.
+    """
+    data = request.get_json() or {}
+    session_id = data.get('session_id')
+    run_number = data.get('run_number')
+
+    if not session_id:
+        return jsonify({'error': 'session_id required'}), 400
+
+    output_dir = Path(__file__).resolve().parent.parent / 'output'
+    session_dir = output_dir / session_id
+
+    if not session_dir.exists():
+        return jsonify({'error': f'Session not found: {session_id}'}), 404
+
+    # Look for existing video clip to generate trajectory from
+    video_path = data.get('video_path')
+    if not video_path:
+        # Try to find video clip in session
+        video_dir = session_dir / 'videos'
+        if video_dir.exists():
+            pattern = f"run_{run_number:03d}_*" if run_number else "*.mp4"
+            videos = list(video_dir.glob(pattern))
+            if videos:
+                video_path = str(videos[0])
+
+    if not video_path or not Path(video_path).exists():
+        return jsonify({'error': 'No source video found for trajectory generation'}), 404
+
+    # Generate trajectory video from the source video frames
+    try:
+        import cv2
+        from trajectory import generate_trajectory_video
+
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return jsonify({'error': f'Cannot open video: {video_path}'}), 500
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        frames = []
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frames.append(frame)
+        cap.release()
+
+        if len(frames) < 5:
+            return jsonify({'error': 'Too few frames in video'}), 400
+
+        # Output path
+        tr_dir = session_dir / 'trajectories'
+        tr_dir.mkdir(exist_ok=True)
+        src_name = Path(video_path).stem
+        tr_output = str(tr_dir / f"{src_name}_TR.mp4")
+
+        result_path = generate_trajectory_video(
+            frames=frames,
+            output_path=tr_output,
+            source_fps=fps,
+        )
+
+        if result_path:
+            rel_path = Path(result_path).relative_to(output_dir)
+            return jsonify({
+                'success': True,
+                'trajectory_url': str(rel_path),
+                'size_kb': int(os.path.getsize(result_path) / 1024),
+            })
+        else:
+            return jsonify({'error': 'Trajectory generation failed'}), 500
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/montages/populate-manifest', methods=['POST'])
@@ -2314,6 +2609,102 @@ def populate_manifest_with_montages():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# MONTAGE BATCH PROCESSING ENDPOINTS
+# =============================================================================
+
+
+@app.route('/api/montage/server-command', methods=['POST'])
+def generate_montage_server_command():
+    """
+    Generate a command to run batch montage processing on the remote server (4T).
+    Returns the command string that can be copied and run via SSH.
+    """
+    data = request.get_json() or {}
+    race_date = data.get('race_date', '')
+    run_number = data.get('run_number', 'run1')
+    camera_id = data.get('camera_id', 'R1')
+    selected_logos = data.get('selected_logos', [])
+    montage_fps_list = data.get('montage_fps_list', [4.0])
+    start_zone = data.get('start_zone')
+    end_zone = data.get('end_zone')
+    crop_zone = data.get('crop_zone')
+    detection_threshold = data.get('detection_threshold', 25)
+    min_pixel_change_pct = data.get('min_pixel_change_pct', 5.0)
+    min_brightness = data.get('min_brightness', 94)
+    race_info = data.get('race_info', {})
+    num_athletes = data.get('num_athletes', 0)
+
+    # Convert race date from YYYY-MM-DD to YYYYMMDD for CLI
+    date_compact = race_date.replace('-', '') if race_date else '20260222'
+
+    # Build config JSON to pass to batch_montage.py
+    config = {
+        'race_date': race_date,
+        'run_number': run_number,
+        'camera_id': camera_id,
+        'start_zone': start_zone,
+        'end_zone': end_zone,
+        'crop_zone': crop_zone,
+        'detection_threshold': detection_threshold,
+        'min_pixel_change_pct': min_pixel_change_pct,
+        'min_brightness': min_brightness,
+        'montage_fps_list': montage_fps_list,
+        'selected_logos': selected_logos,
+        'race_info': race_info,
+    }
+
+    # Save config to a temp file on the server
+    config_filename = f"montage_config_{date_compact}_{run_number}_{camera_id}.json"
+    montage_config_dir = CONFIG_DIR.parent  # edge/config/
+    montage_config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = montage_config_dir / config_filename
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+
+    # Build the CLI command
+    cmd_parts = [
+        'cd /home/pa91/skiframes/photo-montages',
+        'source venv/bin/activate',
+        'export SKIFRAMES_DATA_DIR=/home/pa91/data',
+        'export SKIFRAMES_MONTAGES_DIR=/home/pa91/data/montages',
+        f'python3 edge/batch_montage.py --race-date {race_date} --run {run_number} --camera {camera_id}'
+    ]
+
+    # Add config path (convert local path to server path)
+    server_config_path = str(config_path).replace('/Volumes/OWC_48/data', '/home/pa91/data')
+    # If config is in local edge dir, use a relative path
+    if str(config_path).startswith(str(montage_config_dir)):
+        server_config_path = f'/home/pa91/skiframes/photo-montages/edge/config/{config_filename}'
+    cmd_parts[-1] += f' --config "{server_config_path}"'
+
+    # Add logos
+    if selected_logos:
+        cmd_parts[-1] += f' --logos "{",".join(selected_logos)}"'
+
+    # Add FPS list
+    if montage_fps_list:
+        fps_str = ','.join(str(f) for f in montage_fps_list)
+        cmd_parts[-1] += f' --fps-list "{fps_str}"'
+
+    # Add test count (limit athletes)
+    if num_athletes and num_athletes > 0:
+        cmd_parts[-1] += f' --test {num_athletes}'
+
+    full_command = ' && '.join(cmd_parts)
+    ssh_command = f"ssh 4t '{full_command}'"
+
+    return jsonify({
+        'command': full_command,
+        'ssh_command': ssh_command,
+        'server': '4t',
+        'race_date': race_date,
+        'run_number': run_number,
+        'camera_id': camera_id,
+        'config_path': str(config_path),
+    })
 
 
 # =============================================================================

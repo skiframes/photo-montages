@@ -30,6 +30,12 @@ try:
 except ImportError:
     HAS_YOLO = False
 
+try:
+    from segment_anything import sam_model_registry, SamPredictor
+    HAS_SAM = True
+except ImportError:
+    HAS_SAM = False
+
 
 # COCO keypoint indices
 class Keypoints:
@@ -158,18 +164,35 @@ class YOLOPoseAnalyzer:
     """Analyzes ski racing video clips using YOLOv8-pose."""
 
     def __init__(self, slope_angle_deg: float = 0.0, model_size: str = 'l',
-                 pitch_deg: float = None):
+                 pitch_deg: float = None, ski_model_path: str = None):
         if not HAS_YOLO:
             raise ImportError("ultralytics required. Install with: pip install ultralytics")
 
         self.slope_angle_deg = slope_angle_deg
         self.pitch_deg = pitch_deg
         self.history = MetricsHistory()
+        self.ski_detector = None
 
         model_name = f'yolov8{model_size}-pose.pt'
         print(f"Loading {model_name}...")
         self.model = YOLO(model_name)
         print("Model loaded.")
+
+        # Load custom ski detector if available
+        if ski_model_path is None:
+            # Look for ski detector model
+            for path in ['ski_detector.pt', 'edge/ski_detector.pt',
+                        'runs/detect/ski_detector/weights/best.pt']:
+                if Path(path).exists():
+                    ski_model_path = path
+                    break
+
+        if ski_model_path and Path(ski_model_path).exists():
+            print(f"Loading ski detector from {ski_model_path}...")
+            self.ski_detector = YOLO(ski_model_path)
+            print("Ski detector loaded.")
+        else:
+            print("Ski detector not found. Run train_ski_detector.py to train one.")
 
     def get_keypoint(self, keypoints: np.ndarray, idx: int) -> Optional[Tuple[float, float, float]]:
         if keypoints is None or idx >= len(keypoints):
@@ -179,7 +202,9 @@ class YOLOPoseAnalyzer:
             return None
         return (float(x), float(y), float(conf))
 
-    def compute_metrics(self, keypoints: np.ndarray) -> Optional[PoseMetrics]:
+    def compute_metrics(self, keypoints: np.ndarray,
+                        left_ski: Optional[dict] = None,
+                        right_ski: Optional[dict] = None) -> Optional[PoseMetrics]:
         left_shoulder = self.get_keypoint(keypoints, Keypoints.LEFT_SHOULDER)
         right_shoulder = self.get_keypoint(keypoints, Keypoints.RIGHT_SHOULDER)
         left_hip = self.get_keypoint(keypoints, Keypoints.LEFT_HIP)
@@ -302,10 +327,8 @@ class YOLOPoseAnalyzer:
 
         return person_kpts, metrics
 
-    def _draw_ski_rectangles(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
-        """Draw rectangles representing skis - estimated from ankle positions."""
-        output = frame.copy()
-
+    def _detect_skis(self, frame: np.ndarray, keypoints: np.ndarray) -> Tuple[Optional[dict], Optional[dict]]:
+        """Detect skis and match to ankles. Returns (left_ski, right_ski) dicts with box, angle, fore_aft."""
         def get_pt(idx):
             kp = keypoints[idx]
             if kp[2] > 0.3:
@@ -314,53 +337,88 @@ class YOLOPoseAnalyzer:
 
         la = get_pt(Keypoints.LEFT_ANKLE)
         ra = get_pt(Keypoints.RIGHT_ANKLE)
-        lk = get_pt(Keypoints.LEFT_KNEE)
-        rk = get_pt(Keypoints.RIGHT_KNEE)
 
-        if not la or not ra:
-            return output
+        left_ski = None
+        right_ski = None
 
-        ski_length = int(180 * scale)
-        ski_width = int(10 * scale)
-        boot_height = int(20 * scale)
+        if self.ski_detector is None:
+            return None, None
 
-        # Estimate ski direction from leg angle (knee to ankle direction)
-        # Each ski follows its own leg's direction
-        def get_ski_angle(knee, ankle):
-            if knee and ankle:
-                dx = ankle[0] - knee[0]
-                dy = ankle[1] - knee[1]
-                # Angle of lower leg from vertical
-                angle = math.degrees(math.atan2(dx, dy))
-                return angle
-            return 0
+        results = self.ski_detector(frame, verbose=False, conf=0.3)
 
-        left_ski_angle = get_ski_angle(lk, la)
-        right_ski_angle = get_ski_angle(rk, ra)
+        if not results or len(results) == 0 or results[0].boxes is None:
+            return None, None
 
-        # Left ski
-        # Position: below ankle, offset in the direction the ski points
-        ski_dir_rad = math.radians(left_ski_angle)
-        ski_cx = la[0] + math.sin(ski_dir_rad) * ski_length * 0.3
-        ski_cy = la[1] + boot_height + math.cos(ski_dir_rad) * ski_length * 0.3
+        boxes = results[0].boxes
 
-        # cv2.boxPoints angle is rotation from horizontal
-        rect_angle = left_ski_angle
-        rect = ((ski_cx, ski_cy), (ski_length, ski_width), rect_angle)
-        box = cv2.boxPoints(rect)
-        box = np.intp(box)
-        cv2.drawContours(output, [box], 0, (255, 150, 100), 3)
+        # Get all detections
+        detections = []
+        for box in boxes:
+            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+            conf = float(box.conf[0])
+            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+            width = x2 - x1
+            height = y2 - y1
 
-        # Right ski
-        ski_dir_rad = math.radians(right_ski_angle)
-        ski_cx = ra[0] + math.sin(ski_dir_rad) * ski_length * 0.3
-        ski_cy = ra[1] + boot_height + math.cos(ski_dir_rad) * ski_length * 0.3
+            # Calculate ski angle from bounding box orientation
+            # Ski is elongated - the longer dimension indicates direction
+            if width > height:
+                # Ski is more horizontal - angle from the box diagonal
+                ski_angle = math.degrees(math.atan2(height, width))
+            else:
+                # Ski is more vertical
+                ski_angle = 90 - math.degrees(math.atan2(width, height))
 
-        rect_angle = right_ski_angle
-        rect = ((ski_cx, ski_cy), (ski_length, ski_width), rect_angle)
-        box = cv2.boxPoints(rect)
-        box = np.intp(box)
-        cv2.drawContours(output, [box], 0, (100, 150, 255), 3)
+            detections.append({
+                'box': (x1, y1, x2, y2),
+                'conf': conf,
+                'center': (cx, cy),
+                'angle': ski_angle,
+                'width': width,
+                'height': height
+            })
+
+        # Match skis to ankles
+        if la and detections:
+            best_dist = float('inf')
+            for det in detections:
+                dist = math.sqrt((det['center'][0] - la[0])**2 + (det['center'][1] - la[1])**2)
+                if dist < best_dist:
+                    best_dist = dist
+                    left_ski = det.copy()
+                    # Calculate fore/aft: how far forward ankle is relative to ski center
+                    # Positive = ankle ahead of ski center (forward lean)
+                    left_ski['fore_aft'] = la[0] - det['center'][0]  # In pixels
+
+        if ra and detections:
+            best_dist = float('inf')
+            for det in detections:
+                if left_ski and det['box'] == left_ski['box']:
+                    continue
+                dist = math.sqrt((det['center'][0] - ra[0])**2 + (det['center'][1] - ra[1])**2)
+                if dist < best_dist:
+                    best_dist = dist
+                    right_ski = det.copy()
+                    right_ski['fore_aft'] = ra[0] - det['center'][0]
+
+        return left_ski, right_ski
+
+    def _draw_ski_rectangles(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
+                              left_ski: Optional[dict] = None, right_ski: Optional[dict] = None) -> np.ndarray:
+        """Draw ski detections using pre-detected ski data."""
+        output = frame.copy()
+
+        # Draw left ski (orange)
+        if left_ski:
+            x1, y1, x2, y2 = left_ski['box']
+            color = (0, 165, 255)  # Orange
+            cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
+
+        # Draw right ski (blue)
+        if right_ski:
+            x1, y1, x2, y2 = right_ski['box']
+            color = (255, 150, 50)  # Blue
+            cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
 
         return output
 
