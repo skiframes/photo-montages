@@ -561,22 +561,23 @@ class YOLOPoseAnalyzer:
         else:
             print("Ski detector not found. Run train_ski_detector.py to train one.")
 
-        # Initialize SAM for precise ski segmentation (uses SAM2 when available)
+        # Initialize SAM for precise ski segmentation (SAM3 preferred, then SAM2)
         self.sam_model = None
-        self.use_sam = use_sam3 and HAS_SAM  # use_sam3 parameter name kept for compatibility
+        self.sam_version = None  # 'sam3' or 'sam2'
+        self.use_sam = use_sam3 and HAS_SAM
 
         if use_sam3:
             if not HAS_SAM:
                 print("SAM not available. Install with: pip install -U ultralytics")
-                print("  SAM2 models: sam2_b.pt (base), sam2_l.pt (large), sam2_t.pt (tiny)")
+                print("  SAM3: sam3.pt (text prompts), SAM2: sam2_b.pt")
             else:
-                # Find SAM model (SAM2 preferred over SAM1)
+                # Find SAM model - SAM3 first (supports text prompts), then SAM2
                 sam_model_path = sam3_model_path
                 if sam_model_path is None:
-                    # Try SAM2 models first, then SAM1
-                    for path in ['sam2_b.pt', 'sam2_l.pt', 'sam2_t.pt',
-                                 'edge/sam2_b.pt', 'edge/sam2_l.pt',
-                                 'models/sam2_b.pt', 'sam_b.pt', 'sam_l.pt']:
+                    # Priority: SAM3 > SAM2
+                    for path in ['sam3.pt', 'edge/sam3.pt', 'models/sam3.pt',
+                                 'sam2_b.pt', 'sam2_l.pt', 'sam2_t.pt',
+                                 'edge/sam2_b.pt', 'models/sam2_b.pt']:
                         if Path(path).exists():
                             sam_model_path = path
                             break
@@ -585,13 +586,20 @@ class YOLOPoseAnalyzer:
                     print(f"Loading SAM from {sam_model_path}...")
                     try:
                         self.sam_model = SAMModel(sam_model_path)
-                        print("SAM loaded - will use precise ski segmentation.")
+                        # Detect version
+                        if 'sam3' in sam_model_path.lower():
+                            self.sam_version = 'sam3'
+                            print("SAM3 loaded - will use text prompts for ski detection.")
+                        else:
+                            self.sam_version = 'sam2'
+                            print("SAM2 loaded - will use bbox prompts for ski segmentation.")
                     except Exception as e:
                         print(f"Failed to load SAM: {e}")
                         self.sam_model = None
                 else:
-                    print("SAM model not found. Download from Ultralytics:")
-                    print("  yolo download model=sam2_b.pt")
+                    print("SAM model not found. Download:")
+                    print("  SAM3: huggingface-cli download facebook/sam3 sam3.pt")
+                    print("  SAM2: yolo download model=sam2_b.pt")
                     print("  Falling back to YOLO-based ski detection.")
 
         # Track current frame for SAM (to avoid re-setting image)
@@ -854,10 +862,86 @@ class YOLOPoseAnalyzer:
             print(f"SAM segmentation error: {e}")
             return []
 
-    def _segment_skis_sam3(self, frame: np.ndarray, frame_id: int) -> List[dict]:
-        """Legacy method - redirects to _segment_skis_with_sam for compatibility."""
-        # This is now handled in _detect_skis which calls _segment_skis_sam
-        return []
+    def _segment_skis_sam3_text(self, frame: np.ndarray) -> List[dict]:
+        """
+        Use SAM3 text prompts to detect skis directly without YOLO.
+
+        SAM3 supports text prompts like "ski" to segment objects.
+        Returns list of ski detections with mask, line, and angle info.
+        """
+        if self.sam_model is None or self.sam_version != 'sam3':
+            return []
+
+        try:
+            # Use text prompt to find skis
+            results = self.sam_model(frame, texts=["ski"], verbose=False)
+
+            if not results or len(results) == 0:
+                return []
+
+            detections = []
+
+            for result in results:
+                if not hasattr(result, 'masks') or result.masks is None:
+                    continue
+
+                masks = result.masks.data.cpu().numpy()
+                boxes = result.boxes.xyxy.cpu().numpy() if result.boxes is not None else []
+
+                for i, mask in enumerate(masks):
+                    mask_binary = (mask > 0.5).astype(np.uint8)
+                    contours, _ = cv2.findContours(mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                    if not contours:
+                        continue
+
+                    largest_contour = max(contours, key=cv2.contourArea)
+                    area = cv2.contourArea(largest_contour)
+
+                    if area < 500:
+                        continue
+
+                    if len(largest_contour) >= 5:
+                        line = cv2.fitLine(largest_contour, cv2.DIST_L2, 0, 0.01, 0.01)
+                        vx, vy = float(line[0][0]), float(line[1][0])
+                        cx, cy = float(line[2][0]), float(line[3][0])
+
+                        rect = cv2.minAreaRect(largest_contour)
+                        length = max(rect[1]) / 2
+
+                        pt1 = (int(cx - vx * length), int(cy - vy * length))
+                        pt2 = (int(cx + vx * length), int(cy + vy * length))
+                        ski_line = (pt1, pt2)
+                        direction_angle = math.degrees(math.atan2(vy, vx))
+
+                        if i < len(boxes):
+                            x1, y1, x2, y2 = boxes[i]
+                        else:
+                            x, y, w, h = cv2.boundingRect(largest_contour)
+                            x1, y1, x2, y2 = x, y, x + w, y + h
+
+                        width = x2 - x1
+                        height = y2 - y1
+                        is_side_view = width > 1.5 * height
+
+                        detections.append({
+                            'box': (float(x1), float(y1), float(x2), float(y2)),
+                            'center': (cx, cy),
+                            'direction_angle': direction_angle,
+                            'ski_line': ski_line,
+                            'width': width,
+                            'height': height,
+                            'is_side_view': is_side_view,
+                            'mask': mask_binary,
+                            'conf': 0.95,
+                            'method': 'sam3_text'
+                        })
+
+            return detections
+
+        except Exception as e:
+            print(f"SAM3 text segmentation error: {e}")
+            return []
 
     def _find_ski_base_line(self, frame: np.ndarray, x1: int, y1: int, x2: int, y2: int) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """Find the ski base line by detecting dark pixels within the bounding box.
@@ -917,8 +1001,10 @@ class YOLOPoseAnalyzer:
     def _detect_skis(self, frame: np.ndarray, keypoints: np.ndarray, frame_id: int = 0) -> Tuple[Optional[dict], Optional[dict]]:
         """Detect skis and match to ankles. Returns (left_ski, right_ski) dicts with box, angle, fore_aft.
 
-        Uses YOLO for detection, then SAM for precise segmentation if available.
-        Falls back to dark pixel detection if SAM unavailable.
+        Detection priority:
+        1. SAM3 text prompts ("ski") - no YOLO needed
+        2. YOLO + SAM2 bbox prompts - precise segmentation
+        3. YOLO + dark pixel detection - fallback
         """
         def get_pt(idx):
             kp = keypoints[idx]
@@ -933,26 +1019,28 @@ class YOLOPoseAnalyzer:
         right_ski = None
         detections = []
 
-        if self.ski_detector is None:
-            return None, None
+        # Step 1: Try SAM3 text prompts first (no YOLO needed)
+        if self.sam_model is not None and self.sam_version == 'sam3':
+            sam3_detections = self._segment_skis_sam3_text(frame)
+            if sam3_detections:
+                detections = sam3_detections
 
-        # Step 1: Use YOLO to detect ski bounding boxes
-        yolo_results = self.ski_detector(frame, verbose=False, conf=0.3)
+        # Step 2: Fall back to YOLO detection
+        if not detections and self.ski_detector is not None:
+            yolo_results = self.ski_detector(frame, verbose=False, conf=0.3)
 
-        if not yolo_results or len(yolo_results) == 0 or yolo_results[0].boxes is None:
-            return None, None
+            if yolo_results and len(yolo_results) > 0 and yolo_results[0].boxes is not None:
+                yolo_boxes = yolo_results[0].boxes
+                bboxes = []
+                for box in yolo_boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    bboxes.append([float(x1), float(y1), float(x2), float(y2)])
 
-        yolo_boxes = yolo_results[0].boxes
-        bboxes = []
-        for box in yolo_boxes:
-            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-            bboxes.append([float(x1), float(y1), float(x2), float(y2)])
-
-        # Step 2: If SAM is available, use it for precise segmentation
-        if self.sam_model is not None and bboxes:
-            sam_detections = self._segment_skis_sam(frame, bboxes)
-            if sam_detections:
-                detections = sam_detections
+                # Step 2a: If SAM2 available, use bbox prompts for segmentation
+                if self.sam_model is not None and self.sam_version == 'sam2' and bboxes:
+                    sam_detections = self._segment_skis_sam(frame, bboxes)
+                    if sam_detections:
+                        detections = sam_detections
 
         # Step 3: Fall back to YOLO + dark pixel detection if SAM unavailable or failed
         if not detections:
@@ -1019,14 +1107,14 @@ class YOLOPoseAnalyzer:
     def _draw_ski_rectangles(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
                               left_ski: Optional[dict] = None, right_ski: Optional[dict] = None,
                               metrics: Optional[PoseMetrics] = None) -> np.ndarray:
-        """Draw ski detections with ski base lines and metrics labels above each ski."""
+        """Draw ski detections with ski base lines. Metrics shown only above right ski with comparison."""
         output = frame.copy()
         thickness = max(2, int(3 * scale))
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.5 * scale
+        font_scale = 0.6 * scale
         text_thickness = max(1, int(2 * scale))
 
-        # Draw left ski with metrics
+        # Draw left ski (no label - just visualization)
         if left_ski:
             x1, y1, x2, y2 = left_ski['box']
             # Draw bounding box (orange, thin)
@@ -1035,22 +1123,9 @@ class YOLOPoseAnalyzer:
             if left_ski.get('ski_line'):
                 pt1, pt2 = left_ski['ski_line']
                 cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-                # White outline for visibility
                 cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
 
-            # Draw metrics label above left ski
-            if metrics:
-                edge_l = abs(metrics.edge_angle_left)
-                label = f"L:{edge_l:.0f}"
-                if metrics.fore_aft_left is not None:
-                    fa = 90 + metrics.fore_aft_left
-                    label += f" F/A:{fa:.0f}"
-                label_pos = (int(x1), int(y1) - int(10 * scale))
-                # Black outline for visibility
-                cv2.putText(output, label, label_pos, font, font_scale, (0, 0, 0), text_thickness + 2, cv2.LINE_AA)
-                cv2.putText(output, label, label_pos, font, font_scale, (0, 165, 255), text_thickness, cv2.LINE_AA)
-
-        # Draw right ski with metrics
+        # Draw right ski with comparison metrics above
         if right_ski:
             x1, y1, x2, y2 = right_ski['box']
             # Draw bounding box (blue, thin)
@@ -1059,20 +1134,38 @@ class YOLOPoseAnalyzer:
             if right_ski.get('ski_line'):
                 pt1, pt2 = right_ski['ski_line']
                 cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-                # White outline for visibility
                 cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
 
-            # Draw metrics label above right ski
+            # Draw metrics above right ski - comparison to left ski + slope
             if metrics:
+                edge_l = abs(metrics.edge_angle_left)
                 edge_r = abs(metrics.edge_angle_right)
-                label = f"R:{edge_r:.0f}"
-                if metrics.fore_aft_right is not None:
-                    fa = 90 + metrics.fore_aft_right
-                    label += f" F/A:{fa:.0f}"
-                label_pos = (int(x1), int(y1) - int(10 * scale))
-                # Black outline for visibility
-                cv2.putText(output, label, label_pos, font, font_scale, (0, 0, 0), text_thickness + 2, cv2.LINE_AA)
-                cv2.putText(output, label, label_pos, font, font_scale, (255, 150, 50), text_thickness, cv2.LINE_AA)
+
+                # Build multi-line label above right ski
+                lines = []
+
+                # Line 1: Slope gradient
+                lines.append(f"Slope: {abs(self.pitch_deg):.0f}")
+
+                # Line 2: Edge angles comparison (L vs R)
+                lines.append(f"Edge: L{edge_l:.0f} R{edge_r:.0f}")
+
+                # Line 3: Fore/Aft comparison if available
+                if metrics.fore_aft_left is not None and metrics.fore_aft_right is not None:
+                    fa_l = 90 + metrics.fore_aft_left
+                    fa_r = 90 + metrics.fore_aft_right
+                    lines.append(f"F/A: L{fa_l:.0f} R{fa_r:.0f}")
+
+                # Draw lines above the right ski box
+                line_height = int(25 * scale)
+                base_y = int(y1) - int(15 * scale)
+
+                for i, line in enumerate(reversed(lines)):
+                    label_y = base_y - i * line_height
+                    label_pos = (int(x1), label_y)
+                    # Black outline for visibility
+                    cv2.putText(output, line, label_pos, font, font_scale, (0, 0, 0), text_thickness + 2, cv2.LINE_AA)
+                    cv2.putText(output, line, label_pos, font, font_scale, (255, 255, 255), text_thickness, cv2.LINE_AA)
 
         return output
 
