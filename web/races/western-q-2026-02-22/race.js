@@ -3540,6 +3540,7 @@ const VirtualRace = {
         const hasVideos = this.athletes.length >= 2;
         this._setTabEnabled('V', hasVideos);
         this._setTabEnabled('PM', true);  // Always available
+        this._setTabEnabled('AI', true);  // Always show, will show message if no AI videos
         this.mode = hasVideos ? 'V' : 'PM';
         this._setActiveTab(this.mode);
 
@@ -3560,6 +3561,12 @@ const VirtualRace = {
         });
         this._setActiveLayout(this.layout);
 
+        // Setup ghost opacity slider
+        const ghostSlider = document.getElementById('vrGhostOpacity');
+        if (ghostSlider) {
+            ghostSlider.addEventListener('input', (e) => this.setGhostOpacity(e.target.value));
+        }
+
         // Show modal
         this.modal.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
@@ -3573,6 +3580,9 @@ const VirtualRace = {
     setLayout(layout) {
         this.layout = layout;
         this._setActiveLayout(layout);
+        // Show/hide ghost opacity slider
+        const slider = document.getElementById('vrGhostSlider');
+        if (slider) slider.style.display = layout === 'ghost' ? 'flex' : 'none';
         this.renderContent();
     },
 
@@ -3580,6 +3590,15 @@ const VirtualRace = {
         this.modal?.querySelectorAll('.vr-layout-tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.layout === layout);
         });
+    },
+
+    setGhostOpacity(value) {
+        const container = document.getElementById('vrContent');
+        if (container) {
+            container.style.setProperty('--ghost-opacity', value / 100);
+        }
+        const label = document.getElementById('vrGhostValue');
+        if (label) label.textContent = value + '%';
     },
 
     close() {
@@ -3625,6 +3644,8 @@ const VirtualRace = {
 
         if (this.mode === 'V') {
             this._renderVideoMode(container);
+        } else if (this.mode === 'AI') {
+            this._renderAIMode(container);
         } else {
             this._renderPMMode(container);
         }
@@ -3725,6 +3746,81 @@ const VirtualRace = {
             </div>
         `;
         document.getElementById('vrControlsSection').classList.add('hidden');
+    },
+
+    _renderAIMode(container) {
+        // AI mode: show AI-analyzed videos side by side
+        if (!this.athleteA || !this.athleteB) {
+            container.innerHTML = '<div class="vr-empty">Select two athletes to compare</div>';
+            document.getElementById('vrControlsSection').classList.add('hidden');
+            return;
+        }
+
+        // Get AI video URLs for each athlete
+        const getAIVideo = (athlete) => {
+            const gender = athlete.gender;
+            const bib = athlete.bib;
+            for (const cat of manifest.categories) {
+                const catGender = cat.id.includes('girl') ? 'g' : 'b';
+                if (catGender !== gender) continue;
+                const a = cat.athletes.find(x => x.bib === bib);
+                if (!a || !a.montages) continue;
+                for (const camId of Object.keys(a.montages)) {
+                    for (const runKey of Object.keys(a.montages[camId])) {
+                        const dets = a.montages[camId][runKey];
+                        if (Array.isArray(dets)) {
+                            const det = dets.find(d => d.ai_video);
+                            if (det && det.ai_video) {
+                                return manifest.media_base_url + '/' + det.ai_video;
+                            }
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+
+        const aiA = getAIVideo(this.athleteA);
+        const aiB = getAIVideo(this.athleteB);
+
+        if (!aiA && !aiB) {
+            container.innerHTML = '<div class="vr-empty">No AI videos available. Run AI analysis first.</div>';
+            document.getElementById('vrControlsSection').classList.add('hidden');
+            return;
+        }
+
+        const layoutClass = this.layout === 'stack' ? 'layout-stack' : (this.layout === 'ghost' ? 'layout-ghost' : '');
+        container.innerHTML = `
+            <div class="vr-panels ${layoutClass}">
+                <div class="vr-panel">
+                    <div class="vr-panel-label">#${this.athleteA.bib} ${this.athleteA.name}</div>
+                    <div class="vr-video-wrap">
+                        ${aiA ? `<video id="vrVideoA" preload="auto" playsinline muted><source src="${aiA}" type="video/mp4"></video>` : '<div class="vr-empty">No AI video</div>'}
+                    </div>
+                    <div class="vr-panel-info">
+                        ${this.athleteA.duration ? this.athleteA.duration.toFixed(2) + 's' : '-'}
+                        <span class="vr-panel-meta">${this.athleteA.team}</span>
+                    </div>
+                </div>
+                <div class="vr-panel">
+                    <div class="vr-panel-label">#${this.athleteB.bib} ${this.athleteB.name}</div>
+                    <div class="vr-video-wrap">
+                        ${aiB ? `<video id="vrVideoB" preload="auto" playsinline muted><source src="${aiB}" type="video/mp4"></video>` : '<div class="vr-empty">No AI video</div>'}
+                    </div>
+                    <div class="vr-panel-info">
+                        ${this.athleteB.duration ? this.athleteB.duration.toFixed(2) + 's' : '-'}
+                        <span class="vr-panel-meta">${this.athleteB.team}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.videoA = document.getElementById('vrVideoA');
+        this.videoB = document.getElementById('vrVideoB');
+        if (this.videoA) this.videoA.playbackRate = this.playbackRate;
+        if (this.videoB) this.videoB.playbackRate = this.playbackRate;
+
+        document.getElementById('vrControlsSection').classList.remove('hidden');
     },
 
     togglePlay() {

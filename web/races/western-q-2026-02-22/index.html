@@ -1086,16 +1086,25 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
     <!-- Virtual Race Modal -->
     <div id="virtualRaceModal" class="virtual-race-modal hidden">
         <div class="vr-toolbar">
+            <a href="https://skiframes.com" class="vr-logo" target="_blank">
+                <img src="https://skiframes.com/assets/Skiframes_logo.png" alt="Skiframes" height="28">
+            </a>
             <div class="vr-title">🏁 Virtual Race</div>
             <div class="vr-toolbar-center">
                 <div class="vr-mode-tabs">
-                    <button class="vr-mode-tab" data-mode="PM">Photo</button>
+                    <button class="vr-mode-tab" data-mode="PM">Photo Montage</button>
                     <button class="vr-mode-tab active" data-mode="V">Video</button>
+                    <button class="vr-mode-tab" data-mode="AI">AI</button>
                 </div>
                 <div class="vr-layout-tabs">
                     <button class="vr-layout-tab active" data-layout="side" title="Side by Side">◫</button>
                     <button class="vr-layout-tab" data-layout="stack" title="Top / Bottom">▤</button>
-                    <button class="vr-layout-tab" data-layout="ghost" title="Ghost Overlay">◉</button>
+                    <button class="vr-layout-tab" data-layout="ghost" title="Ghost Overlay">👻</button>
+                </div>
+                <div id="vrGhostSlider" class="vr-ghost-slider" style="display:none;">
+                    <label>Ghost:</label>
+                    <input type="range" id="vrGhostOpacity" min="10" max="90" value="50">
+                    <span id="vrGhostValue">50%</span>
                 </div>
             </div>
             <button class="vr-close" onclick="VirtualRace.close()">&times;</button>
