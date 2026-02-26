@@ -4657,40 +4657,62 @@ def assign_unmatched():
 
     renamed_files = 0
 
+    # Delete any existing files with the target prefix (false positives)
+    deleted_existing = 0
+    for f in list(run_dir.glob(f'{new_prefix}*')):
+        try:
+            f.unlink()
+            deleted_existing += 1
+            print(f'[unmatched] Deleted existing: {f.name}')
+        except Exception as e:
+            print(f'[unmatched] Warning: failed to delete {f}: {e}')
+
+    thumb_dir = run_dir / 'thumbnails'
+    if thumb_dir.is_dir():
+        for f in list(thumb_dir.glob(f'{new_prefix}*')):
+            try:
+                f.unlink()
+                deleted_existing += 1
+                print(f'[unmatched] Deleted existing: thumbnails/{f.name}')
+            except Exception as e:
+                print(f'[unmatched] Warning: failed to delete {f}: {e}')
+
+    fullres_dir = run_dir / 'fullres'
+    if fullres_dir.is_dir():
+        for f in list(fullres_dir.glob(f'{new_prefix}*')):
+            try:
+                f.unlink()
+                deleted_existing += 1
+                print(f'[unmatched] Deleted existing: fullres/{f.name}')
+            except Exception as e:
+                print(f'[unmatched] Warning: failed to delete {f}: {e}')
+
+    if deleted_existing > 0:
+        print(f'[unmatched] Deleted {deleted_existing} existing files for {new_prefix}')
+
     # Rename in run_dir (mp4, timing json)
     for f in run_dir.glob(f'{unmatched_id}*'):
         suffix = f.name[len(unmatched_id):]  # e.g. ".mp4", "_timing.json"
         new_name = new_prefix + suffix
         new_path = f.parent / new_name
-        if new_path.exists():
-            print(f'[unmatched] WARNING: target exists, skipping: {new_path}')
-            continue
         f.rename(new_path)
         renamed_files += 1
 
     # Rename in thumbnails/ subdir
-    thumb_dir = run_dir / 'thumbnails'
     if thumb_dir.is_dir():
         for f in thumb_dir.glob(f'{unmatched_id}*'):
             suffix = f.name[len(unmatched_id):]
             new_name = new_prefix + suffix
             new_path = f.parent / new_name
-            if new_path.exists():
-                print(f'[unmatched] WARNING: target exists, skipping: {new_path}')
-                continue
             f.rename(new_path)
             renamed_files += 1
 
     # Rename in fullres/ subdir
-    fullres_dir = run_dir / 'fullres'
     if fullres_dir.is_dir():
         for f in fullres_dir.glob(f'{unmatched_id}*'):
             suffix = f.name[len(unmatched_id):]
             new_name = new_prefix + suffix
             new_path = f.parent / new_name
-            if new_path.exists():
-                print(f'[unmatched] WARNING: target exists, skipping: {new_path}')
-                continue
             f.rename(new_path)
             renamed_files += 1
 
@@ -4727,6 +4749,7 @@ def assign_unmatched():
     return jsonify({
         'ok': True,
         'renamed_files': renamed_files,
+        'deleted_existing': deleted_existing,
         'new_prefix': new_prefix,
         'manifest_rebuilt': manifest_rebuilt,
     })
