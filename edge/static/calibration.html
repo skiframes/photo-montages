@@ -1487,12 +1487,21 @@
                     <option value="">Loading videos...</option>
                 </select>
                 <div id="videoInfo" style="display: none;">
-                    <label for="seekTime">Seek to (seconds)</label>
+                    <label for="seekTime">Seek within file (seconds)</label>
                     <div style="display: flex; gap: 8px; align-items: center;">
                         <input type="range" id="seekTime" min="0" max="7200" value="0" style="flex: 1;">
                         <input type="number" id="seekTimeInput" min="0" max="7200" value="0" style="width: 80px;" placeholder="seconds">
                     </div>
                     <div class="help-text">Duration: <span id="videoDuration">0</span>s | Position: <span id="seekPosition">0</span>s</div>
+
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                        <label>Jump to time of day (finds correct video file)</label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="time" id="jumpToTime" step="1" style="flex: 1; font-size: 18px; padding: 8px 12px; min-width: 150px;">
+                            <button type="button" id="jumpToTimeBtn" class="btn btn-secondary" style="padding: 10px 16px; font-size: 16px;">Jump</button>
+                        </div>
+                        <div class="help-text">Enter time (e.g., 09:30:00) to find and select the video file containing that time</div>
+                    </div>
                 </div>
 
                 <!-- Race Timing Section (appears for Video File only) -->
@@ -1997,6 +2006,8 @@
             seekTime: document.getElementById('seekTime'),
             seekTimeInput: document.getElementById('seekTimeInput'),
             videoDuration: document.getElementById('videoDuration'),
+            jumpToTime: document.getElementById('jumpToTime'),
+            jumpToTimeBtn: document.getElementById('jumpToTimeBtn'),
             grabFrame: document.getElementById('grabFrame'),
             frameCard: document.getElementById('frameCard'),
             frameWrapper: document.getElementById('frameWrapper'),
@@ -2700,6 +2711,53 @@
                 const val = Math.min(Math.max(0, parseInt(elements.seekTimeInput.value) || 0), parseInt(elements.seekTime.max) || 7200);
                 elements.seekTime.value = val;
                 elements.seekPosition.textContent = val;
+            });
+
+            // Jump to time of day - find correct video file
+            elements.jumpToTimeBtn.addEventListener('click', () => {
+                const timeStr = elements.jumpToTime.value;
+                if (!timeStr) {
+                    showStatus('Enter a time of day (e.g., 09:30:00)', 'error');
+                    return;
+                }
+                // Parse time to seconds since midnight
+                const [h, m, s] = timeStr.split(':').map(Number);
+                const targetSec = h * 3600 + m * 60 + (s || 0);
+
+                // Look through video options to find one containing this time
+                const options = elements.videoDropdown.options;
+                let found = false;
+                for (let i = 0; i < options.length; i++) {
+                    const filename = options[i].text;
+                    // Parse timestamp from filename: R1_YYYYMMDD_HHMMSS.mp4 or similar patterns
+                    const match = filename.match(/(\d{6})\.mp4/i) || filename.match(/_(\d{6})[_\.]/);
+                    if (match) {
+                        const ts = match[1];
+                        const fileH = parseInt(ts.substring(0, 2));
+                        const fileM = parseInt(ts.substring(2, 4));
+                        const fileS = parseInt(ts.substring(4, 6));
+                        const fileStartSec = fileH * 3600 + fileM * 60 + fileS;
+                        const fileEndSec = fileStartSec + 300; // ~5 min per file
+
+                        if (targetSec >= fileStartSec && targetSec < fileEndSec) {
+                            // Found the file! Select it and set seek position
+                            elements.videoDropdown.selectedIndex = i;
+                            loadVideoInfo(options[i].value);
+                            const seekPos = targetSec - fileStartSec;
+                            setTimeout(() => {
+                                elements.seekTime.value = seekPos;
+                                elements.seekTimeInput.value = seekPos;
+                                elements.seekPosition.textContent = seekPos;
+                            }, 200);
+                            showStatus(`Found: ${filename} at offset ${seekPos}s`, 'success');
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) {
+                    showStatus(`No video file found for time ${timeStr}`, 'error');
+                }
             });
 
             // Frame grabbing
