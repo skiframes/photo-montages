@@ -512,6 +512,7 @@ class SkiFramesRunner:
                     output_path=video_out_path,
                     source_fps=self.source_fps,
                     crop_region=vid_crop_region,
+                    selected_logos=self.selected_logos,
                 )
                 if staging_video_path:
                     size_kb = os.path.getsize(staging_video_path) / 1024
@@ -627,6 +628,7 @@ class SkiFramesRunner:
                     output_path=video_out_path,
                     source_fps=self.source_fps,
                     crop_region=vid_crop_region,
+                    selected_logos=self.selected_logos,
                 )
                 if video_clip_path:
                     size_kb = os.path.getsize(video_clip_path) / 1024

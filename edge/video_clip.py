@@ -20,6 +20,12 @@ from typing import Optional, Dict, List
 
 import numpy as np
 
+# Import add_logos from montage for consistent logo overlay
+try:
+    from montage import add_logos
+except ImportError:
+    add_logos = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,6 +76,7 @@ def generate_video_clip(
     output_path: str,
     source_fps: float = 30.0,
     crop_region: Optional[Dict] = None,
+    selected_logos: Optional[List[str]] = None,
 ) -> Optional[str]:
     """
     Generate an MP4 video clip from a list of BGR frames.
@@ -79,6 +86,7 @@ def generate_video_clip(
         output_path: Where to write the .mp4 file.
         source_fps: FPS of the source video (for correct playback speed).
         crop_region: Optional dict with x, y, w, h to crop frames.
+        selected_logos: Optional list of logo filenames to overlay at bottom-left.
 
     Returns:
         Path to the generated MP4 file, or None if generation fails.
@@ -155,6 +163,10 @@ def generate_video_clip(
 
             # Ensure even dimensions
             cropped = cropped[:out_h, :out_w]
+
+            # Add logos if specified and add_logos is available
+            if selected_logos and add_logos:
+                cropped = add_logos(cropped, selected_logos)
 
             process.stdin.write(cropped.tobytes())
 

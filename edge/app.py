@@ -1209,6 +1209,9 @@ def save_config():
         'run_number': data.get('run_number', ''),       # e.g., "run1"
         'race_slug': data.get('race_slug', ''),         # e.g., "western-q-2026-02-22"
         'staging_dir': data.get('staging_dir', ''),     # e.g., "/path/to/montages/western-q-2026-02-22"
+        # Branding options
+        'selected_logos': data.get('selected_logos'),  # Logo filenames for overlay
+        'race_info': data.get('race_info'),            # Race info for overlay
     }
 
     # Save config
@@ -2827,6 +2830,13 @@ def populate_manifest_with_montages():
                         if legacy_video.exists():
                             montage_entry['video'] = f"{cam_id}/{run_key}/{base_prefix}.mp4"
 
+                    # Check for pre-computed AI analysis video
+                    if montage_entry.get('video'):
+                        ai_video_name = video_prefix + '_ai.mp4'
+                        ai_video_file = run_dir / ai_video_name
+                        if ai_video_file.exists():
+                            montage_entry['ai_video'] = f"{cam_id}/{run_key}/{ai_video_name}"
+
                     bib_key = (gender_char, bib)
                     if bib_key not in bib_detections:
                         bib_detections[bib_key] = []
@@ -4264,6 +4274,10 @@ def ai_analyze():
                 }
                 cmd.extend(['--gate-info', _json.dumps(gate_info)])
                 print(f"[AI] Gate info: Gate 9 from Gate 8 (Section 1)")
+
+            # Add logos for overlay (use same defaults as montage.py)
+            logos_list = data.get('logos') or ['NHARA_logo.png', 'ProctorLogo.jpg', 'Skiframes-com_logo.png']
+            cmd.extend(['--logos', ','.join(logos_list)])
 
             print(f"[AI] Running: {' '.join(cmd)}")
 

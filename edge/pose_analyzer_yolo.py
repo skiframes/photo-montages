@@ -30,6 +30,12 @@ from collections import deque
 import cv2
 import numpy as np
 
+# Import add_logos from montage for consistent logo overlay
+try:
+    from montage import add_logos
+except ImportError:
+    add_logos = None
+
 # SAM/SAM2/SAM3 support (optional) - Segment Anything Model for precise ski segmentation
 HAS_SAM = False
 SAMModel = None
@@ -628,6 +634,13 @@ class YOLOPoseAnalyzer:
 
         # Gate info for display (set via set_gate_info())
         self.current_gate = None
+
+        # Logo overlay (set via set_logos())
+        self.selected_logos = None
+
+    def set_logos(self, logos: List[str]):
+        """Set logos to overlay at bottom-left corner."""
+        self.selected_logos = logos if logos else None
 
     def set_gate_info(self, gate_id: int = None, color: str = None,
                       prev_gate_id: int = None, prev_gate_color: str = None,
@@ -1612,6 +1625,10 @@ class YOLOPoseAnalyzer:
                 (tw, _), _ = cv2.getTextSize(text, font, font_scale, text_thickness)
                 x += tw + int(15 * scale)
 
+        # Add logos at bottom-left (above the metrics footer)
+        if self.selected_logos and add_logos:
+            output = add_logos(output, self.selected_logos)
+
         return output
 
 
@@ -1637,6 +1654,8 @@ def main():
                         help='Which run (default: run2)')
     parser.add_argument('--gate-info', metavar='JSON',
                         help='Gate info JSON: {"gate_id":9,"color":"blue","prev_id":8,...}')
+    parser.add_argument('--logos', metavar='LIST',
+                        help='Comma-separated logo filenames for bottom-left overlay')
 
     args = parser.parse_args()
 
@@ -1683,6 +1702,12 @@ def main():
             print(f"Gate info: Gate {gate_data.get('gate_id')} from Gate {gate_data.get('prev_id')}")
         except Exception as e:
             print(f"Warning: Could not parse gate info: {e}")
+
+    # Set logos if provided
+    if args.logos:
+        logos = [l.strip() for l in args.logos.split(',')]
+        analyzer.set_logos(logos)
+        print(f"Logos: {logos}")
 
     cap = cv2.VideoCapture(args.video_path)
     if not cap.isOpened():
