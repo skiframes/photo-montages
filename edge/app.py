@@ -4249,6 +4249,22 @@ def ai_analyze():
                 '--output-video', str(ai_video_path),
                 '--model', 'l',
             ]
+
+            # Add gate info for Cam1/run1 (Section 1: gates 8-9)
+            if cam_id == 'Cam1' and run_key == 'run1':
+                import json as _json
+                gate_info = {
+                    'gate_id': 9,
+                    'color': 'blue',
+                    'prev_id': 8,
+                    'prev_color': 'red',
+                    'dist_from_prev': 22.5,  # meters (computed from GPS)
+                    'drop': 6.5,  # meters (295.5m - 289.0m)
+                    'gps_accuracy': 0.81,  # from run2 manifest
+                }
+                cmd.extend(['--gate-info', _json.dumps(gate_info)])
+                print(f"[AI] Gate info: Gate 9 from Gate 8 (Section 1)")
+
             print(f"[AI] Running: {' '.join(cmd)}")
 
             # Run subprocess and capture output for progress tracking

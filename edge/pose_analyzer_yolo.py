@@ -1160,27 +1160,21 @@ class YOLOPoseAnalyzer:
     def _draw_ski_rectangles(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
                               left_ski: Optional[dict] = None, right_ski: Optional[dict] = None,
                               metrics: Optional[PoseMetrics] = None) -> np.ndarray:
-        """Draw ski detections with ski base lines (no labels - info shown in top-right box)."""
+        """Draw ski base lines only (no bounding boxes)."""
         output = frame.copy()
         thickness = max(2, int(3 * scale))
 
-        # Draw left ski
-        if left_ski:
-            x1, y1, x2, y2 = left_ski['box']
-            cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), (0, 165, 255), 2)
-            if left_ski.get('ski_line'):
-                pt1, pt2 = left_ski['ski_line']
-                cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-                cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
+        # Draw left ski line (no rectangle)
+        if left_ski and left_ski.get('ski_line'):
+            pt1, pt2 = left_ski['ski_line']
+            cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+            cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
 
-        # Draw right ski
-        if right_ski:
-            x1, y1, x2, y2 = right_ski['box']
-            cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), (255, 150, 50), 2)
-            if right_ski.get('ski_line'):
-                pt1, pt2 = right_ski['ski_line']
-                cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-                cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
+        # Draw right ski line (no rectangle)
+        if right_ski and right_ski.get('ski_line'):
+            pt1, pt2 = right_ski['ski_line']
+            cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+            cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
 
         return output
 
@@ -1288,29 +1282,34 @@ class YOLOPoseAnalyzer:
 
         return output
 
-    def _draw_metrics_graph(self, frame: np.ndarray, scale: float, graph_height: int) -> np.ndarray:
-        """Draw a graph of metrics over time above the footer."""
+    def _draw_metrics_graph(self, frame: np.ndarray, scale: float, graph_height: int,
+                             current_frame: int = None, total_frames: int = None) -> np.ndarray:
+        """Draw a graph of metrics over time above the footer with current position line."""
         output = frame.copy()
         h, w = frame.shape[:2]
 
         if len(self.history.edge_symmetry) < 2:
             return output
 
-        # Graph dimensions
-        graph_y = h - graph_height - int(50 * scale)  # Above footer
-        graph_w = w - int(40 * scale)
-        margin = int(20 * scale)
+        # Graph dimensions - larger graph
+        graph_y = h - graph_height - int(90 * scale)  # Higher above footer
+        graph_w = w - int(60 * scale)
+        margin = int(30 * scale)
 
         # Semi-transparent background
         overlay = output.copy()
         cv2.rectangle(overlay, (margin, graph_y), (margin + graph_w, graph_y + graph_height),
-                     (30, 30, 30), -1)
-        cv2.addWeighted(overlay, 0.7, output, 0.3, 0, output)
+                     (20, 20, 20), -1)
+        cv2.addWeighted(overlay, 0.8, output, 0.2, 0, output)
+
+        # Draw border
+        cv2.rectangle(output, (margin, graph_y), (margin + graph_w, graph_y + graph_height),
+                     (80, 80, 80), 1)
 
         # Draw grid lines
         for i in range(5):
             y = graph_y + int(graph_height * i / 4)
-            cv2.line(output, (margin, y), (margin + graph_w, y), (60, 60, 60), 1)
+            cv2.line(output, (margin, y), (margin + graph_w, y), (50, 50, 50), 1)
 
         def draw_line(data, color, y_min, y_max):
             if len(data) < 2:
@@ -1325,25 +1324,45 @@ class YOLOPoseAnalyzer:
                 points.append((x, y))
 
             for i in range(len(points) - 1):
-                cv2.line(output, points[i], points[i+1], color, max(1, int(2 * scale)), cv2.LINE_AA)
+                cv2.line(output, points[i], points[i+1], color, max(2, int(2 * scale)), cv2.LINE_AA)
 
         # Draw different metrics
         draw_line(self.history.edge_symmetry, (0, 255, 0), 0, 100)  # Green - symmetry
         draw_line(self.history.inclination, (255, 180, 100), -45, 45)  # Orange - inclination
-        draw_line(self.history.angulation, (0, 255, 255), 0, 45)  # Yellow - angulation (0=aligned)
+        draw_line(self.history.angulation, (0, 255, 255), 0, 45)  # Yellow - angulation
 
-        # Legend
+        # Draw current position line (vertical white line)
+        if current_frame is not None and total_frames and total_frames > 1:
+            pos_x = margin + int(current_frame * graph_w / (total_frames - 1))
+            cv2.line(output, (pos_x, graph_y), (pos_x, graph_y + graph_height), (255, 255, 255), 2)
+
+        # Legend - larger and more visible
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.4 * scale
-        leg_y = graph_y + int(15 * scale)
-        cv2.putText(output, "Symmetry", (margin + 5, leg_y), font, font_scale, (0, 255, 0), 1)
-        cv2.putText(output, "Inclin", (margin + int(80 * scale), leg_y), font, font_scale, (255, 180, 100), 1)
-        cv2.putText(output, "Angul", (margin + int(140 * scale), leg_y), font, font_scale, (0, 255, 255), 1)
+        font_scale = 0.55 * scale
+        text_thickness = max(1, int(2 * scale))
+        leg_y = graph_y - int(8 * scale)  # Above the graph
+
+        # Draw legend with colored squares
+        leg_items = [
+            ("Symmetry", (0, 255, 0)),
+            ("Inclination", (255, 180, 100)),
+            ("Angulation", (0, 255, 255)),
+        ]
+        leg_x = margin
+        for label, color in leg_items:
+            # Colored square
+            sq_size = int(12 * scale)
+            cv2.rectangle(output, (leg_x, leg_y - sq_size + 2), (leg_x + sq_size, leg_y + 2), color, -1)
+            # Label
+            cv2.putText(output, label, (leg_x + sq_size + 5, leg_y), font, font_scale,
+                       (200, 200, 200), text_thickness, cv2.LINE_AA)
+            (tw, _), _ = cv2.getTextSize(label, font, font_scale, text_thickness)
+            leg_x += sq_size + tw + int(25 * scale)
 
         return output
 
     def _draw_extended_lines(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
-        """Draw extended lines through shoulders and hips with slope reference."""
+        """Draw extended lines through shoulders and hips (no slope reference lines)."""
         output = frame.copy()
         line_ext = int(100 * scale)
         thickness = max(2, int(3 * scale))
@@ -1354,40 +1373,12 @@ class YOLOPoseAnalyzer:
                 return (int(kp[0]), int(kp[1]))
             return None
 
-        def draw_dotted_line(img, pt1, pt2, color, thickness, dash_len=10, gap_len=8):
-            """Draw a dotted line between two points."""
-            dx = pt2[0] - pt1[0]
-            dy = pt2[1] - pt1[1]
-            dist = math.sqrt(dx*dx + dy*dy)
-            if dist < 1:
-                return
-            ux, uy = dx/dist, dy/dist
-            pos = 0
-            drawing = True
-            while pos < dist:
-                if drawing:
-                    seg_len = min(dash_len, dist - pos)
-                    x1 = int(pt1[0] + ux * pos)
-                    y1 = int(pt1[1] + uy * pos)
-                    x2 = int(pt1[0] + ux * (pos + seg_len))
-                    y2 = int(pt1[1] + uy * (pos + seg_len))
-                    cv2.line(img, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
-                    pos += dash_len
-                else:
-                    pos += gap_len
-                drawing = not drawing
-
         ls = get_pt(Keypoints.LEFT_SHOULDER)
         rs = get_pt(Keypoints.RIGHT_SHOULDER)
         lh = get_pt(Keypoints.LEFT_HIP)
         rh = get_pt(Keypoints.RIGHT_HIP)
 
-        # Slope direction unit vector
-        slope_rad = math.radians(self.slope_angle_deg)
-        slope_ux = math.cos(slope_rad)
-        slope_uy = math.sin(slope_rad)
-
-        # Extended shoulder line (magenta) with dotted slope reference
+        # Extended shoulder line (magenta) - no slope reference
         if ls and rs:
             dx = rs[0] - ls[0]
             dy = rs[1] - ls[1]
@@ -1398,12 +1389,7 @@ class YOLOPoseAnalyzer:
                 ext_r = (int(rs[0] + ux * line_ext), int(rs[1] + uy * line_ext))
                 cv2.line(output, ext_l, ext_r, (255, 0, 255), thickness, cv2.LINE_AA)
 
-                # Dotted slope reference line from extended left end
-                slope_ref = (int(ext_l[0] + slope_ux * line_ext * 1.5),
-                           int(ext_l[1] + slope_uy * line_ext * 1.5))
-                draw_dotted_line(output, ext_l, slope_ref, (255, 0, 255), max(1, thickness-1))
-
-        # Extended hip line (cyan) with dotted slope reference
+        # Extended hip line (cyan) - no slope reference
         if lh and rh:
             dx = rh[0] - lh[0]
             dy = rh[1] - lh[1]
@@ -1414,72 +1400,56 @@ class YOLOPoseAnalyzer:
                 ext_r = (int(rh[0] + ux * line_ext), int(rh[1] + uy * line_ext))
                 cv2.line(output, ext_l, ext_r, (255, 255, 0), thickness, cv2.LINE_AA)
 
-                # Dotted slope reference line from extended left end
-                slope_ref = (int(ext_l[0] + slope_ux * line_ext * 1.5),
-                           int(ext_l[1] + slope_uy * line_ext * 1.5))
-                draw_dotted_line(output, ext_l, slope_ref, (255, 255, 0), max(1, thickness-1))
-
         return output
 
     def _draw_gate_info_box(self, frame: np.ndarray, scale: float) -> np.ndarray:
         """
         Draw gate info box in top-right corner.
 
-        Displays:
+        Always displays slope gradient. If gate info is set, also shows:
         - Gate number and color
-        - Distance from previous gate (↕)
-        - Left/right offset (← or →)
-        - Vertical drop (▼)
-        - GPS accuracy (±)
-        - Slope gradient
+        - Distance from previous gate
+        - Vertical drop
+        - GPS accuracy
         """
-        if not self.current_gate:
-            return frame
-
         output = frame.copy()
         h, w = frame.shape[:2]
 
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6 * scale
+        font_scale = 0.7 * scale  # Bigger text
         text_thickness = max(1, int(2 * scale))
-        line_height = int(28 * scale)
+        line_height = int(32 * scale)
         margin = int(10 * scale)
-        padding = int(8 * scale)
+        padding = int(10 * scale)
 
-        gate = self.current_gate
         lines = []
 
-        # Gate number and color
-        if gate.get('id') is not None:
-            color_text = f" ({gate['color']})" if gate.get('color') else ""
-            lines.append((f"Gate {gate['id']}{color_text}", (255, 255, 255)))
+        # Gate info if available
+        if self.current_gate:
+            gate = self.current_gate
+            # Gate number and color
+            if gate.get('id') is not None:
+                color_text = f" ({gate['color']})" if gate.get('color') else ""
+                lines.append((f"Gate {gate['id']}{color_text}", (255, 255, 255)))
 
-        # Previous gate reference
-        if gate.get('prev_id') is not None:
-            prev_color_text = f" ({gate['prev_color']})" if gate.get('prev_color') else ""
-            lines.append((f"From Gate {gate['prev_id']}{prev_color_text}:", (180, 180, 180)))
+            # Previous gate reference
+            if gate.get('prev_id') is not None:
+                prev_color_text = f" ({gate['prev_color']})" if gate.get('prev_color') else ""
+                lines.append((f"From Gate {gate['prev_id']}{prev_color_text}:", (180, 180, 180)))
 
-        # Distance from previous gate
-        if gate.get('dist_from_prev') is not None:
-            lines.append((f"Dist: {gate['dist_from_prev']:.1f}m", (200, 200, 200)))
+            # Distance from previous gate
+            if gate.get('dist_from_prev') is not None:
+                lines.append((f"Dist: {gate['dist_from_prev']:.1f}m", (200, 200, 200)))
 
-        # Left/right offset
-        if gate.get('offset_lr') is not None:
-            offset = gate['offset_lr']
-            if offset < 0:
-                lines.append((f"Offset: {abs(offset):.1f}m L", (200, 200, 200)))
-            else:
-                lines.append((f"Offset: {offset:.1f}m R", (200, 200, 200)))
+            # Vertical drop
+            if gate.get('drop') is not None:
+                lines.append((f"Drop: {gate['drop']:.1f}m", (200, 200, 200)))
 
-        # Vertical drop
-        if gate.get('drop') is not None:
-            lines.append((f"Drop: {gate['drop']:.1f}m", (200, 200, 200)))
+            # GPS accuracy
+            if gate.get('gps_accuracy') is not None:
+                lines.append((f"GPS: +/-{gate['gps_accuracy']:.2f}m", (180, 180, 180)))
 
-        # GPS accuracy
-        if gate.get('gps_accuracy') is not None:
-            lines.append((f"GPS: +/-{gate['gps_accuracy']:.2f}m", (180, 180, 180)))
-
-        # Slope gradient
+        # Always show slope gradient
         lines.append((f"Slope: {abs(self.pitch_deg):.0f} deg", (0, 200, 255)))
 
         if not lines:
@@ -1521,7 +1491,9 @@ class YOLOPoseAnalyzer:
                      metrics: Optional[PoseMetrics] = None,
                      left_ski: Optional[dict] = None,
                      right_ski: Optional[dict] = None,
-                     show_debug_angles: bool = True) -> np.ndarray:
+                     show_debug_angles: bool = True,
+                     frame_num: int = None,
+                     total_frames: int = None) -> np.ndarray:
         """Draw pose skeleton and metrics on frame."""
         output = frame.copy()
         h, w = frame.shape[:2]
@@ -1571,26 +1543,26 @@ class YOLOPoseAnalyzer:
         # Draw fall line from snow level
         output = self._draw_fall_line(output, keypoints, scale)
 
-        # Draw metrics graph
-        graph_height = int(80 * scale)
-        output = self._draw_metrics_graph(output, scale, graph_height)
+        # Draw metrics graph - larger with position indicator
+        graph_height = int(120 * scale)
+        output = self._draw_metrics_graph(output, scale, graph_height, frame_num, total_frames)
 
         # Draw gate info box in top-right corner
         output = self._draw_gate_info_box(output, scale)
 
-        # Draw metrics panel at BOTTOM (two lines)
+        # Draw metrics panel at BOTTOM (two lines) - BIGGER text
         if metrics:
             font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.7 * scale
-            bar_height = int(70 * scale)  # Taller for two lines
+            font_scale = 0.9 * scale  # Bigger text
+            bar_height = int(80 * scale)  # Taller for bigger text
 
             overlay = output.copy()
             cv2.rectangle(overlay, (0, h - bar_height), (w, h), (0, 0, 0), -1)
             cv2.addWeighted(overlay, 0.7, output, 0.3, 0, output)
 
-            y = h - int(42 * scale)  # First line position
-            margin = int(10 * scale)
-            text_thickness = max(1, int(2 * scale))
+            y = h - int(48 * scale)  # First line position
+            margin = int(15 * scale)
+            text_thickness = max(2, int(2 * scale))
 
             # Color coding for percentages
             def pct_color(pct):
@@ -1603,7 +1575,7 @@ class YOLOPoseAnalyzer:
             edge_l = abs(metrics.edge_angle_left)
             edge_r = abs(metrics.edge_angle_right)
             line1_parts = [
-                (f"Edge angles: L{edge_l:.0f} R{edge_r:.0f}", (100, 255, 255)),
+                (f"Edge: L{edge_l:.0f} R{edge_r:.0f}", (100, 255, 255)),
                 (f"Sym:{metrics.edge_symmetry_pct:.0f}%", pct_color(metrics.edge_symmetry_pct)),
             ]
             # Fore/aft shows actual boot angle (90° + deviation = angle from ski base)
@@ -1613,17 +1585,16 @@ class YOLOPoseAnalyzer:
                 fa_r = f"{90 + metrics.fore_aft_right:.0f}" if metrics.fore_aft_right is not None else "--"
                 line1_parts.append((f"Fore/Aft: L{fa_l} R{fa_r}", (255, 200, 100)))
 
-            # Line 2: Body angles + slope gradient
+            # Line 2: Body angles (no slope - it's in the gate info panel)
             sh = abs(metrics.shoulder_angle_to_slope)
             hip = abs(metrics.hip_angle_to_slope)
             ang = abs(metrics.body_angulation)
             incl = abs(metrics.body_inclination)
             line2_parts = [
-                (f"Shoulders/Slope:{sh:.0f}", (255, 0, 255)),  # Magenta
-                (f"Hip/Slope:{hip:.0f}", (255, 255, 0)),  # Cyan
+                (f"Shoulders:{sh:.0f}", (255, 0, 255)),  # Magenta
+                (f"Hip:{hip:.0f}", (255, 255, 0)),  # Cyan
                 (f"Angulation:{ang:.0f}", (0, 255, 255)),
                 (f"Inclination:{incl:.0f}", (255, 180, 100)),
-                (f"Slope:{abs(self.pitch_deg):.0f}", (0, 200, 255)),  # Orange - slope gradient
             ]
 
             # Draw line 1 (body angles)
@@ -1664,6 +1635,8 @@ def main():
     parser.add_argument('--camera', default='Cam1', help='Camera ID')
     parser.add_argument('--run', default='run2', choices=['run1', 'run2'],
                         help='Which run (default: run2)')
+    parser.add_argument('--gate-info', metavar='JSON',
+                        help='Gate info JSON: {"gate_id":9,"color":"blue","prev_id":8,...}')
 
     args = parser.parse_args()
 
@@ -1691,6 +1664,25 @@ def main():
         # No slope info - use defaults
         print("Warning: No calibration or slope angle provided. Using defaults.")
         analyzer = YOLOPoseAnalyzer(model_size=args.model)
+
+    # Set gate info if provided
+    if args.gate_info:
+        import json
+        try:
+            gate_data = json.loads(args.gate_info)
+            analyzer.set_gate_info(
+                gate_id=gate_data.get('gate_id'),
+                color=gate_data.get('color'),
+                prev_gate_id=gate_data.get('prev_id'),
+                prev_gate_color=gate_data.get('prev_color'),
+                dist_from_prev=gate_data.get('dist_from_prev'),
+                offset_lr=gate_data.get('offset_lr'),
+                drop=gate_data.get('drop'),
+                gps_accuracy=gate_data.get('gps_accuracy')
+            )
+            print(f"Gate info: Gate {gate_data.get('gate_id')} from Gate {gate_data.get('prev_id')}")
+        except Exception as e:
+            print(f"Warning: Could not parse gate info: {e}")
 
     cap = cv2.VideoCapture(args.video_path)
     if not cap.isOpened():
@@ -1730,7 +1722,8 @@ def main():
                 poses_detected += 1
                 if metrics:
                     all_metrics.append(metrics)
-                annotated = analyzer.draw_overlay(frame, keypoints, metrics, left_ski, right_ski)
+                annotated = analyzer.draw_overlay(frame, keypoints, metrics, left_ski, right_ski,
+                                                   frame_num=frame_num, total_frames=total_frames)
                 if out_video:
                     out_video.write(annotated)
                 if args.output_frames:

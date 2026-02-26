@@ -124,10 +124,10 @@
             </div>
             <div id="team-download">
                 <select id="team-download-select">
-                    <option value="">Download team media...</option>
+                    <option value="">⬇️ Download by Team...</option>
                 </select>
-                <button id="team-download-btn" class="team-download-btn" disabled>⬇️ Download</button>
             </div>
+            <button id="virtualRaceBtn" class="vr-open-btn">🏁 Virtual Race</button>
         </div>
         <div id="results-container">
             <table id="results-table">
@@ -1085,6 +1085,46 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
         <p>Official results are available at: <a href="https://www.nhalpine.org/2026-results" target="_blank" rel="noopener">nhalpine.org/2026-results</a></p>
         <p><strong>*Section Times Disclaimer:</strong> Intermediate section times are unofficial estimates derived from camera analysis, not from official timing equipment. They are provided as a coaching aid only and should not be used for any official purpose. Accuracy is &plusmn;0.08s</p>
     </footer>
+
+    <!-- Virtual Race Modal -->
+    <div id="virtualRaceModal" class="virtual-race-modal hidden">
+        <div class="vr-toolbar">
+            <div class="vr-title">🏁 Virtual Race</div>
+            <div class="vr-mode-tabs">
+                <button class="vr-mode-tab" data-mode="PM">Photo</button>
+                <button class="vr-mode-tab active" data-mode="V">Video</button>
+            </div>
+            <button class="vr-close" onclick="VirtualRace.close()">&times;</button>
+        </div>
+        <div class="vr-selectors">
+            <div class="vr-selector-group">
+                <label>Athlete A</label>
+                <select id="vrSelectA" class="vr-select"></select>
+            </div>
+            <div class="vr-vs">VS</div>
+            <div class="vr-selector-group">
+                <label>Athlete B</label>
+                <select id="vrSelectB" class="vr-select"></select>
+            </div>
+            <div id="vrDiff" class="vr-diff"></div>
+        </div>
+        <div id="vrContent" class="vr-content">
+            <!-- Populated by JS: side-by-side videos or montages -->
+        </div>
+        <div id="vrControlsSection" class="vr-controls hidden">
+            <button id="vrPlayBtn" class="vr-ctrl-btn vr-play-btn">▶ Play</button>
+            <button class="vr-ctrl-btn" onclick="VirtualRace.restart()">↺ Restart</button>
+            <span class="vr-divider"></span>
+            <button class="vr-ctrl-btn" onclick="VirtualRace.frameStep(-1)">◀ Frame</button>
+            <button class="vr-ctrl-btn" onclick="VirtualRace.frameStep(1)">Frame ▶</button>
+            <span class="vr-divider"></span>
+            <button class="vr-speed-btn" data-speed="0.25">0.25x</button>
+            <button class="vr-speed-btn" data-speed="0.5">0.5x</button>
+            <button class="vr-speed-btn active" data-speed="1">1x</button>
+            <span class="vr-divider"></span>
+            <span id="vrTimeDisplay" class="vr-time-display">0.00s</span>
+        </div>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
