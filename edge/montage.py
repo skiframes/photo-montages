@@ -87,8 +87,18 @@ class CropRegion:
 
 
 def crop_frame(frame: np.ndarray, crop: CropRegion) -> np.ndarray:
-    """Crop a frame to the specified region."""
-    return frame[crop.y:crop.y+crop.h, crop.x:crop.x+crop.w]
+    """Crop a frame to the specified region, clamping to valid bounds."""
+    h, w = frame.shape[:2]
+    # Clamp coordinates to valid range
+    x1 = max(0, crop.x)
+    y1 = max(0, crop.y)
+    x2 = min(w, crop.x + crop.w)
+    y2 = min(h, crop.y + crop.h)
+    # Ensure we have a valid region
+    if x2 <= x1 or y2 <= y1:
+        print(f"    WARNING: Invalid crop region after clamping: ({x1},{y1})-({x2},{y2})")
+        return frame  # Return uncropped frame as fallback
+    return frame[y1:y2, x1:x2]
 
 
 def select_frames_by_fps(frames: List[np.ndarray], source_fps: float,
