@@ -2574,7 +2574,7 @@ function athleteRow(a, cat, ranks, activeSections, isForerunner) {
     html += `<td class="col-rank"><span class="rank-val">${rank || ''}</span></td>`;
     html += `<td class="col-time">${isForerunner ? '' : formatTimeCell(time, status)}</td>`;
     // Identity group
-    html += `<td class="col-bib">${a.bib}</td>`;
+    html += `<td class="col-bib">${isForerunner ? 'F' : ''}${a.bib}</td>`;
     html += `<td class="col-name">${a.first} ${a.last}</td>`;
     html += `<td class="col-club">${a.club}</td>`;
     // Section times + montage buttons
@@ -2610,7 +2610,14 @@ function athleteRow(a, cat, ranks, activeSections, isForerunner) {
         let aiLabel = 'AI';
         let aiClass = 'inactive';
         let aiClick = '';
-        if (hasVideo) {
+        // Check for pre-computed AI video in manifest first
+        const firstDetWithAI = hasMontage ? dets.find(d => d.ai_video) : null;
+        if (firstDetWithAI) {
+            // Pre-computed AI video available — show checkmark
+            aiLabel = 'AI \u2713';
+            aiClass = 'complete';
+            aiClick = `onclick="window._showPrecomputedAI('${firstDetWithAI.ai_video}',${a.bib})"`;
+        } else if (hasVideo) {
             if (aiState && aiState.status === 'running') {
                 aiLabel = `${aiState.progress}%`;
                 aiClass = 'running';
@@ -2757,7 +2764,8 @@ function showLightbox() {
 
     lb.classList.remove('hidden');
     document.getElementById('lb-img').src = thumbUrl;
-    document.getElementById('lb-name').textContent = `${a.first} ${a.last} (#${a.bib})`;
+    const bibDisplay = a.is_forerunner ? `F${a.bib}` : a.bib;
+    document.getElementById('lb-name').textContent = `${a.first} ${a.last} (#${bibDisplay})`;
 
     // Build details with trigger_time
     let detailText = `${runLabel} | ${sectionLabel}`;
@@ -3079,7 +3087,8 @@ function showVideoLightbox() {
     let detailText = `${runLabel} | ${sectionLabel} | Video`;
     if (montage.trigger_time) detailText += ` | ${montage.trigger_time}`;
 
-    document.getElementById('vlb-name').textContent = `${a.first} ${a.last} (#${a.bib})`;
+    const bibDisplayV = a.is_forerunner ? `F${a.bib}` : a.bib;
+    document.getElementById('vlb-name').textContent = `${a.first} ${a.last} (#${bibDisplayV})`;
     document.getElementById('vlb-details').textContent = detailText;
     document.getElementById('vlb-time').textContent = '0.00s / 0.00s';
     document.getElementById('vlb-scrubber').value = 0;
@@ -3391,9 +3400,64 @@ window._showAIResults = function (aiJobKey) {
         video.play().catch(() => {});
     });
 
-    const nameStr = athlete ? `${athlete.first} ${athlete.last} (#${athlete.bib})` : `Bib #${bib}`;
+    const bibStr1 = athlete?.is_forerunner ? `F${athlete.bib}` : (athlete?.bib || bib);
+    const nameStr = athlete ? `${athlete.first} ${athlete.last} (#${bibStr1})` : `Bib #${bib}`;
     document.getElementById('vlb-name').textContent = nameStr;
     document.getElementById('vlb-details').textContent = `AI Pose Analysis | ${state.results.frames_analyzed} poses / ${state.results.total_frames} frames`;
+    document.getElementById('vlb-time').textContent = '0.00s / 0.00s';
+    document.getElementById('vlb-scrubber').value = 0;
+
+    // Hide navigation arrows (single AI video, not part of athlete list)
+    vlb.querySelector('.vlb-prev').style.display = 'none';
+    vlb.querySelector('.vlb-next').style.display = 'none';
+
+    // Hide detection nav and delete button for AI view
+    const detNav = document.getElementById('vlb-det-nav');
+    if (detNav) detNav.style.display = 'none';
+    const delBtn = document.getElementById('vlb-delete-btn');
+    if (delBtn) delBtn.style.display = 'none';
+};
+
+/**
+ * Show a pre-computed AI analysis video from the manifest.
+ * Opens the video lightbox directly with the AI video URL.
+ */
+window._showPrecomputedAI = function(aiVideoRelPath, bib) {
+    const aiVideoUrl = manifest.media_base_url + '/' + aiVideoRelPath;
+
+    // Find the athlete by bib
+    let athlete = null;
+    for (const cat of manifest.categories || []) {
+        for (const a of cat.athletes || []) {
+            if (a.bib === bib) { athlete = a; break; }
+        }
+        if (athlete) break;
+    }
+
+    const vlb = document.getElementById('video-lightbox');
+    vlb.classList.remove('hidden');
+
+    // Hide canvas overlay from previous video
+    const overlay = document.getElementById('vlb-canvas-overlay');
+    if (overlay) overlay.style.display = 'none';
+
+    const video = document.getElementById('vlb-video');
+    video.src = aiVideoUrl;
+    video.playbackRate = vlbSpeed;
+    video.load();
+    video.addEventListener('loadeddata', function onLoaded() {
+        video.removeEventListener('loadeddata', onLoaded);
+        video.currentTime = 0;
+        video.play().catch(() => {});
+    });
+
+    const bibStr2 = athlete?.is_forerunner ? `F${athlete.bib}` : (athlete?.bib || bib);
+    const nameStr = athlete ? `${athlete.first} ${athlete.last} (#${bibStr2})` : `Bib #${bib}`;
+    document.getElementById('vlb-name').textContent = nameStr;
+
+    // Show AI version from manifest
+    const ver = manifest.ai_version || 'pre-computed';
+    document.getElementById('vlb-details').textContent = `AI Pose Analysis | ${ver}`;
     document.getElementById('vlb-time').textContent = '0.00s / 0.00s';
     document.getElementById('vlb-scrubber').value = 0;
 
