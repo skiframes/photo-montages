@@ -1232,20 +1232,12 @@ function updateCourseOverlay() {
             const dist3DH = Math.sqrt(dist2DH * dist2DH + dElevH * dElevH);
             tooltipHtml += `<br>↕ ${dist3DH.toFixed(1)}m from prev`;
 
-            // Lateral offset
-            if (idx >= 1) {
-                const r2Lat = (idx === 1 && course.start) ? course.start.lat : (idx >= 2 ? gates[idx - 2].lat : refLat_h);
-                const r2Lon = (idx === 1 && course.start) ? course.start.lon : (idx >= 2 ? gates[idx - 2].lon : refLon_h);
-                const bdLat = (refLat_h - r2Lat) * mPerLat_h;
-                const bdLon = (refLon_h - r2Lon) * mPerLon_h;
-                const bLen = Math.sqrt(bdLat * bdLat + bdLon * bdLon) || 1;
-                const pLat = bdLon / bLen;
-                const pLon = -bdLat / bLen;
-                const off = dLatH * pLat + dLonH * pLon;
-                if (Math.abs(off) > 0.01) {
-                    const dir = off > 0 ? 'right' : 'left';
-                    tooltipHtml += `<br>${off > 0 ? '→' : '←'} ${Math.abs(off).toFixed(1)}m ${dir}`;
-                }
+            // Horizontal gate distance (FIS definition) - pre-computed in manifest
+            // Perpendicular distance from gate to line between prev and next gates
+            const off = g.offset_lr || 0;
+            if (Math.abs(off) > 0.01) {
+                const dir = off > 0 ? 'right' : 'left';
+                tooltipHtml += `<br>${off > 0 ? '→' : '←'} ${Math.abs(off).toFixed(1)}m ${dir}`;
             }
 
             tooltipHtml += `<br>▼ ${dElevH.toFixed(1)}m drop`;
@@ -2300,18 +2292,9 @@ function addLeafletMeasurements(course) {
         const dist2D = Math.sqrt(dLat * dLat + dLon * dLon);
         const dist3D = Math.sqrt(dist2D * dist2D + dElev * dElev);
 
-        // Lateral offset (same corrected formula as 3D)
-        let offset = 0;
-        if (i >= 1) {
-            const ref2Lat = (i === 1 && course.start) ? course.start.lat : (i >= 2 ? gates[i - 2].lat : refLat);
-            const ref2Lon = (i === 1 && course.start) ? course.start.lon : (i >= 2 ? gates[i - 2].lon : refLon);
-            const baseDirLat = (refLat - ref2Lat) * mPerLat;
-            const baseDirLon = (refLon - ref2Lon) * mPerLon;
-            const baseLen = Math.sqrt(baseDirLat * baseDirLat + baseDirLon * baseDirLon) || 1;
-            const perpLat = baseDirLon / baseLen;
-            const perpLon = -baseDirLat / baseLen;
-            offset = dLat * perpLat + dLon * perpLon;
-        }
+        // Horizontal gate distance (FIS definition) - pre-computed in manifest
+        // Perpendicular distance from gate to line between prev and next gates
+        const offset = g.offset_lr || 0;
 
         const accuracy = g.accuracy;
 
@@ -2763,7 +2746,7 @@ function showLightbox() {
     lbCurrentFullUrl = fullUrl; // Store for download/copy buttons
 
     lb.classList.remove('hidden');
-    document.getElementById('lb-img').src = thumbUrl;
+    document.getElementById('lb-img').src = fullUrl;
     const bibDisplay = a.is_forerunner ? `F${a.bib}` : a.bib;
     document.getElementById('lb-name').textContent = `${a.first} ${a.last} (#${bibDisplay})`;
 
@@ -3041,7 +3024,87 @@ function setupVideoLightbox() {
             const delBtn = document.getElementById('vlb-delete-btn');
             if (delBtn) delBtn.style.display = delBtn.style.display === 'none' ? '' : 'none';
         }
+        // 's' cycles through speed settings
+        if (e.key === 's' || e.key === 'S') {
+            e.preventDefault();
+            const speeds = [0.1, 0.25, 0.5, 1];
+            const currentIdx = speeds.indexOf(vlbSpeed);
+            const nextIdx = (currentIdx + 1) % speeds.length;
+            vlbSpeed = speeds[nextIdx];
+            video.playbackRate = vlbSpeed;
+            vlb.querySelectorAll('.vlb-speed').forEach(b => {
+                b.classList.toggle('active', parseFloat(b.dataset.speed) === vlbSpeed);
+            });
+        }
+        // 'c' closes the lightbox
+        if (e.key === 'c' || e.key === 'C') {
+            e.preventDefault();
+            closeVLB();
+        }
+        // 'o' cycles opacity for AI videos
+        if (e.key === 'o' || e.key === 'O') {
+            const opacityWrap = document.getElementById('vlb-opacity-wrap');
+            if (opacityWrap && opacityWrap.style.display !== 'none') {
+                e.preventDefault();
+                const slider = document.getElementById('vlb-opacity');
+                const presets = [100, 75, 50, 25, 0];
+                const current = parseInt(slider.value);
+                const currentIdx = presets.findIndex(v => v <= current);
+                const nextIdx = (currentIdx + 1) % presets.length;
+                slider.value = presets[nextIdx];
+                slider.dispatchEvent(new Event('input'));
+            }
+        }
     });
+
+    // Opacity slider for AI videos - controls contrast to fade the graph overlay
+    const opacitySlider = document.getElementById('vlb-opacity');
+    if (opacitySlider) {
+        opacitySlider.addEventListener('input', () => {
+            const val = parseInt(opacitySlider.value);
+            // Use contrast filter: 100% = full contrast, 0% = minimum contrast (gray)
+            // This fades the white graph/text overlay while keeping the video visible
+            const contrast = 0.5 + (val / 100) * 0.5; // Range: 0.5 to 1.0
+            const brightness = 1 + (1 - val / 100) * 0.3; // Slight brightness boost when fading
+            video.style.filter = val < 100 ? `contrast(${contrast}) brightness(${brightness})` : '';
+        });
+    }
+
+    // Make video controls draggable
+    const controls = vlb.querySelector('.vlb-controls');
+    if (controls) {
+        let isDragging = false;
+        let startX, startY, origX, origY;
+
+        controls.addEventListener('mousedown', (e) => {
+            // Don't drag if clicking on buttons/inputs
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = controls.getBoundingClientRect();
+            origX = rect.left + rect.width / 2;
+            origY = rect.top;
+            controls.style.transition = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            controls.style.left = (origX + dx) + 'px';
+            controls.style.bottom = 'auto';
+            controls.style.top = (origY + dy) + 'px';
+            controls.style.transform = 'translateX(-50%)';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                controls.style.transition = '';
+            }
+        });
+    }
 }
 
 function showVideoLightbox() {
@@ -3243,6 +3306,14 @@ function closeVLB() {
     // Hide canvas overlay
     const overlay = document.getElementById('vlb-canvas-overlay');
     if (overlay) overlay.style.display = 'none';
+    // Hide and reset opacity slider
+    const opacityWrap = document.getElementById('vlb-opacity-wrap');
+    const opacitySlider = document.getElementById('vlb-opacity');
+    const opacityHint = document.getElementById('vlb-opacity-hint');
+    if (opacityWrap) opacityWrap.style.display = 'none';
+    if (opacityHint) opacityHint.style.display = 'none';
+    if (opacitySlider) opacitySlider.value = 100;
+    video.style.filter = '';
     vlb.classList.add('hidden');
 }
 
@@ -3367,6 +3438,7 @@ window._showAIResults = function (aiJobKey) {
 
     // Open the AI-annotated video in the video lightbox
     const aiVideoUrl = manifest.media_base_url + '/' + state.results.ai_video;
+    vlbCurrentVideoUrl = aiVideoUrl; // Store for download/copy buttons
 
     // Parse aiJobKey to get athlete info: "Cam1_10_run1"
     const parts = aiJobKey.split('_');
@@ -3416,6 +3488,12 @@ window._showAIResults = function (aiJobKey) {
     if (detNav) detNav.style.display = 'none';
     const delBtn = document.getElementById('vlb-delete-btn');
     if (delBtn) delBtn.style.display = 'none';
+
+    // Show opacity slider for AI videos
+    const opacityWrap = document.getElementById('vlb-opacity-wrap');
+    const opacityHint = document.getElementById('vlb-opacity-hint');
+    if (opacityWrap) opacityWrap.style.display = 'flex';
+    if (opacityHint) opacityHint.style.display = '';
 };
 
 /**
@@ -3424,6 +3502,7 @@ window._showAIResults = function (aiJobKey) {
  */
 window._showPrecomputedAI = function(aiVideoRelPath, bib) {
     const aiVideoUrl = manifest.media_base_url + '/' + aiVideoRelPath;
+    vlbCurrentVideoUrl = aiVideoUrl; // Store for download/copy buttons
 
     // Find the athlete by bib
     let athlete = null;
@@ -3470,6 +3549,12 @@ window._showPrecomputedAI = function(aiVideoRelPath, bib) {
     if (detNav) detNav.style.display = 'none';
     const delBtn = document.getElementById('vlb-delete-btn');
     if (delBtn) delBtn.style.display = 'none';
+
+    // Show opacity slider for AI videos
+    const opacityWrap = document.getElementById('vlb-opacity-wrap');
+    const opacityHint = document.getElementById('vlb-opacity-hint');
+    if (opacityWrap) opacityWrap.style.display = 'flex';
+    if (opacityHint) opacityHint.style.display = '';
 };
 
 

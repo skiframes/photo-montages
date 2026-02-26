@@ -297,23 +297,25 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
     return img
 
 
-def add_gate_info(image: np.ndarray, gate_info: Dict, corner: str = "top-right") -> np.ndarray:
+def add_gate_info(image: np.ndarray, gate_info: Dict, corner: str = "top-right", scale_factor: float = 1.0) -> np.ndarray:
     """Add gate info box in specified corner.
 
     Args:
         image: The image to add gate info to.
         gate_info: Dict with gate_id, color, prev_id, prev_color, dist_from_prev, drop, slope, gps_accuracy
         corner: Position - "top-right", "top-left", "bottom-right", "bottom-left"
+        scale_factor: Additional scale multiplier (e.g., 0.7 for smaller text on videos)
     """
     img = image.copy()
     h, w = img.shape[:2]
 
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = max(0.5, w / 1800)
-    thickness = max(1, int(w / 1200))
-    line_height = int(28 * font_scale)
-    margin = int(10 * font_scale)
-    padding = int(10 * font_scale)
+    # Gate info panel - readable but not too large
+    font_scale = max(0.35, w / 3200) * scale_factor
+    thickness = max(1, int(w / 2000))
+    line_height = int(55 * font_scale)
+    margin = int(80 * font_scale)  # Larger margin to avoid edge cropping in video player
+    padding = int(14 * font_scale)
 
     lines = []
 
@@ -330,6 +332,12 @@ def add_gate_info(image: np.ndarray, gate_info: Dict, corner: str = "top-right")
     # Distance from previous gate
     if gate_info.get('dist_from_prev') is not None:
         lines.append((f"Dist: {gate_info['dist_from_prev']:.1f}m", (80, 80, 80)))
+
+    # Left/right offset from fall line
+    if gate_info.get('offset_lr') is not None:
+        offset_val = gate_info['offset_lr']
+        offset_dir = "L" if offset_val < 0 else "R"
+        lines.append((f"Offset: {abs(offset_val):.1f}m {offset_dir}", (80, 80, 80)))
 
     # Vertical drop
     if gate_info.get('drop') is not None:
@@ -569,6 +577,12 @@ def generate_montage(frames: List[np.ndarray],
         # Add branding overlay with variant label and race title/info
         if add_branding:
             composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title, race_info, source_fps=source_fps, elapsed_time=elapsed_time, selected_logos=selected_logos, gate_info=gate_info, gate_info_corner=gate_info_corner)
+        else:
+            # Even without full branding, add logos and gate info if provided
+            if selected_logos:
+                composite = add_logos(composite, selected_logos=selected_logos)
+            if gate_info:
+                composite = add_gate_info(composite, gate_info, corner=gate_info_corner)
 
         # Output paths - use file_suffix for naming, include FPS in filename
         fps_tag = f"_{montage_fps:.1f}fps"

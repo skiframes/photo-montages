@@ -161,6 +161,8 @@
                     <li><a href="#doc-architecture" class="docs-nav-link">System Architecture</a></li>
                     <li><a href="#doc-detection" class="docs-nav-link">Detection Engine</a></li>
                     <li><a href="#doc-montage" class="docs-nav-link">Montage Generation</a></li>
+                    <li><a href="#doc-reid" class="docs-nav-link">Athlete Re-Identification</a></li>
+                    <li><a href="#doc-vola" class="docs-nav-link">Vola Timing Integration</a></li>
                     <li><a href="#doc-manifest" class="docs-nav-link">Race Manifest Format</a></li>
                     <li><a href="#doc-terrain" class="docs-nav-link">3D Terrain Pipeline</a></li>
                     <li><a href="#doc-api" class="docs-nav-link">API Reference</a></li>
@@ -380,16 +382,16 @@
 
                 <article id="doc-calibration" class="docs-article">
                     <h2>Calibration UI</h2>
-                    <p>The calibration interface is a <strong>mobile-first web app</strong> served by the Flask server on the edge device. Coaches access it from their phone while on the mountain.</p>
+                    <p>The calibration interface is a <strong>mobile-first web app</strong> (~5,900 lines of HTML/CSS/JS) served by the Flask server on the edge device. Coaches access it from their phone while on the mountain via the local WiFi network.</p>
 
                     <h3>Workflow</h3>
                     <ol>
                         <li><strong>Select camera</strong> &mdash; Choose from R1, R2, R3, or Axis in the dropdown</li>
                         <li><strong>Select input</strong> &mdash; Live RTSP stream or recorded video file</li>
-                        <li><strong>Grab a frame</strong> &mdash; Capture a representative frame from the video</li>
-                        <li><strong>Draw START zone</strong> &mdash; Rectangle near the top of frame where skiers enter</li>
-                        <li><strong>Draw END zone</strong> &mdash; Rectangle near the bottom where skiers exit</li>
-                        <li><strong>Configure session</strong> &mdash; Set type (race/training/test), group (U10-Masters), end time</li>
+                        <li><strong>Grab a frame</strong> &mdash; Capture a representative frame from the video (3840&times;2160 at native resolution)</li>
+                        <li><strong>Draw START zone</strong> &mdash; Touch-draw a rectangle near the top of frame where skiers enter</li>
+                        <li><strong>Draw END zone</strong> &mdash; Touch-draw a rectangle near the bottom where skiers exit</li>
+                        <li><strong>Configure session</strong> &mdash; Set type (race/training/test), group (U10-Masters), discipline, end time</li>
                         <li><strong>Save &amp; start</strong> &mdash; Saves config JSON and begins detection</li>
                     </ol>
 
@@ -412,23 +414,79 @@
          Camera frame view</pre>
                     </div>
 
+                    <h3>Trigger Zones &mdash; Actual Camera Views</h3>
+                    <p>Below are the actual calibration frames from races, showing where trigger zones are drawn on the camera view. The green rectangle is the START zone (where the skier enters the frame) and the red rectangle is the END zone (where the skier exits).</p>
+
+                    <h4>GS Course &mdash; Proctor Ski Hill (Feb 22, 2026)</h4>
+                    <p>Camera R1 looking across the slope at GS gates. The START zone is positioned above the first visible gate panel, and the END zone is below the last gate. Asymmetric padding (30% left, 50% right) captures the full ski path between gates.</p>
+                    <div style="position:relative; display:inline-block; max-width:100%;">
+                        <img src="docs/camera_gs_proctor.jpg" alt="GS camera view at Proctor with trigger zones" style="max-width:100%; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="position:absolute; top:14%; left:47%; width:7%; height:11%; border:3px solid #22c55e; border-radius:4px; opacity:0.85;"></div>
+                        <div style="position:absolute; top:14%; left:44%; color:#22c55e; font-weight:bold; font-size:13px; text-shadow:1px 1px 2px rgba(0,0,0,0.7);">START</div>
+                        <div style="position:absolute; top:24%; left:93%; width:6%; height:36%; border:3px solid #ef4444; border-radius:4px; opacity:0.85;"></div>
+                        <div style="position:absolute; top:22%; left:90%; color:#ef4444; font-weight:bold; font-size:13px; text-shadow:1px 1px 2px rgba(0,0,0,0.7);">END</div>
+                    </div>
+                    <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">Reolink RLC-823S2 &bull; 3840&times;2160 &bull; 30fps &bull; Feb 22, 2026 09:05 AM &bull; Proctor Burden Trail</p>
+
+                    <h4>SL Course &mdash; Ragged Mountain (Feb 1, 2026)</h4>
+                    <p>Camera R2 looking downhill at slalom gates. The narrower field of view covers 4-6 slalom gates. The START zone is drawn across the top where skiers first appear, and the END zone covers the lower section where they exit frame.</p>
+                    <div style="position:relative; display:inline-block; max-width:100%;">
+                        <img src="docs/camera_sl_ragged.jpg" alt="SL camera view at Ragged Mountain with trigger zones" style="max-width:100%; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="position:absolute; top:7%; left:10%; width:20%; height:14%; border:3px solid #22c55e; border-radius:4px; opacity:0.85;"></div>
+                        <div style="position:absolute; top:4%; left:12%; color:#22c55e; font-weight:bold; font-size:13px; text-shadow:1px 1px 2px rgba(0,0,0,0.7);">START</div>
+                        <div style="position:absolute; top:40%; left:62%; width:23%; height:25%; border:3px solid #ef4444; border-radius:4px; opacity:0.85;"></div>
+                        <div style="position:absolute; top:37%; left:65%; color:#ef4444; font-weight:bold; font-size:13px; text-shadow:1px 1px 2px rgba(0,0,0,0.7);">END</div>
+                    </div>
+                    <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">Reolink RLC-823S2 &bull; 3840&times;2160 &bull; 30fps &bull; Feb 1, 2026 11:03 AM &bull; Ragged Mountain</p>
+
+                    <h3>Zone Coordinates &amp; Storage</h3>
+                    <p>Each trigger zone is stored as a pixel-space rectangle <code>{x, y, w, h}</code> in the session configuration JSON. Zones are drawn on the native 3840&times;2160 frame and stored at full resolution. Example from the Feb 25 U12 SL race:</p>
+<pre class="docs-code">{
+  <span class="key">"start_zone"</span>: {<span class="key">"x"</span>: <span class="number">1814</span>, <span class="key">"y"</span>: <span class="number">302</span>, <span class="key">"w"</span>: <span class="number">251</span>, <span class="key">"h"</span>: <span class="number">236</span>},
+  <span class="key">"end_zone"</span>:   {<span class="key">"x"</span>: <span class="number">3591</span>, <span class="key">"y"</span>: <span class="number">524</span>, <span class="key">"w"</span>: <span class="number">222</span>, <span class="key">"h"</span>: <span class="number">779</span>},
+  <span class="key">"crop_zone"</span>: {<span class="key">"x"</span>: <span class="number">44</span>,   <span class="key">"y"</span>: <span class="number">16</span>,  <span class="key">"w"</span>: <span class="number">3776</span>, <span class="key">"h"</span>: <span class="number">1688</span>},
+  <span class="key">"detection_threshold"</span>: <span class="number">38</span>,
+  <span class="key">"min_pixel_change_pct"</span>: <span class="number">9</span>,
+  <span class="key">"min_brightness"</span>: <span class="number">94</span>
+}</pre>
+                    <p>The <code>crop_zone</code> defines the bounding box used for montage generation &mdash; it encompasses both trigger zones plus padding to capture the full ski path. The crop is calculated automatically from the START/END zones with asymmetric padding: 30% left, 50% right, 10% vertical.</p>
+
                     <details>
-                        <summary>Session configuration JSON format</summary>
+                        <summary>Full session configuration JSON format</summary>
                         <div>
 <pre class="docs-code">{
-  <span class="key">"session_id"</span>: <span class="string">"2026-02-22_0900_u12_race_R2"</span>,
+  <span class="key">"session_id"</span>: <span class="string">"2026-02-25_122903_u12_race_R2_macbook-pro-2"</span>,
+  <span class="key">"device_id"</span>: <span class="string">"macbook-pro-2"</span>,
   <span class="key">"session_type"</span>: <span class="string">"race"</span>,
   <span class="key">"group"</span>: <span class="string">"U12"</span>,
   <span class="key">"camera_id"</span>: <span class="string">"R2"</span>,
-  <span class="key">"camera_url"</span>: <span class="string">"rtsp://admin:pass@192.168.1.102/stream"</span>,
-  <span class="key">"start_zone"</span>: {<span class="key">"x"</span>: <span class="number">400</span>, <span class="key">"y"</span>: <span class="number">100</span>, <span class="key">"w"</span>: <span class="number">200</span>, <span class="key">"h"</span>: <span class="number">80</span>},
-  <span class="key">"end_zone"</span>: {<span class="key">"x"</span>: <span class="number">350</span>, <span class="key">"y"</span>: <span class="number">900</span>, <span class="key">"w"</span>: <span class="number">250</span>, <span class="key">"h"</span>: <span class="number">80</span>},
-  <span class="key">"detection_threshold"</span>: <span class="number">25</span>,
-  <span class="key">"min_pixel_change_pct"</span>: <span class="number">5.0</span>,
-  <span class="key">"min_brightness"</span>: <span class="number">100</span>,
-  <span class="key">"pre_buffer_seconds"</span>: <span class="number">2</span>,
-  <span class="key">"post_buffer_seconds"</span>: <span class="number">2</span>,
-  <span class="key">"session_end_time"</span>: <span class="string">"2026-02-22T10:30:00-05:00"</span>
+  <span class="key">"camera_url"</span>: <span class="string">"rtsp://j40:J40j40j40@192.168.0.102/h264Preview_01_main"</span>,
+  <span class="key">"calibration_frame"</span>: <span class="string">"2e17370f"</span>,
+  <span class="key">"start_zone"</span>: {<span class="key">"x"</span>: <span class="number">1814</span>, <span class="key">"y"</span>: <span class="number">302</span>, <span class="key">"w"</span>: <span class="number">251</span>, <span class="key">"h"</span>: <span class="number">236</span>},
+  <span class="key">"end_zone"</span>: {<span class="key">"x"</span>: <span class="number">3591</span>, <span class="key">"y"</span>: <span class="number">524</span>, <span class="key">"w"</span>: <span class="number">222</span>, <span class="key">"h"</span>: <span class="number">779</span>},
+  <span class="key">"crop_zone"</span>: {<span class="key">"x"</span>: <span class="number">44</span>, <span class="key">"y"</span>: <span class="number">16</span>, <span class="key">"w"</span>: <span class="number">3776</span>, <span class="key">"h"</span>: <span class="number">1688</span>},
+  <span class="key">"run_duration_seconds"</span>: <span class="number">null</span>,
+  <span class="key">"session_start_time"</span>: <span class="string">"2026-02-25T12:29:03.706911"</span>,
+  <span class="key">"session_end_time"</span>: <span class="string">"2026-02-25T13:28:24.025597"</span>,
+  <span class="key">"pre_buffer_seconds"</span>: <span class="number">0</span>,
+  <span class="key">"post_buffer_seconds"</span>: <span class="number">0</span>,
+  <span class="key">"detection_threshold"</span>: <span class="number">38</span>,
+  <span class="key">"min_pixel_change_pct"</span>: <span class="number">9</span>,
+  <span class="key">"min_brightness"</span>: <span class="number">94</span>,
+  <span class="key">"discipline"</span>: <span class="string">"freeski"</span>,
+  <span class="key">"montage_fps_list"</span>: [<span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>],
+  <span class="key">"start_offset_sec"</span>: <span class="number">0</span>,
+  <span class="key">"vola_racers"</span>: [
+    {
+      <span class="key">"bib"</span>: <span class="number">1</span>,
+      <span class="key">"name"</span>: <span class="string">"Ella Soroko"</span>,
+      <span class="key">"team"</span>: <span class="string">"Ragged Mt"</span>,
+      <span class="key">"gender"</span>: <span class="string">"Women"</span>,
+      <span class="key">"start_time_sec"</span>: <span class="number">32871.73</span>,
+      <span class="key">"camera_start_sec"</span>: <span class="number">32875.73</span>,
+      <span class="key">"camera_end_sec"</span>: <span class="number">32883.73</span>
+    }
+  ]
 }</pre>
                         </div>
                     </details>
@@ -441,6 +499,36 @@
                         <li>Draw trigger zones on a frame from the video</li>
                         <li>The system processes each video file, matching detected runs to athletes by timestamp</li>
                     </ol>
+
+                    <h3>Gate Detection &amp; Camera Calibration</h3>
+                    <p>The calibration system can automatically detect ski gates in the camera frame using HSV color filtering:</p>
+<pre class="docs-code"><span class="comment"># Gate detection uses HSV color space</span>
+hsv = cv2.cvtColor(frame, COLOR_BGR2HSV)
+
+<span class="comment"># Red gates (hue wraps around 0/180 in HSV)</span>
+red_mask = inRange(hsv, (<span class="number">0</span>, <span class="number">120</span>, <span class="number">80</span>), (<span class="number">10</span>, <span class="number">255</span>, <span class="number">255</span>)) |
+           inRange(hsv, (<span class="number">170</span>, <span class="number">120</span>, <span class="number">80</span>), (<span class="number">180</span>, <span class="number">255</span>, <span class="number">255</span>))
+
+<span class="comment"># Blue gates</span>
+blue_mask = inRange(hsv, (<span class="number">100</span>, <span class="number">120</span>, <span class="number">80</span>), (<span class="number">130</span>, <span class="number">255</span>, <span class="number">255</span>))
+
+<span class="comment"># Aspect ratio filter: gates are tall and thin</span>
+<span class="key">for</span> contour <span class="key">in</span> findContours(mask):
+    x, y, w, h = boundingRect(contour)
+    <span class="key">if</span> h > <span class="number">3</span> * w <span class="key">and</span> h > <span class="number">30</span>:
+        gates.append({<span class="string">"color"</span>: color, <span class="string">"top"</span>: (x+w//<span class="number">2</span>, y), <span class="string">"base"</span>: (x+w//<span class="number">2</span>, y+h)})</pre>
+
+                    <p>With known gate dimensions (SL: 1.50&ndash;1.80m poles; GS: 2.20m panels with 0.75m&times;0.50m flags), the system computes a camera-to-world transformation using <code>cv2.solvePnP</code>. This enables projecting a verification grid onto the snow surface and measuring real-world distances between gates.</p>
+
+                    <table class="docs-table">
+                        <thead><tr><th>Gate Type</th><th>Pole Height</th><th>Pole Diameter</th><th>Panel Size</th></tr></thead>
+                        <tbody>
+                            <tr><td>SL Youth</td><td>1.50m</td><td>25mm</td><td>&mdash;</td></tr>
+                            <tr><td>SL Adult</td><td>1.80m</td><td>29mm</td><td>&mdash;</td></tr>
+                            <tr><td>GS Panel</td><td>2.20m</td><td>&mdash;</td><td>0.75m &times; 0.50m</td></tr>
+                            <tr><td>SG Panel</td><td>2.20m</td><td>&mdash;</td><td>0.75m &times; 0.50m</td></tr>
+                        </tbody>
+                    </table>
                 </article>
 
                 <article id="doc-processing" class="docs-article">
@@ -658,68 +746,173 @@ RTSP Stream / Video File
 
                 <article id="doc-detection" class="docs-article">
                     <h2>Detection Engine</h2>
-                    <p>The detection engine (<code>detection.py</code>) monitors video frames for skier motion using frame differencing in configurable trigger zones.</p>
+                    <p>The detection engine (<code>detection.py</code>) monitors video frames for skier motion using <strong>frame differencing</strong> &mdash; a classical computer vision technique, not machine learning. It compares consecutive frames pixel-by-pixel to detect movement within configurable trigger zones.</p>
 
                     <h3>Core Algorithm</h3>
+                    <p>For every frame received from the camera (at ~10fps during idle, full 30fps during active tracking):</p>
                     <ol>
-                        <li>Convert each frame to grayscale</li>
-                        <li>Compute absolute pixel difference with previous frame</li>
-                        <li>Crop difference image to the trigger zone rectangle</li>
-                        <li>Apply threshold: pixels with diff &gt; <code>detection_threshold</code> are "changed"</li>
-                        <li>Apply brightness filter: keep only changed pixels brighter than <code>min_brightness</code></li>
-                        <li>Count changed pixels as percentage of zone area</li>
-                        <li>If percentage exceeds <code>min_pixel_change_pct</code>, zone is triggered</li>
+                        <li><strong>Extract zone ROI</strong> &mdash; Crop both current and previous frames to the trigger zone rectangle</li>
+                        <li><strong>Absolute difference</strong> &mdash; <code>diff = cv2.absdiff(prev_zone, curr_zone)</code> produces a grayscale difference image</li>
+                        <li><strong>Threshold</strong> &mdash; Pixels where <code>diff &gt; detection_threshold</code> (default 25, range 0&ndash;255) are marked as "changed"</li>
+                        <li><strong>Brightness filter</strong> &mdash; Of the changed pixels, only keep those where <code>current_brightness &ge; min_brightness</code> (default 100). This is the key innovation for ski racing: snow is bright (200+), skiers are moderately bright (120&ndash;200), but shadows are dark (30&ndash;80)</li>
+                        <li><strong>Percentage calculation</strong> &mdash; <code>pct = changed_pixels / total_zone_pixels &times; 100</code></li>
+                        <li><strong>Trigger decision</strong> &mdash; If <code>pct &gt; min_pixel_change_pct</code> (default 5%), the zone fires</li>
                     </ol>
 
+<pre class="docs-code"><span class="comment"># Actual motion detection logic (simplified from detection.py)</span>
+<span class="key">def</span> detect_motion_in_zone(prev_frame, curr_frame, zone, config):
+    prev_roi = prev_frame[zone.y1:zone.y2, zone.x1:zone.x2]
+    curr_roi = curr_frame[zone.y1:zone.y2, zone.x1:zone.x2]
+
+    diff = cv2.absdiff(prev_roi, curr_roi)
+    gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+
+    <span class="comment"># Step 1: Which pixels changed enough?</span>
+    motion_mask = gray_diff > config.detection_threshold
+
+    <span class="comment"># Step 2: Of those, which are bright enough? (filters shadows)</span>
+    <span class="key">if</span> config.min_brightness > <span class="number">0</span>:
+        brightness = cv2.cvtColor(curr_roi, cv2.COLOR_BGR2GRAY)
+        motion_mask = motion_mask &amp; (brightness >= config.min_brightness)
+
+    <span class="comment"># Step 3: What percentage of zone area changed?</span>
+    pct = np.sum(motion_mask) / motion_mask.size * <span class="number">100</span>
+    <span class="key">return</span> pct > config.min_pixel_change_pct, pct</pre>
+
+                    <h3>Why Frame Differencing Instead of AI/ML?</h3>
+                    <p>Frame differencing was chosen deliberately over neural-network-based object detection (YOLO, etc.) for several reasons:</p>
+                    <ul>
+                        <li><strong>Deterministic</strong> &mdash; No model weights, no inference uncertainty, no GPU required. Results are reproducible and explainable.</li>
+                        <li><strong>Fast</strong> &mdash; A single <code>absdiff</code> + threshold + mask takes &lt;1ms per frame. YOLO inference takes 15&ndash;50ms. On a 3-camera system, this saves ~150ms per frame cycle.</li>
+                        <li><strong>Snow-optimized</strong> &mdash; The brightness filter exploits the unique property of ski racing: bright snow background with darker skier silhouettes. ML detectors trained on general scenes struggle with white-on-white conditions.</li>
+                        <li><strong>No training data needed</strong> &mdash; Works immediately on any camera angle, any course. ML models require labeled training data for each new environment.</li>
+                        <li><strong>Tunable in real-time</strong> &mdash; Coaches adjust sensitivity from their phone. Detection parameters hot-reload every 2 seconds without restarting the engine.</li>
+                    </ul>
+                    <p>The trade-off is that frame differencing cannot distinguish <em>what</em> is moving &mdash; only <em>that</em> something moved. Course workers, falling gates, and blowing snow can all trigger detections. This is mitigated by the brightness filter and by careful trigger zone placement.</p>
+
                     <h3>State Machine</h3>
+                    <p>The detection engine operates as a three-state finite automaton:</p>
                     <div class="docs-diagram">
 <pre class="docs-code">
-  IDLE  ---(START zone triggered)---&gt;  TRACKING
-    ^                                      |
-    |                                      |
-    +----(cooldown expires)----  COMPLETE &lt;-+--- (END zone triggered)
-                                    |           (or timeout)
-                                    v
-                              Generate montage</pre>
+  IDLE  ──(START zone triggered)──▶  TRACKING
+    ▲                                     │
+    │                                     │
+    └──(cooldown expires)── COMPLETE ◀────┤── (END zone triggered)
+                                │         └── (timeout 30s)
+                                │         └── (duration elapsed)
+                                ▼
+                          on_run_complete callback
+                          ├── Generate montage(s)
+                          ├── Generate video clip
+                          ├── Match to Vola athlete
+                          └── Write timing JSON</pre>
                     </div>
 
-                    <h3>Key Classes</h3>
+                    <h4>State Transitions</h4>
+                    <table class="docs-table">
+                        <thead><tr><th>From</th><th>To</th><th>Condition</th></tr></thead>
+                        <tbody>
+                            <tr><td>IDLE</td><td>TRACKING</td><td>START zone fires AND cooldown elapsed since last trigger</td></tr>
+                            <tr><td>TRACKING</td><td>COMPLETE</td><td>END zone fires (zone mode) OR duration elapsed (duration mode) OR 30s timeout</td></tr>
+                            <tr><td>COMPLETE</td><td>IDLE</td><td>After <code>cooldown_seconds</code> (default 3s) &mdash; prevents re-triggering on same skier</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h4>Two Completion Modes</h4>
                     <ul>
-                        <li><code>Zone(x, y, w, h)</code> &mdash; Rectangle defining a trigger area on the frame</li>
-                        <li><code>FrameBuffer</code> &mdash; Ring buffer (deque) holding the last N seconds of frames for pre-trigger capture</li>
-                        <li><code>DetectionConfig</code> &mdash; All parameters loaded from JSON, supports hot-reload (polled every 2 seconds)</li>
-                        <li><code>DetectionEngine</code> &mdash; Main class with <code>process_frame()</code>, <code>run_on_video()</code>, <code>run_on_rtsp()</code></li>
-                        <li><code>Run</code> &mdash; Data class holding run_number, timestamps, and captured frames</li>
+                        <li><strong>Zone mode</strong> (default) &mdash; Run ends when the END zone detects motion. Best for races with clearly separated skier paths.</li>
+                        <li><strong>Duration mode</strong> &mdash; Run ends after a fixed number of seconds (<code>run_duration_seconds</code>). Used when the END zone can&rsquo;t be reliably placed, or when Vola timing data provides known section durations per athlete.</li>
                     </ul>
+
+                    <h3>Detection Sampling Rate</h3>
+                    <p>The engine runs at two speeds to balance CPU usage and responsiveness:</p>
+                    <table class="docs-table">
+                        <thead><tr><th>State</th><th>Frame Check Rate</th><th>Frame Capture Rate</th><th>Why</th></tr></thead>
+                        <tbody>
+                            <tr><td>IDLE</td><td>~10fps (every 3rd frame)</td><td>None (but FrameBuffer stores all)</td><td>Save CPU; 10fps is fast enough to catch a skier entering</td></tr>
+                            <tr><td>TRACKING</td><td>30fps (every frame)</td><td>30fps (all frames to run.frames)</td><td>Full resolution for montage quality</td></tr>
+                        </tbody>
+                    </table>
+                    <p>The detection interval is computed as <code>max(1, int(fps / 10))</code> &mdash; at 30fps, that&rsquo;s every 3rd frame. During active tracking, every frame is both checked (for END zone) and captured (for montage generation).</p>
+
+                    <h3>Key Classes</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Class</th><th>Purpose</th><th>Key Properties</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>Zone(x, y, w, h)</code></td><td>Rectangle defining a trigger area</td><td><code>x1, y1, x2, y2</code> computed properties; <code>from_dict()</code> factory</td></tr>
+                            <tr><td><code>FrameBuffer</code></td><td>Ring buffer for pre-trigger capture</td><td><code>deque(maxlen=fps*seconds)</code>; <code>get_frames_since()</code>, <code>get_recent()</code></td></tr>
+                            <tr><td><code>DetectionConfig</code></td><td>All parameters, hot-reload support</td><td>Checks file mtime every 2s; only reloads tunable params (thresholds)</td></tr>
+                            <tr><td><code>DetectionEngine</code></td><td>Main detection orchestrator</td><td><code>process_frame()</code>, <code>run_on_video()</code>, <code>run_on_rtsp()</code></td></tr>
+                            <tr><td><code>Run</code></td><td>Captured run data</td><td><code>run_number</code>, <code>start_time</code>, <code>end_time</code>, <code>frames[]</code>, <code>capture_start_time</code></td></tr>
+                        </tbody>
+                    </table>
 
                     <details>
                         <summary>FrameBuffer and pre-trigger capture</summary>
                         <div>
-                            <p>The FrameBuffer continuously stores the most recent frames (default: 2 seconds worth). When the START zone triggers, the buffered frames are included in the run, capturing the skier's approach before the trigger fired. This ensures no part of the run is missed due to detection latency.</p>
-<pre class="docs-code"><span class="comment"># Simplified frame buffer logic</span>
-buffer = deque(maxlen=fps * pre_buffer_seconds)
+                            <p>The FrameBuffer continuously stores the most recent frames (default: 2 seconds worth at 30fps = 60 frames). When the START zone triggers, the buffered frames are included in the run, capturing the skier's approach before the trigger fired. This ensures no part of the run is missed due to detection latency.</p>
+<pre class="docs-code"><span class="comment"># Ring buffer implementation</span>
+buffer = deque(maxlen=int(fps * pre_buffer_seconds) + <span class="number">1</span>)
 
-<span class="key">def</span> process_frame(frame):
-    buffer.append(frame)
-    <span class="key">if</span> detect_motion_in_zone(frame, start_zone):
-        <span class="comment"># Include buffered frames from BEFORE the trigger</span>
-        run_frames = list(buffer) + [frame]
-        start_tracking(run_frames)</pre>
+<span class="key">def</span> process_frame(frame, frame_num, timestamp):
+    buffer.append(frame.copy())  <span class="comment"># Copy! Original may be overwritten</span>
+
+    <span class="key">if</span> state == IDLE:
+        <span class="key">if</span> frame_num % detection_interval == <span class="number">0</span>:  <span class="comment"># ~10fps check</span>
+            triggered, pct = detect_motion(start_zone)
+            <span class="key">if</span> triggered <span class="key">and</span> cooldown_elapsed:
+                run = Run(frames=list(buffer))  <span class="comment"># Pre-trigger frames included!</span>
+                state = TRACKING
+
+    <span class="key">elif</span> state == TRACKING:
+        run.frames.append(frame.copy())  <span class="comment"># Every frame at 30fps</span>
+        triggered, pct = detect_motion(end_zone)
+        <span class="key">if</span> triggered <span class="key">or</span> elapsed > <span class="number">30</span>:
+            state = COMPLETE
+            on_run_complete(run)</pre>
                         </div>
                     </details>
 
                     <details>
-                        <summary>Stream Manager for shared connections</summary>
+                        <summary>Stream Manager for shared RTSP connections</summary>
                         <div>
-                            <p>When multiple detection sessions run on the same camera (e.g., different coaches monitoring different zones), the Stream Manager (<code>stream_manager.py</code>) maintains a single RTSP connection and distributes frames to all registered sessions. This avoids duplicate decode overhead.</p>
-                            <p>Each session gets its own copy of each frame to prevent race conditions, and maintains independent detection state (zones, thresholds, run tracking).</p>
+                            <p>When multiple detection sessions run on the same camera (e.g., different age groups or coaches monitoring different zones), the Stream Manager (<code>stream_manager.py</code>) maintains a <strong>single RTSP connection</strong> per camera and distributes frames to all registered sessions. This avoids duplicate decode overhead and connection limits.</p>
+                            <p>Architecture: <code>StreamManager</code> &rarr; <code>CameraStream</code> (one per camera) &rarr; multiple <code>DetectionEngine</code> sessions.</p>
+<pre class="docs-code"><span class="comment"># Frame distribution in CameraStream thread</span>
+<span class="key">for</span> session_id, session <span class="key">in</span> self.sessions.items():
+    engine = session[<span class="string">'engine'</span>]
+    <span class="key">if</span> engine.current_run <span class="key">is not None</span>:
+        engine.process_frame(frame, frame_num, now)  <span class="comment"># Every frame during run</span>
+    <span class="key">elif</span> frame_num % check_interval == <span class="number">0</span>:
+        engine.process_frame(frame, frame_num, now)  <span class="comment"># ~10fps idle</span></pre>
+                            <p>Montage generation uses a <code>ThreadPoolExecutor</code> for non-blocking async processing. When a run completes, the callback is submitted to the thread pool so the detection engine can immediately resume monitoring for the next skier.</p>
+                            <p>RTSP options: <code>rtsp_transport=tcp|fflags=+genpts</code> (TCP for reliability; genpts for Reolink timestamp quirks). Up to 10 reconnect attempts before giving up on a camera.</p>
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Live metrics output for calibration charts</summary>
+                        <div>
+                            <p>During active detection, the engine writes a JSON metrics file every 0.5 seconds (throttled to reduce disk I/O). The calibration UI reads this file to render real-time motion level charts, helping coaches fine-tune thresholds.</p>
+<pre class="docs-code"><span class="comment"># Metrics written to {session_id}_metrics.json</span>
+{
+  <span class="key">"timestamp"</span>: <span class="string">"2026-02-22T09:15:23.456"</span>,
+  <span class="key">"start_pct"</span>: <span class="number">2.3</span>,       <span class="comment">// motion % in START zone</span>
+  <span class="key">"end_pct"</span>: <span class="number">0.1</span>,         <span class="comment">// motion % in END zone</span>
+  <span class="key">"threshold"</span>: <span class="number">38</span>,
+  <span class="key">"min_brightness"</span>: <span class="number">94</span>,
+  <span class="key">"min_pct"</span>: <span class="number">9</span>,
+  <span class="key">"run_active"</span>: <span class="number">false</span>,
+  <span class="key">"run_count"</span>: <span class="number">14</span>
+}</pre>
+                            <p>A 120-entry deque (60 seconds at 0.5s intervals) provides a scrolling window of detection activity.</p>
                         </div>
                     </details>
                 </article>
 
                 <article id="doc-montage" class="docs-article">
                     <h2>Montage Generation</h2>
-                    <p>The montage generator (<code>montage.py</code>) creates stop-motion photo composites from the frames captured during a run.</p>
+                    <p>The montage generator (<code>montage.py</code>) creates stop-motion photo composites from the frames captured during a run. The technique is inspired by <strong>Ron LeMaster's</strong> ski photography from <em>Ultimate Skiing</em>.</p>
 
                     <h3>Pixel-Wise Minimum Algorithm</h3>
                     <p>The core technique is remarkably simple: for each pixel position, take the <strong>darkest value</strong> across all frames. Since the snow background is bright (white) and the skier is darker, the skier's silhouette from every frame is preserved while the snow background remains clean.</p>
@@ -738,45 +931,237 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
   Keeps darkest pixel at each position</pre>
                     </div>
 
+                    <p>In NumPy, the entire composite is a single line: <code>result = np.minimum(result, next_frame)</code> applied iteratively. Processing ~25 frames at 4K resolution takes approximately 0.4 seconds.</p>
+
                     <h3>Processing Pipeline</h3>
                     <ol>
                         <li><strong>Frame selection</strong> &mdash; Subsample captured frames to target FPS (e.g., 30fps capture &rarr; 6fps montage = every 5th frame)</li>
-                        <li><strong>Crop</strong> &mdash; Compute bounding box from START/END zones with asymmetric padding (30% left, 50% right, 10% vertical) to capture the full ski path</li>
-                        <li><strong>Bilateral filter</strong> &mdash; Edge-preserving noise reduction (<code>cv2.bilateralFilter(f, 5, 50, 50)</code>) applied to each frame before compositing. Reduces noise by ~50% while preserving edge sharpness.</li>
+                        <li><strong>Crop</strong> &mdash; Compute bounding box from START/END zones with asymmetric padding:
+                            <ul>
+                                <li>Left padding: 30% of zone width (captures approach line)</li>
+                                <li>Right padding: 50% of zone width (captures exit line &mdash; skiers drift further right)</li>
+                                <li>Vertical padding: 10% (slight buffer above/below)</li>
+                                <li>All values clamped to frame bounds (0&ndash;3840 horizontal, 0&ndash;2160 vertical)</li>
+                            </ul>
+                        </li>
+                        <li><strong>Bilateral filter</strong> &mdash; Edge-preserving noise reduction applied to each frame <em>before</em> compositing: <code>cv2.bilateralFilter(f, d=5, sigmaColor=50, sigmaSpace=50)</code></li>
                         <li><strong>Composite</strong> &mdash; Iterative pixel-wise minimum: <code>result = np.minimum(result, next_frame)</code></li>
-                        <li><strong>Output</strong> &mdash; Generate thumbnail (~800px, JPEG 85%) and full-resolution (native crop, JPEG 95%)</li>
+                        <li><strong>Overlay</strong> &mdash; Add race metadata (event, discipline, age, run, date), elapsed time, gate measurements, and sponsor logos</li>
+                        <li><strong>Output</strong> &mdash; Generate thumbnail (~800px width, JPEG Q85, ~200KB) and full-resolution (native crop, JPEG Q95)</li>
                     </ol>
+
+<pre class="docs-code"><span class="comment"># Complete montage generation (simplified from montage.py)</span>
+<span class="key">def</span> create_montage(frames, crop_region):
+    <span class="comment"># 1. Crop all frames to the region of interest</span>
+    cropped = [f[crop.y:crop.y+crop.h, crop.x:crop.x+crop.w] <span class="key">for</span> f <span class="key">in</span> frames]
+
+    <span class="comment"># 2. Bilateral filter: reduce noise, preserve edges</span>
+    filtered = [cv2.bilateralFilter(f, <span class="number">5</span>, <span class="number">50</span>, <span class="number">50</span>) <span class="key">for</span> f <span class="key">in</span> cropped]
+
+    <span class="comment"># 3. Pixel-wise minimum (darkest pixel wins)</span>
+    composite = filtered[<span class="number">0</span>].copy()
+    <span class="key">for</span> frame <span class="key">in</span> filtered[<span class="number">1</span>:]:
+        np.minimum(composite, frame, out=composite)
+
+    <span class="comment"># 4. Generate outputs</span>
+    cv2.imwrite(fullres_path, composite, [IMWRITE_JPEG_QUALITY, <span class="number">95</span>])
+    thumb = cv2.resize(composite, (<span class="number">800</span>, auto_h), INTER_AREA)
+    cv2.imwrite(thumb_path, thumb, [IMWRITE_JPEG_QUALITY, <span class="number">85</span>])</pre>
+
+                    <h3>Overlay System</h3>
+                    <p>Each montage gets several annotation layers:</p>
+                    <table class="docs-table">
+                        <thead><tr><th>Overlay</th><th>Position</th><th>Content</th></tr></thead>
+                        <tbody>
+                            <tr><td>Race info</td><td>Bottom-right</td><td>Event name, discipline, age group, run number, date</td></tr>
+                            <tr><td>Capture info</td><td>Bottom-right (line 2)</td><td>&ldquo;Captured at 30fps. 6.0 frames printed per second&rdquo;</td></tr>
+                            <tr><td>Elapsed time</td><td>Top-left</td><td>&ldquo;4.23s&rdquo; (if Vola timing available)</td></tr>
+                            <tr><td>Gate info</td><td>Four corners</td><td>Gate ID, color, distance, lateral offset, drop, slope</td></tr>
+                            <tr><td>Logos</td><td>Bottom-left</td><td>NHARA, venue, Skiframes logos (6% of image height)</td></tr>
+                        </tbody>
+                    </table>
+                    <p>Font size scales with image width: <code>max(0.4, width / 2000)</code>. PNG logos support alpha blending for transparent backgrounds.</p>
 
                     <details>
                         <summary>Why bilateral filter instead of Gaussian blur?</summary>
                         <div>
-                            <p>Gaussian blur smooths everything equally, including edges. Bilateral filtering smooths flat areas (reducing sensor noise in the snow) while preserving sharp edges (keeping the skier's outline crisp). Quality comparison:</p>
+                            <p>Gaussian blur smooths everything equally, including edges. Bilateral filtering smooths flat areas (reducing sensor noise in the snow) while preserving sharp edges (keeping the skier's outline crisp). Quality comparison from production montages:</p>
                             <table class="docs-table">
-                                <thead><tr><th>Metric</th><th>Raw Minimum</th><th>With Bilateral Filter</th></tr></thead>
+                                <thead><tr><th>Metric</th><th>Raw Minimum</th><th>With Bilateral Filter</th><th>Improvement</th></tr></thead>
                                 <tbody>
-                                    <tr><td>Noise level</td><td>22</td><td>13 (41% reduction)</td></tr>
-                                    <tr><td>Edge sharpness</td><td>3017</td><td>2873 (5% reduction)</td></tr>
+                                    <tr><td>Noise level (std dev)</td><td>22</td><td>13</td><td>41% reduction</td></tr>
+                                    <tr><td>Edge sharpness (Laplacian)</td><td>3017</td><td>2873</td><td>5% reduction (acceptable)</td></tr>
+                                    <tr><td>Processing time (25 frames)</td><td>&mdash;</td><td>+0.15s overhead</td><td>&mdash;</td></tr>
                                 </tbody>
                             </table>
-                            <p>The trade-off is worthwhile: nearly half the noise removed with minimal sharpness loss.</p>
+                            <p>The trade-off is worthwhile: nearly half the noise removed with minimal sharpness loss. The bilateral filter parameters (<code>d=5, sigmaColor=50, sigmaSpace=50</code>) were tuned empirically on 200+ race montages.</p>
                         </div>
                     </details>
 
                     <details>
                         <summary>FPS variant generation</summary>
                         <div>
-                            <p>Each run generates montages at 5 different frame rates (5.0, 5.5, 6.0, 6.5, 7.0 images per second). This is done by subsampling the captured frames differently:</p>
+                            <p>Each run generates montages at multiple frame rates (typically 5.0, 6.0, 7.0 images per second for races; 4.0, 2.0 for training). This is done by subsampling the captured frames differently:</p>
 <pre class="docs-code"><span class="comment"># 30fps video, 2.5-second run = 75 frames captured</span>
-<span class="comment"># At 5.0 img/s: use every 6th frame = 12 frames in composite</span>
-<span class="comment"># At 7.0 img/s: use every ~4th frame = 17 frames in composite</span>
+<span class="comment"># At 5.0 img/s: interval = 30/5 = 6.0 → every 6th frame = 12 in composite</span>
+<span class="comment"># At 6.0 img/s: interval = 30/6 = 5.0 → every 5th frame = 15 in composite</span>
+<span class="comment"># At 7.0 img/s: interval = 30/7 ≈ 4.3 → every ~4th frame = 17 in composite</span>
 
 <span class="key">def</span> select_frames_by_fps(frames, source_fps, target_fps):
     interval = source_fps / target_fps
-    indices = [int(i * interval) for i in range(int(len(frames) / interval))]
-    <span class="key">return</span> [frames[i] for i in indices if i &lt; len(frames)]</pre>
-                            <p>More frames = smoother motion trail but more overlap between positions. Fewer frames = cleaner individual positions but less continuous flow. The default (6.0 img/s) is a good middle ground.</p>
+    selected = []
+    next_frame = <span class="number">0.0</span>
+    <span class="key">for</span> i, frame <span class="key">in</span> enumerate(frames):
+        <span class="key">if</span> i >= next_frame:
+            selected.append(frame)
+            next_frame += interval
+    <span class="key">return</span> selected</pre>
+                            <p>More frames = smoother motion trail but more overlap between positions. Fewer frames = cleaner individual positions but less continuous flow. The default (6.0 img/s) is a good middle ground for races. Training sessions use lower rates (4.0) since runs are longer.</p>
                         </div>
                     </details>
+
+                    <details>
+                        <summary>Video clip generation</summary>
+                        <div>
+                            <p>In addition to the static montage image, a video clip is generated from the captured frames:</p>
+                            <ol>
+                                <li>Frames are cropped to the same region as the montage</li>
+                                <li>Encoded to H.264 MP4 at the original source framerate (30fps)</li>
+                                <li>Race metadata and logos are overlaid on each frame</li>
+                                <li>Output provides normal-speed and slow-motion playback capability in the gallery</li>
+                            </ol>
+                            <p>Video clips are typically 2&ndash;5 seconds long and 2&ndash;8MB in size depending on the section length and resolution.</p>
+                        </div>
+                    </details>
+                </article>
+
+                <article id="doc-reid" class="docs-article">
+                    <h2>Athlete Re-Identification (AI Model)</h2>
+                    <p>During <strong>training sessions</strong> (not races), the system uses a pre-trained <strong>CLIP vision model</strong> to generate visual embeddings for each detected skier. These embeddings enable automatic grouping of montages by athlete &mdash; even without bib numbers or timing data.</p>
+
+                    <h3>Why AI for Training but Not Races?</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Context</th><th>Identification Method</th><th>Reason</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>Races</strong></td><td>Vola timing data (bib + timestamp)</td><td>Official timing provides deterministic athlete-to-run matching. Athletes run in known order with recorded start times.</td></tr>
+                            <tr><td><strong>Training</strong></td><td>CLIP embeddings + clustering</td><td>No bib numbers, no timing system, athletes run in random order. Visual appearance is the only signal available.</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>The CLIP Embedding Model</h3>
+                    <p><strong>CLIP</strong> (Contrastive Language&ndash;Image Pre-training) is a vision model developed by OpenAI that learns visual concepts from natural language supervision. Skiframes uses only the <strong>vision encoder</strong> to generate a 512-dimensional embedding vector for each detected skier.</p>
+
+                    <h4>How the Model Was Trained</h4>
+                    <p>The CLIP model was <strong>not trained by Skiframes</strong> &mdash; it is a pre-trained foundation model. Key training details:</p>
+                    <ul>
+                        <li><strong>Training data</strong> &mdash; 400 million image-text pairs scraped from the internet (WebImageText dataset)</li>
+                        <li><strong>Architecture</strong> &mdash; Vision Transformer (ViT-B/32): 12 transformer layers, 768-dim hidden state, 32&times;32 patch size</li>
+                        <li><strong>Objective</strong> &mdash; Contrastive learning: match images to their text descriptions. This produces general-purpose visual features that transfer well to downstream tasks</li>
+                        <li><strong>Output</strong> &mdash; 512-dimensional L2-normalized embedding vector per image</li>
+                        <li><strong>Published</strong> &mdash; OpenAI, January 2021 (<em>&ldquo;Learning Transferable Visual Models From Natural Language Supervision&rdquo;</em>)</li>
+                    </ul>
+                    <p>The key insight is that CLIP's general visual features are rich enough to distinguish individual skiers by their helmet color, jacket pattern, ski poles, and body proportions &mdash; without any ski-racing-specific fine-tuning.</p>
+
+                    <h4>Embedding Generation Pipeline</h4>
+                    <ol>
+                        <li><strong>Frame selection</strong> &mdash; From the captured run frames, select representative frames (middle of run, when skier is most visible)</li>
+                        <li><strong>Crop to skier region</strong> &mdash; Use the trigger zone crop region to focus on the area containing the skier</li>
+                        <li><strong>CLIP inference</strong> &mdash; Pass cropped frames through ViT-B/32 vision encoder</li>
+                        <li><strong>Average pooling</strong> &mdash; Average embeddings across selected frames to get a single 512-dim vector per run</li>
+                        <li><strong>Store in manifest</strong> &mdash; The embedding vector is saved alongside the montage in the session manifest JSON</li>
+                    </ol>
+
+<pre class="docs-code"><span class="comment"># Embedding generation (from runner.py)</span>
+<span class="key">if</span> session_type != <span class="string">'race'</span>:
+    embedding = embedder.embed_frames(run.frames, crop_region)
+    <span class="comment"># Returns: numpy array of shape (512,) — L2-normalized</span>
+    <span class="comment"># Stored in manifest as: "embedding": [0.123, -0.456, ...]</span></pre>
+
+                    <h4>Athlete Clustering</h4>
+                    <p>In the web gallery, embeddings are used for <strong>unsupervised clustering</strong> to group montages by athlete:</p>
+                    <ol>
+                        <li><strong>Pairwise cosine similarity</strong> &mdash; Compute similarity between all pairs of embeddings. Same athlete: typically &gt;0.85. Different athletes: typically &lt;0.70.</li>
+                        <li><strong>Agglomerative clustering</strong> &mdash; Group runs where cosine similarity exceeds a configurable threshold (default ~0.78)</li>
+                        <li><strong>Gallery display</strong> &mdash; The &ldquo;Athlete View&rdquo; toggle groups montages by cluster, showing all runs by the same person together</li>
+                        <li><strong>Manual correction</strong> &mdash; Coaches can drag-and-drop montages between clusters to fix grouping errors</li>
+                    </ol>
+
+                    <h4>Model Performance Characteristics</h4>
+                    <table class="docs-table">
+                        <thead><tr><th>Metric</th><th>Value</th><th>Notes</th></tr></thead>
+                        <tbody>
+                            <tr><td>Embedding dimension</td><td>512</td><td>L2-normalized float32 vector</td></tr>
+                            <tr><td>Inference time</td><td>~50ms per frame</td><td>CPU-only (no GPU on edge device)</td></tr>
+                            <tr><td>Same-athlete similarity</td><td>&gt;0.85</td><td>Helmet/jacket patterns are strong signals</td></tr>
+                            <tr><td>Different-athlete similarity</td><td>&lt;0.70</td><td>Clear separation in most conditions</td></tr>
+                            <tr><td>Storage per embedding</td><td>~4KB</td><td>512 float32 values in JSON</td></tr>
+                            <tr><td>Model size</td><td>~350MB</td><td>ViT-B/32 weights (downloaded once)</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h4>Limitations</h4>
+                    <ul>
+                        <li><strong>Clothing changes</strong> &mdash; If an athlete changes jacket or helmet between sessions, the embeddings won't match</li>
+                        <li><strong>Identical gear</strong> &mdash; Teammates wearing the same team jacket may be confused. Body proportions help but aren't always sufficient.</li>
+                        <li><strong>Overcast/flat light</strong> &mdash; Low-contrast conditions reduce the distinctiveness of color features</li>
+                        <li><strong>Not used for races</strong> &mdash; Race identification relies entirely on Vola timing data, which is deterministic</li>
+                    </ul>
+                </article>
+
+                <article id="doc-vola" class="docs-article">
+                    <h2>Vola Timing Integration</h2>
+                    <p>For race events, athlete identification uses the <strong>Vola electronic timing system</strong> rather than visual recognition. This provides deterministic, reliable matching between detected runs and athletes.</p>
+
+                    <h3>Data Flow</h3>
+                    <ol>
+                        <li><strong>Vola CSV export</strong> &mdash; The timing operator exports a CSV file from the Vola timing software containing athlete names, bib numbers, clubs, and start-of-day times</li>
+                        <li><strong>Camera offset calculation</strong> &mdash; For each athlete, the system estimates when they'll appear in each camera's field of view by adding a fixed offset to their start time (based on how long it takes to ski from the start gate to that camera section)</li>
+                        <li><strong>Timestamp matching</strong> &mdash; When the detection engine completes a run, the run's timestamp is compared against the Vola-predicted camera times with a &plusmn;10 second tolerance window</li>
+                        <li><strong>Bib assignment</strong> &mdash; The matched athlete's bib number determines the output filename and manifest entry</li>
+                    </ol>
+
+<pre class="docs-code"><span class="comment"># Athlete matching logic (from runner.py)</span>
+<span class="key">def</span> find_matching_racer(run_start_time):
+    run_sec = run_start_time.hour * <span class="number">3600</span> + minute * <span class="number">60</span> + second
+    tolerance = <span class="number">10.0</span>  <span class="comment"># seconds</span>
+
+    <span class="key">for</span> racer <span class="key">in</span> vola_racers:
+        <span class="key">if</span> racer <span class="key">already</span> matched: <span class="key">continue</span>
+        cam_start = racer[<span class="string">'camera_start_sec'</span>]
+        cam_end   = racer[<span class="string">'camera_end_sec'</span>]
+        <span class="key">if</span> (cam_start - tolerance) &lt;= run_sec &lt;= (cam_end + tolerance):
+            <span class="key">return</span> racer  <span class="comment"># Match found!</span>
+    <span class="key">return</span> None  <span class="comment"># Unmatched run → named by timestamp</span></pre>
+
+                    <h3>Early Stopping Optimization</h3>
+                    <p>When processing recorded video files in batch mode, the runner implements two early-stopping heuristics to avoid processing unnecessary video:</p>
+                    <ul>
+                        <li><strong>All athletes matched</strong> &mdash; If every racer in the Vola list has been paired with a detected run, processing stops immediately</li>
+                        <li><strong>Past timing window</strong> &mdash; If the video timestamp exceeds the last racer's predicted end time by 120 seconds and no run is currently active, processing stops</li>
+                    </ul>
+
+                    <h3>Reolink Video File Naming</h3>
+                    <p>Recorded video files from Reolink cameras follow a specific naming convention that encodes the recording timestamps:</p>
+<pre class="docs-code"><span class="comment"># Format: RecM03_YYYYMMDD_HHMMSS_HHMMSS_XXXXX_XXXXX.mp4</span>
+<span class="comment"># Example: RecM03_20260201_081538_082039_533C810_BEF5D90.mp4</span>
+<span class="comment">#                 ^^^^^^^^ ^^^^^^ ^^^^^^</span>
+<span class="comment">#                 date     start  end time</span>
+
+<span class="comment"># The start time (081538 = 08:15:38) is parsed and compared</span>
+<span class="comment"># against Vola timing data to determine which athletes</span>
+<span class="comment"># should appear in that video file.</span></pre>
+
+                    <h3>File Naming Convention</h3>
+                    <p>Output files use a gender-prefix + bib number scheme in staging mode:</p>
+                    <table class="docs-table">
+                        <thead><tr><th>Pattern</th><th>Example</th><th>Meaning</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>g{bib}_d{NNN}_{fps}fps</code></td><td><code>g4_d001_6.0fps.jpg</code></td><td>Girl bib 4, detection #1, 6.0fps variant</td></tr>
+                            <tr><td><code>b{bib}_d{NNN}_{fps}fps</code></td><td><code>b175_d001_5.0fps_thumb.jpg</code></td><td>Boy bib 175, detection #1, 5.0fps thumbnail</td></tr>
+                            <tr><td><code>unmatched_{HHMMSS}_d{NNN}</code></td><td><code>unmatched_081538_d001_6.0fps.jpg</code></td><td>No Vola match, named by timestamp</td></tr>
+                        </tbody>
+                    </table>
+                    <p>The detection counter (<code>d001</code>, <code>d002</code>) handles cases where the same bib is detected multiple times (e.g., a skier pausing mid-run).</p>
                 </article>
 
                 <article id="doc-manifest" class="docs-article">
@@ -1057,6 +1442,10 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
                     <input type="range" id="vlb-scrubber" min="0" max="1000" value="0" class="vlb-scrubber">
                 </div>
                 <span class="vlb-time" id="vlb-time">0.00s / 0.00s</span>
+                <div id="vlb-opacity-wrap" class="vlb-opacity-wrap" style="display:none;">
+                    <span class="vlb-opacity-label">Graph</span>
+                    <input type="range" id="vlb-opacity" min="0" max="100" value="100" class="vlb-opacity-slider">
+                </div>
             </div>
             <div class="vlb-info">
                 <span id="vlb-name"></span>
@@ -1072,7 +1461,9 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
                 <span><kbd>Space</kbd> Play</span>
                 <span><kbd>&larr;&rarr;</kbd> Frame</span>
                 <span><kbd>&uarr;&darr;</kbd> Athlete</span>
-                <span><kbd>Esc</kbd> Close</span>
+                <span><kbd>S</kbd> Speed</span>
+                <span><kbd>C</kbd> Close</span>
+                <span id="vlb-opacity-hint" style="display:none;"><kbd>O</kbd> Opacity</span>
             </div>
         </div>
     </div>
