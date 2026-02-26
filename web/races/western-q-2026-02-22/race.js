@@ -3481,6 +3481,7 @@ window._showPrecomputedAI = function(aiVideoRelPath, bib) {
 const VirtualRace = {
     modal: null,
     mode: 'V',
+    layout: 'side',      // 'side', 'stack', or 'ghost'
     athletes: [],        // Athletes with video data
     athleteA: null,
     athleteB: null,
@@ -3553,6 +3554,12 @@ const VirtualRace = {
             document.getElementById('vrSelectB').value = `${this.athleteB.gender}${this.athleteB.bib}`;
         }
 
+        // Setup layout tabs
+        this.modal.querySelectorAll('.vr-layout-tab').forEach(tab => {
+            tab.addEventListener('click', () => this.setLayout(tab.dataset.layout));
+        });
+        this._setActiveLayout(this.layout);
+
         // Show modal
         this.modal.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
@@ -3561,6 +3568,18 @@ const VirtualRace = {
         // Keyboard
         this._keyHandler = (e) => this._onKeydown(e);
         document.addEventListener('keydown', this._keyHandler);
+    },
+
+    setLayout(layout) {
+        this.layout = layout;
+        this._setActiveLayout(layout);
+        this.renderContent();
+    },
+
+    _setActiveLayout(layout) {
+        this.modal?.querySelectorAll('.vr-layout-tab').forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.layout === layout);
+        });
     },
 
     close() {
@@ -3619,8 +3638,9 @@ const VirtualRace = {
             return;
         }
 
+        const layoutClass = this.layout === 'stack' ? 'layout-stack' : (this.layout === 'ghost' ? 'layout-ghost' : '');
         container.innerHTML = `
-            <div class="vr-panels">
+            <div class="vr-panels ${layoutClass}">
                 <div class="vr-panel">
                     <div class="vr-panel-label">#${this.athleteA.bib} ${this.athleteA.name}</div>
                     <div class="vr-video-wrap">
@@ -3687,8 +3707,9 @@ const VirtualRace = {
         const imgA = getFirstMontage(this.athleteA);
         const imgB = getFirstMontage(this.athleteB);
 
+        const layoutClass = this.layout === 'stack' ? 'layout-stack' : (this.layout === 'ghost' ? 'layout-ghost' : '');
         container.innerHTML = `
-            <div class="vr-panels">
+            <div class="vr-panels ${layoutClass}">
                 <div class="vr-panel">
                     <div class="vr-panel-label">#${this.athleteA.bib} ${this.athleteA.name}</div>
                     <div class="vr-montage-wrap">

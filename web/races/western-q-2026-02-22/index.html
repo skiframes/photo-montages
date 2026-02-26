@@ -122,12 +122,12 @@
                     <option value="">All teams</option>
                 </select>
             </div>
+            <button id="virtualRaceBtn" class="vr-open-btn">🏁 Virtual Race</button>
             <div id="team-download">
                 <select id="team-download-select">
                     <option value="">⬇️ Download by Team...</option>
                 </select>
             </div>
-            <button id="virtualRaceBtn" class="vr-open-btn">🏁 Virtual Race</button>
         </div>
         <div id="results-container">
             <table id="results-table">
@@ -1087,9 +1087,16 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
     <div id="virtualRaceModal" class="virtual-race-modal hidden">
         <div class="vr-toolbar">
             <div class="vr-title">🏁 Virtual Race</div>
-            <div class="vr-mode-tabs">
-                <button class="vr-mode-tab" data-mode="PM">Photo</button>
-                <button class="vr-mode-tab active" data-mode="V">Video</button>
+            <div class="vr-toolbar-center">
+                <div class="vr-mode-tabs">
+                    <button class="vr-mode-tab" data-mode="PM">Photo</button>
+                    <button class="vr-mode-tab active" data-mode="V">Video</button>
+                </div>
+                <div class="vr-layout-tabs">
+                    <button class="vr-layout-tab active" data-layout="side" title="Side by Side">◫</button>
+                    <button class="vr-layout-tab" data-layout="stack" title="Top / Bottom">▤</button>
+                    <button class="vr-layout-tab" data-layout="ghost" title="Ghost Overlay">◉</button>
+                </div>
             </div>
             <button class="vr-close" onclick="VirtualRace.close()">&times;</button>
         </div>
@@ -1106,14 +1113,14 @@ buffer = deque(maxlen=fps * pre_buffer_seconds)
             <div id="vrDiff" class="vr-diff"></div>
         </div>
         <div id="vrContent" class="vr-content">
-            <!-- Populated by JS: side-by-side videos or montages -->
+            <!-- Populated by JS: side-by-side, stacked, or ghost overlay -->
         </div>
         <div id="vrControlsSection" class="vr-controls hidden">
             <button id="vrPlayBtn" class="vr-ctrl-btn vr-play-btn">▶ Play</button>
             <button class="vr-ctrl-btn" onclick="VirtualRace.restart()">↺ Restart</button>
             <span class="vr-divider"></span>
-            <button class="vr-ctrl-btn" onclick="VirtualRace.frameStep(-1)">◀ Frame</button>
-            <button class="vr-ctrl-btn" onclick="VirtualRace.frameStep(1)">Frame ▶</button>
+            <button class="vr-ctrl-btn" onclick="VirtualRace.frameStep(-1)">◀</button>
+            <button class="vr-ctrl-btn" onclick="VirtualRace.frameStep(1)">▶</button>
             <span class="vr-divider"></span>
             <button class="vr-speed-btn" data-speed="0.25">0.25x</button>
             <button class="vr-speed-btn" data-speed="0.5">0.5x</button>
