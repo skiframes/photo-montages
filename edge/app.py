@@ -4260,9 +4260,11 @@ def ai_analyze():
                 '--model', 'l',
             ]
 
-            # Add gate info for Cam1/run1 (Section 1: gates 8-9)
-            if cam_id == 'Cam1' and run_key == 'run1':
-                import json as _json
+            # Add gate info based on camera/section
+            import json as _json
+            gate_info = None
+            if cam_id == 'Cam1':
+                # Section 1: gates 8-9
                 gate_info = {
                     'gate_id': 9,
                     'color': 'blue',
@@ -4270,10 +4272,36 @@ def ai_analyze():
                     'prev_color': 'red',
                     'dist_from_prev': 22.5,  # meters (computed from GPS)
                     'drop': 6.5,  # meters (295.5m - 289.0m)
-                    'gps_accuracy': 0.81,  # from run2 manifest
+                    'gps_accuracy': 0.81,
                 }
-                cmd.extend(['--gate-info', _json.dumps(gate_info)])
                 print(f"[AI] Gate info: Gate 9 from Gate 8 (Section 1)")
+            elif cam_id == 'Cam2':
+                # Section 2: gates 13-14
+                gate_info = {
+                    'gate_id': 14,
+                    'color': 'red',
+                    'prev_id': 13,
+                    'prev_color': 'blue',
+                    'dist_from_prev': 20.0,
+                    'drop': 5.5,
+                    'gps_accuracy': 0.9,
+                }
+                print(f"[AI] Gate info: Gate 14 from Gate 13 (Section 2)")
+            elif cam_id == 'Cam3':
+                # Section 3: gates 18-19
+                gate_info = {
+                    'gate_id': 19,
+                    'color': 'blue',
+                    'prev_id': 18,
+                    'prev_color': 'red',
+                    'dist_from_prev': 18.0,
+                    'drop': 4.5,
+                    'gps_accuracy': 0.85,
+                }
+                print(f"[AI] Gate info: Gate 19 from Gate 18 (Section 3)")
+
+            if gate_info:
+                cmd.extend(['--gate-info', _json.dumps(gate_info)])
 
             # Add logos for overlay (use same defaults as montage.py)
             logos_list = data.get('logos') or ['NHARA_logo.png', 'ProctorLogo.jpg', 'Skiframes-com_logo.png']
