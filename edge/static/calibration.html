@@ -1571,6 +1571,17 @@
                             </label>
                         </div>
                         <div id="gateInfoFields" style="display: none;">
+                            <!-- Load from manifest -->
+                            <div style="display: flex; gap: 8px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
+                                <select id="gateInfoManifestGate" style="flex: 1;">
+                                    <option value="">Load gate from manifest...</option>
+                                </select>
+                                <select id="gateInfoManifestRun" style="width: 80px;">
+                                    <option value="run1">Run 1</option>
+                                    <option value="run2">Run 2</option>
+                                </select>
+                                <button type="button" id="gateInfoLoadBtn" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;">Load</button>
+                            </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
                                 <div>
                                     <label style="font-size: 12px; color: #64748b;">Gate #</label>
@@ -1597,6 +1608,10 @@
                                 <div>
                                     <label style="font-size: 12px; color: #64748b;">Distance (m)</label>
                                     <input type="number" id="gateInfoDist" min="0" max="100" step="0.1" value="22.5" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">Offset L/R (m)</label>
+                                    <input type="number" id="gateInfoOffset" min="-20" max="20" step="0.1" value="0" style="width: 100%;" title="Negative = Left, Positive = Right">
                                 </div>
                                 <div>
                                     <label style="font-size: 12px; color: #64748b;">Drop (m)</label>
@@ -3954,6 +3969,7 @@
             const prevIdInput = document.getElementById('gateInfoPrevId');
             const prevColorSelect = document.getElementById('gateInfoPrevColor');
             const distInput = document.getElementById('gateInfoDist');
+            const offsetInput = document.getElementById('gateInfoOffset');
             const dropInput = document.getElementById('gateInfoDrop');
             const slopeInput = document.getElementById('gateInfoSlope');
             const gpsAccInput = document.getElementById('gateInfoGpsAcc');
@@ -3977,6 +3993,7 @@
                         prev_id: parseInt(prevIdInput.value) || 0,
                         prev_color: prevColorSelect.value,
                         dist_from_prev: parseFloat(distInput.value) || 0,
+                        offset_lr: parseFloat(offsetInput.value) || 0,
                         drop: parseFloat(dropInput.value) || 0,
                         slope: parseFloat(slopeInput.value) || 0,
                         gps_accuracy: parseFloat(gpsAccInput.value) || 0
@@ -3987,10 +4004,75 @@
                 state.gateInfoCorner = cornerSelect.value;
             };
 
-            [gateIdInput, colorSelect, prevIdInput, prevColorSelect, distInput, dropInput, slopeInput, gpsAccInput, cornerSelect].forEach(el => {
+            [gateIdInput, colorSelect, prevIdInput, prevColorSelect, distInput, offsetInput, dropInput, slopeInput, gpsAccInput, cornerSelect].forEach(el => {
                 if (el) el.addEventListener('change', updateGateInfoState);
                 if (el && el.type === 'number') el.addEventListener('input', updateGateInfoState);
             });
+
+            // Load from manifest functionality
+            const manifestGateSelect = document.getElementById('gateInfoManifestGate');
+            const manifestRunSelect = document.getElementById('gateInfoManifestRun');
+            const loadBtn = document.getElementById('gateInfoLoadBtn');
+
+            // Cache for manifest data
+            let manifestGates = { run1: [], run2: [] };
+
+            // Load manifest gates when race date changes or on init
+            async function loadManifestGates() {
+                const raceDate = elements.volaRaceDate?.value;
+                if (!raceDate) return;
+
+                try {
+                    const res = await fetch(`/api/manifest-gates?race_date=${raceDate}`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    manifestGates = data;
+
+                    // Populate dropdown with gates from selected run
+                    populateGateDropdown();
+                } catch (e) {
+                    console.error('Failed to load manifest gates:', e);
+                }
+            }
+
+            function populateGateDropdown() {
+                const run = manifestRunSelect.value;
+                const gates = manifestGates[run] || [];
+                manifestGateSelect.innerHTML = '<option value="">Load gate from manifest...</option>' +
+                    gates.map(g => `<option value="${g.number}">Gate ${g.number} (${g.color}) - ${g.dist_from_prev || '?'}m, ${g.offset_lr !== undefined ? (g.offset_lr > 0 ? g.offset_lr + 'm R' : Math.abs(g.offset_lr) + 'm L') : '?'}</option>`).join('');
+            }
+
+            manifestRunSelect?.addEventListener('change', populateGateDropdown);
+
+            loadBtn?.addEventListener('click', () => {
+                const gateNum = parseInt(manifestGateSelect.value);
+                if (!gateNum) return;
+
+                const run = manifestRunSelect.value;
+                const gates = manifestGates[run] || [];
+                const gate = gates.find(g => g.number === gateNum);
+                const prevGate = gates.find(g => g.number === gateNum - 1);
+
+                if (gate) {
+                    gateIdInput.value = gate.number;
+                    colorSelect.value = gate.color || 'blue';
+                    if (prevGate) {
+                        prevIdInput.value = prevGate.number;
+                        prevColorSelect.value = prevGate.color || 'red';
+                    }
+                    distInput.value = gate.dist_from_prev || 0;
+                    offsetInput.value = gate.offset_lr || 0;
+                    dropInput.value = gate.drop || 0;
+                    slopeInput.value = gate.slope || 0;
+                    gpsAccInput.value = gate.accuracy || 0;
+                    updateGateInfoState();
+                }
+            });
+
+            // Load gates when race date changes
+            elements.volaRaceDate?.addEventListener('change', loadManifestGates);
+            // Initial load
+            setTimeout(loadManifestGates, 500);
         }
 
         function toggleLogo(filename) {

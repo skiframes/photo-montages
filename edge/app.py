@@ -211,6 +211,57 @@ def list_cameras():
     return jsonify(cameras)
 
 
+@app.route('/api/manifest-gates')
+def get_manifest_gates():
+    """Get gate data from race manifest for a given race date."""
+    race_date = request.args.get('race_date', '')
+    if not race_date:
+        return jsonify({'run1': [], 'run2': []})
+
+    # Look for manifest in web/races directory
+    web_races_dir = Path(__file__).parent.parent / 'web' / 'races'
+    manifest_path = None
+
+    # Search for manifest matching date
+    for race_dir in web_races_dir.glob('*'):
+        if race_date in race_dir.name:
+            mp = race_dir / 'race_manifest.json'
+            if mp.exists():
+                manifest_path = mp
+                break
+
+    if not manifest_path:
+        return jsonify({'run1': [], 'run2': []})
+
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        result = {'run1': [], 'run2': []}
+        course = manifest.get('course', {})
+
+        for run_key in ['run1', 'run2']:
+            if run_key in course:
+                gates = course[run_key].get('gates', [])
+                result[run_key] = [
+                    {
+                        'number': g.get('number'),
+                        'color': g.get('color'),
+                        'dist_from_prev': g.get('dist_from_prev'),
+                        'offset_lr': g.get('offset_lr'),
+                        'drop': g.get('drop'),
+                        'slope': g.get('slope'),
+                        'accuracy': g.get('accuracy'),
+                    }
+                    for g in gates
+                ]
+
+        return jsonify(result)
+    except Exception as e:
+        print(f"Error loading manifest gates: {e}")
+        return jsonify({'run1': [], 'run2': []})
+
+
 @app.route('/api/sessions')
 def list_sessions():
     """List session types and groups."""
@@ -4263,52 +4314,16 @@ def ai_analyze():
                 '--model', 'l',
             ]
 
-            # Add gate info based on camera/section
-            import json as _json
-            gate_info = None
+            # Add calibration file for Cam1 (Section 1)
             if cam_id == 'Cam1':
-                # Section 1: gates 8-9
-                gate_info = {
-                    'gate_id': 9,
-                    'color': 'blue',
-                    'prev_id': 8,
-                    'prev_color': 'red',
-                    'dist_from_prev': 22.5,  # meters (computed from GPS)
-                    'drop': 6.5,  # meters (295.5m - 289.0m)
-                    'gps_accuracy': 0.81,
-                }
-                print(f"[AI] Gate info: Gate 9 from Gate 8 (Section 1)")
-            elif cam_id == 'Cam2':
-                # Section 2: gates 13-14
-                gate_info = {
-                    'gate_id': 14,
-                    'color': 'red',
-                    'prev_id': 13,
-                    'prev_color': 'blue',
-                    'dist_from_prev': 20.0,
-                    'drop': 5.5,
-                    'gps_accuracy': 0.9,
-                }
-                print(f"[AI] Gate info: Gate 14 from Gate 13 (Section 2)")
-            elif cam_id == 'Cam3':
-                # Section 3: gates 18-19
-                gate_info = {
-                    'gate_id': 19,
-                    'color': 'blue',
-                    'prev_id': 18,
-                    'prev_color': 'red',
-                    'dist_from_prev': 18.0,
-                    'drop': 4.5,
-                    'gps_accuracy': 0.85,
-                }
-                print(f"[AI] Gate info: Gate 19 from Gate 18 (Section 3)")
+                calibration_file = edge_dir / 'config' / 'calibrations' / 'test_4pole_2026-02-24_1833.json'
+                if calibration_file.exists():
+                    cmd.extend(['--calibration', str(calibration_file)])
+                    print(f"[AI] Using calibration: {calibration_file.name}")
 
-            if gate_info:
-                cmd.extend(['--gate-info', _json.dumps(gate_info)])
-
-            # Add logos for overlay (use same defaults as montage.py)
-            logos_list = data.get('logos') or ['NHARA_logo.png', 'ProctorLogo.jpg', 'Skiframes-com_logo.png']
-            cmd.extend(['--logos', ','.join(logos_list)])
+            # Note: Gate info panel and logos are NOT added here because AI videos
+            # are generated from original videos that already have these overlays
+            # from video_clip.py
 
             print(f"[AI] Running: {' '.join(cmd)}")
 

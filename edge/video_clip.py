@@ -20,11 +20,12 @@ from typing import Optional, Dict, List
 
 import numpy as np
 
-# Import add_logos from montage for consistent logo overlay
+# Import add_logos and add_gate_info from montage for consistent overlays
 try:
-    from montage import add_logos
+    from montage import add_logos, add_gate_info
 except ImportError:
     add_logos = None
+    add_gate_info = None
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,8 @@ def generate_video_clip(
     source_fps: float = 30.0,
     crop_region: Optional[Dict] = None,
     selected_logos: Optional[List[str]] = None,
+    gate_info: Optional[Dict] = None,
+    gate_info_corner: str = "top-right",
 ) -> Optional[str]:
     """
     Generate an MP4 video clip from a list of BGR frames.
@@ -87,6 +90,8 @@ def generate_video_clip(
         source_fps: FPS of the source video (for correct playback speed).
         crop_region: Optional dict with x, y, w, h to crop frames.
         selected_logos: Optional list of logo filenames to overlay at bottom-left.
+        gate_info: Optional dict with gate info to overlay (gate_id, color, etc).
+        gate_info_corner: Corner for gate info panel ("top-right", "top-left", etc).
 
     Returns:
         Path to the generated MP4 file, or None if generation fails.
@@ -167,6 +172,10 @@ def generate_video_clip(
             # Add logos if specified and add_logos is available
             if selected_logos and add_logos:
                 cropped = add_logos(cropped, selected_logos)
+
+            # Add gate info if specified and add_gate_info is available
+            if gate_info and add_gate_info:
+                cropped = add_gate_info(cropped, gate_info, corner=gate_info_corner)
 
             process.stdin.write(cropped.tobytes())
 
