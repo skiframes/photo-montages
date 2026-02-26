@@ -1560,6 +1560,69 @@
                             <!-- Logos will be populated dynamically by renderLogoList() -->
                         </div>
                     </div>
+
+                    <!-- Gate Info Overlay -->
+                    <div style="margin-top: 12px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="font-weight: 600; color: #334155;">Gate Info Overlay</div>
+                            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+                                <input type="checkbox" id="gateInfoEnabled" style="width: 16px; height: 16px;">
+                                Enable
+                            </label>
+                        </div>
+                        <div id="gateInfoFields" style="display: none;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">Gate #</label>
+                                    <input type="number" id="gateInfoGateId" min="1" max="50" value="9" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">Gate Color</label>
+                                    <select id="gateInfoColor" style="width: 100%;">
+                                        <option value="blue">Blue</option>
+                                        <option value="red">Red</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">From Gate #</label>
+                                    <input type="number" id="gateInfoPrevId" min="1" max="50" value="8" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">From Color</label>
+                                    <select id="gateInfoPrevColor" style="width: 100%;">
+                                        <option value="red">Red</option>
+                                        <option value="blue">Blue</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">Distance (m)</label>
+                                    <input type="number" id="gateInfoDist" min="0" max="100" step="0.1" value="22.5" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">Drop (m)</label>
+                                    <input type="number" id="gateInfoDrop" min="0" max="50" step="0.1" value="6.5" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">Slope (deg)</label>
+                                    <input type="number" id="gateInfoSlope" min="0" max="45" step="1" value="16" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">GPS Accuracy (m)</label>
+                                    <input type="number" id="gateInfoGpsAcc" min="0" max="5" step="0.01" value="0.81" style="width: 100%;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; color: #64748b;">Display Corner</label>
+                                <select id="gateInfoCorner" style="width: 100%;">
+                                    <option value="top-right">Top Right</option>
+                                    <option value="top-left">Top Left</option>
+                                    <option value="bottom-right">Bottom Right</option>
+                                    <option value="bottom-left">Bottom Left</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="help-text" style="margin-top: 6px;">Shows gate number, distance, drop, and slope on PM/Video</div>
+                    </div>
                 </div>
             </div>
 
@@ -1868,6 +1931,10 @@
             cameras: [],  // Camera list with offset percentages
             selectedLogos: [],  // List of selected logo filenames in order
             availableLogos: [],  // All available logos
+            // Gate info overlay
+            gateInfoEnabled: false,
+            gateInfo: null,      // {gate_id, color, prev_id, prev_color, dist_from_prev, drop, slope, gps_accuracy}
+            gateInfoCorner: 'top-right',
             // Gates mode state
             gatesSourceType: 'rtsp',
             gatesFrameId: null,
@@ -2077,6 +2144,8 @@
             setupEventListeners();
             // Load logos on startup (montage mode is default)
             loadLogos();
+            // Setup gate info overlay controls
+            setupGateInfo();
             // Set initial end mode (hides END zone button if in duration mode)
             setEndMode(state.endMode);
             // Only check active session for RTSP mode (check after setup so UI is correct)
@@ -3149,6 +3218,9 @@
                     num_athletes: parseInt(elements.numAthletes.value) || 0,
                     // Logo selection
                     selected_logos: state.selectedLogos.length > 0 ? state.selectedLogos : null,
+                    // Gate info overlay
+                    gate_info: state.gateInfoEnabled ? state.gateInfo : null,
+                    gate_info_corner: state.gateInfoCorner,
                 };
 
                 // For video files, include the video path and Vola racer data for processing
@@ -3871,6 +3943,54 @@
 
             // Add drag and drop handlers
             setupLogoDragDrop();
+        }
+
+        // Gate Info initialization and handlers
+        function setupGateInfo() {
+            const enabledCheckbox = document.getElementById('gateInfoEnabled');
+            const fieldsDiv = document.getElementById('gateInfoFields');
+            const gateIdInput = document.getElementById('gateInfoGateId');
+            const colorSelect = document.getElementById('gateInfoColor');
+            const prevIdInput = document.getElementById('gateInfoPrevId');
+            const prevColorSelect = document.getElementById('gateInfoPrevColor');
+            const distInput = document.getElementById('gateInfoDist');
+            const dropInput = document.getElementById('gateInfoDrop');
+            const slopeInput = document.getElementById('gateInfoSlope');
+            const gpsAccInput = document.getElementById('gateInfoGpsAcc');
+            const cornerSelect = document.getElementById('gateInfoCorner');
+
+            if (!enabledCheckbox) return;
+
+            // Toggle fields visibility
+            enabledCheckbox.addEventListener('change', () => {
+                state.gateInfoEnabled = enabledCheckbox.checked;
+                fieldsDiv.style.display = enabledCheckbox.checked ? 'block' : 'none';
+                updateGateInfoState();
+            });
+
+            // Update state when any field changes
+            const updateGateInfoState = () => {
+                if (state.gateInfoEnabled) {
+                    state.gateInfo = {
+                        gate_id: parseInt(gateIdInput.value) || 0,
+                        color: colorSelect.value,
+                        prev_id: parseInt(prevIdInput.value) || 0,
+                        prev_color: prevColorSelect.value,
+                        dist_from_prev: parseFloat(distInput.value) || 0,
+                        drop: parseFloat(dropInput.value) || 0,
+                        slope: parseFloat(slopeInput.value) || 0,
+                        gps_accuracy: parseFloat(gpsAccInput.value) || 0
+                    };
+                } else {
+                    state.gateInfo = null;
+                }
+                state.gateInfoCorner = cornerSelect.value;
+            };
+
+            [gateIdInput, colorSelect, prevIdInput, prevColorSelect, distInput, dropInput, slopeInput, gpsAccInput, cornerSelect].forEach(el => {
+                if (el) el.addEventListener('change', updateGateInfoState);
+                if (el && el.type === 'number') el.addEventListener('input', updateGateInfoState);
+            });
         }
 
         function toggleLogo(filename) {

@@ -117,6 +117,10 @@ class SkiFramesRunner:
         # Selected logos for overlay (from UI logo selection)
         self.selected_logos: Optional[List[str]] = self.raw_config.get('selected_logos') or None
 
+        # Gate info for overlay (gate number, slope, distance, etc.)
+        self.gate_info: Optional[Dict] = self.raw_config.get('gate_info') or None
+        self.gate_info_corner: str = self.raw_config.get('gate_info_corner', 'top-right')
+
         # Track which racers have been matched (prevent duplicate matches)
         self.matched_racer_indices: set = set()
 
@@ -464,6 +468,8 @@ class SkiFramesRunner:
                     race_info=self.race_info,
                     elapsed_time=elapsed_time,
                     selected_logos=self.selected_logos,
+                    gate_info=self.gate_info,
+                    gate_info_corner=self.gate_info_corner,
                 )
 
                 if result:
@@ -562,6 +568,8 @@ class SkiFramesRunner:
                     race_info=self.race_info,
                     elapsed_time=elapsed_time,
                     selected_logos=self.selected_logos,
+                    gate_info=self.gate_info,
+                    gate_info_corner=self.gate_info_corner,
                 )
 
             if result:

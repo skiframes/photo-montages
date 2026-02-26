@@ -1212,6 +1212,9 @@ def save_config():
         # Branding options
         'selected_logos': data.get('selected_logos'),  # Logo filenames for overlay
         'race_info': data.get('race_info'),            # Race info for overlay
+        # Gate info overlay
+        'gate_info': data.get('gate_info'),            # Gate info dict for overlay
+        'gate_info_corner': data.get('gate_info_corner', 'top-right'),  # Corner position
     }
 
     # Save config

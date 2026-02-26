@@ -175,7 +175,9 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
                 duration_sec: Optional[float] = None, race_title: str = "",
                 race_info: Optional[Dict] = None, source_fps: float = 30.0,
                 elapsed_time: Optional[float] = None,
-                selected_logos: Optional[List[str]] = None) -> np.ndarray:
+                selected_logos: Optional[List[str]] = None,
+                gate_info: Optional[Dict] = None,
+                gate_info_corner: str = "top-right") -> np.ndarray:
     """Add overlay with race info and capture details.
 
     Top-left: Elapsed time (e.g. "4.23s") if available
@@ -288,6 +290,101 @@ def add_overlay(image: np.ndarray, timestamp: datetime, fps: float, variant: str
         cv2.putText(img, time_text, (time_padding, th + time_padding),
                     font, time_font_scale, (50, 50, 50), time_thickness)
 
+    # Add gate info overlay if provided
+    if gate_info:
+        img = add_gate_info(img, gate_info, corner=gate_info_corner)
+
+    return img
+
+
+def add_gate_info(image: np.ndarray, gate_info: Dict, corner: str = "top-right") -> np.ndarray:
+    """Add gate info box in specified corner.
+
+    Args:
+        image: The image to add gate info to.
+        gate_info: Dict with gate_id, color, prev_id, prev_color, dist_from_prev, drop, slope, gps_accuracy
+        corner: Position - "top-right", "top-left", "bottom-right", "bottom-left"
+    """
+    img = image.copy()
+    h, w = img.shape[:2]
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = max(0.5, w / 1800)
+    thickness = max(1, int(w / 1200))
+    line_height = int(28 * font_scale)
+    margin = int(10 * font_scale)
+    padding = int(10 * font_scale)
+
+    lines = []
+
+    # Gate number and color
+    if gate_info.get('gate_id') is not None:
+        color_text = f" ({gate_info['color']})" if gate_info.get('color') else ""
+        lines.append((f"Gate {gate_info['gate_id']}{color_text}", (50, 50, 50)))
+
+    # Previous gate reference
+    if gate_info.get('prev_id') is not None:
+        prev_color_text = f" ({gate_info['prev_color']})" if gate_info.get('prev_color') else ""
+        lines.append((f"From Gate {gate_info['prev_id']}{prev_color_text}", (100, 100, 100)))
+
+    # Distance from previous gate
+    if gate_info.get('dist_from_prev') is not None:
+        lines.append((f"Dist: {gate_info['dist_from_prev']:.1f}m", (80, 80, 80)))
+
+    # Vertical drop
+    if gate_info.get('drop') is not None:
+        lines.append((f"Drop: {gate_info['drop']:.1f}m", (80, 80, 80)))
+
+    # Slope angle
+    if gate_info.get('slope') is not None:
+        lines.append((f"Slope: {abs(gate_info['slope']):.0f} deg", (0, 120, 200)))
+
+    # GPS accuracy
+    if gate_info.get('gps_accuracy') is not None:
+        lines.append((f"GPS: +/-{gate_info['gps_accuracy']:.2f}m", (100, 100, 100)))
+
+    if not lines:
+        return image
+
+    # Calculate box dimensions
+    max_text_width = 0
+    for text, _ in lines:
+        (tw, _), _ = cv2.getTextSize(text, font, font_scale, thickness)
+        max_text_width = max(max_text_width, tw)
+
+    box_width = max_text_width + 2 * padding
+    box_height = len(lines) * line_height + padding
+
+    # Calculate box position based on corner
+    if corner == "top-left":
+        box_x = margin
+        box_y = margin
+    elif corner == "top-right":
+        box_x = w - box_width - margin
+        box_y = margin
+    elif corner == "bottom-left":
+        box_x = margin
+        box_y = h - box_height - margin
+    else:  # bottom-right
+        box_x = w - box_width - margin
+        box_y = h - box_height - margin
+
+    # Draw semi-transparent white background
+    overlay = img.copy()
+    cv2.rectangle(overlay, (box_x, box_y), (box_x + box_width, box_y + box_height),
+                 (255, 255, 255), -1)
+    cv2.addWeighted(overlay, 0.85, img, 0.15, 0, img)
+
+    # Draw border
+    cv2.rectangle(img, (box_x, box_y), (box_x + box_width, box_y + box_height),
+                 (180, 180, 180), 1)
+
+    # Draw text lines
+    y = box_y + padding + int(line_height * 0.7)
+    for text, color in lines:
+        cv2.putText(img, text, (box_x + padding, y), font, font_scale, color, thickness)
+        y += line_height
+
     return img
 
 
@@ -387,7 +484,9 @@ def generate_montage(frames: List[np.ndarray],
                      race_title: str = "",
                      race_info: Optional[Dict] = None,
                      elapsed_time: Optional[float] = None,
-                     selected_logos: Optional[List[str]] = None) -> Optional[MontageResultPair]:
+                     selected_logos: Optional[List[str]] = None,
+                     gate_info: Optional[Dict] = None,
+                     gate_info_corner: str = "top-right") -> Optional[MontageResultPair]:
     """
     Generate A and B montage pairs from run frames.
 
@@ -469,7 +568,7 @@ def generate_montage(frames: List[np.ndarray],
 
         # Add branding overlay with variant label and race title/info
         if add_branding:
-            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title, race_info, source_fps=source_fps, elapsed_time=elapsed_time, selected_logos=selected_logos)
+            composite = add_overlay(composite, timestamp, montage_fps, variant_label, run_duration_sec, race_title, race_info, source_fps=source_fps, elapsed_time=elapsed_time, selected_logos=selected_logos, gate_info=gate_info, gate_info_corner=gate_info_corner)
 
         # Output paths - use file_suffix for naming, include FPS in filename
         fps_tag = f"_{montage_fps:.1f}fps"
