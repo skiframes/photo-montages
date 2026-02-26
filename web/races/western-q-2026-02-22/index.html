@@ -1427,6 +1427,7 @@ buffer = deque(maxlen=int(fps * pre_buffer_seconds) + <span class="number">1</sp
             <button class="vlb-next">&rsaquo;</button>
             <div class="vlb-video-wrap">
                 <video id="vlb-video" playsinline preload="auto"></video>
+                <canvas id="vlb-graph-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;display:none;z-index:10;"></canvas>
             </div>
             <div class="vlb-controls">
                 <button class="vlb-play-btn" id="vlb-play-btn">&#9654;</button>
@@ -1442,9 +1443,9 @@ buffer = deque(maxlen=int(fps * pre_buffer_seconds) + <span class="number">1</sp
                     <input type="range" id="vlb-scrubber" min="0" max="1000" value="0" class="vlb-scrubber">
                 </div>
                 <span class="vlb-time" id="vlb-time">0.00s / 0.00s</span>
-                <div id="vlb-opacity-wrap" class="vlb-opacity-wrap" style="display:none;">
-                    <span class="vlb-opacity-label">Graph</span>
-                    <input type="range" id="vlb-opacity" min="0" max="100" value="100" class="vlb-opacity-slider">
+                <div id="vlb-graph-controls" class="vlb-graph-controls" style="display:none;">
+                    <button id="vlb-graph-toggle" class="vlb-graph-toggle" title="Toggle graphs (G)">Graphs: OFF</button>
+                    <input type="range" id="vlb-graph-opacity" min="20" max="100" value="85" class="vlb-opacity-slider" style="width:80px;" title="Graph opacity">
                 </div>
             </div>
             <div class="vlb-info">
@@ -1463,7 +1464,7 @@ buffer = deque(maxlen=int(fps * pre_buffer_seconds) + <span class="number">1</sp
                 <span><kbd>&uarr;&darr;</kbd> Athlete</span>
                 <span><kbd>S</kbd> Speed</span>
                 <span><kbd>C</kbd> Close</span>
-                <span id="vlb-opacity-hint" style="display:none;"><kbd>O</kbd> Opacity</span>
+                <span id="vlb-graph-hint" style="display:none;"><kbd>G</kbd> Graphs</span>
             </div>
         </div>
     </div>
@@ -1501,6 +1502,12 @@ buffer = deque(maxlen=int(fps * pre_buffer_seconds) + <span class="number">1</sp
             <button class="vr-close" onclick="VirtualRace.close()">&times;</button>
         </div>
         <div class="vr-selectors">
+            <div id="vrRunTabs" class="vr-run-tabs">
+                <!-- Populated by JS: Run 1 / Run 2 -->
+            </div>
+            <div id="vrSectionTabs" class="vr-section-tabs">
+                <!-- Populated by JS: Section 1 / Section 2 / Section 3 -->
+            </div>
             <div class="vr-selector-group">
                 <label>Athlete A</label>
                 <select id="vrSelectA" class="vr-select"></select>
@@ -1532,6 +1539,39 @@ buffer = deque(maxlen=int(fps * pre_buffer_seconds) + <span class="number">1</sp
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+    <script src="../../js/ai-graph-overlay.js"></script>
     <script src="race.js" type="module"></script>
+    <style>
+        .vlb-graph-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 12px;
+        }
+        .vlb-graph-toggle {
+            background: #374151;
+            color: #9ca3af;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .vlb-graph-toggle.active {
+            background: #059669;
+            color: white;
+            border-color: #10b981;
+        }
+        .vlb-graph-toggle:hover {
+            background: #4b5563;
+        }
+        .vlb-graph-toggle.active:hover {
+            background: #047857;
+        }
+        .vlb-video-wrap {
+            position: relative;
+        }
+    </style>
 </body>
 </html>

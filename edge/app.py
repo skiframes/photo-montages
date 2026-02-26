@@ -182,9 +182,11 @@ def index():
 
 @app.route('/montages/<path:filepath>')
 def serve_montage(filepath):
-    """Serve montage images from the staging directory (with CORS for file:// access)."""
-    resp = send_from_directory(str(MONTAGES_DIR), filepath)
+    """Serve montage images/videos from the staging directory (with CORS and Range support)."""
+    # conditional=True enables Range requests for video streaming
+    resp = send_from_directory(str(MONTAGES_DIR), filepath, conditional=True)
     resp.headers['Access-Control-Allow-Origin'] = '*'
+    resp.headers['Accept-Ranges'] = 'bytes'
     return resp
 
 

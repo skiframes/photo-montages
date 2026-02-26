@@ -2461,7 +2461,7 @@ function renderResults() {
     activeSections.forEach(({ cam, sectionIdx }) => {
         const colKey = 'sectionTime_' + cam.id;
         const stSortCls = sortColumn === colKey ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
-        headerHtml += `<th class="col-section-time sortable ${stSortCls}" onclick="handleSort('${colKey}')" title="${sectionTimeDisclaimer}"><a href="#disclaimer" class="section-time-link">Time*</a> <span class="sort-arrow">${sortColumn === colKey ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
+        headerHtml += `<th class="col-section-time sortable ${stSortCls}" onclick="handleSort('${colKey}')" title="${sectionTimeDisclaimer}"><a href="#disclaimer" class="section-time-link" onclick="event.stopPropagation(); document.getElementById('disclaimer').scrollIntoView({behavior:'smooth'}); return false;">Time*</a> <span class="sort-arrow">${sortColumn === colKey ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
         headerHtml += `<th class="col-pm">PM</th>`;
         headerHtml += `<th class="col-video">V</th>`;
         headerHtml += `<th class="col-ai">AI</th>`;
@@ -3041,33 +3041,48 @@ function setupVideoLightbox() {
             e.preventDefault();
             closeVLB();
         }
-        // 'o' cycles opacity for AI videos
-        if (e.key === 'o' || e.key === 'O') {
-            const opacityWrap = document.getElementById('vlb-opacity-wrap');
-            if (opacityWrap && opacityWrap.style.display !== 'none') {
+        // 'g' toggles graph overlay for AI videos
+        if (e.key === 'g' || e.key === 'G') {
+            const graphControls = document.getElementById('vlb-graph-controls');
+            if (graphControls && graphControls.style.display !== 'none' && window._aiGraphOverlay) {
                 e.preventDefault();
-                const slider = document.getElementById('vlb-opacity');
-                const presets = [100, 75, 50, 25, 0];
-                const current = parseInt(slider.value);
-                const currentIdx = presets.findIndex(v => v <= current);
-                const nextIdx = (currentIdx + 1) % presets.length;
-                slider.value = presets[nextIdx];
-                slider.dispatchEvent(new Event('input'));
+                const toggleBtn = document.getElementById('vlb-graph-toggle');
+                const isVisible = window._aiGraphOverlay.toggle();
+                if (toggleBtn) {
+                    toggleBtn.textContent = isVisible ? 'Graphs: ON' : 'Graphs: OFF';
+                    toggleBtn.classList.toggle('active', isVisible);
+                }
             }
         }
     });
 
-    // Opacity slider for AI videos - controls contrast to fade the graph overlay
-    const opacitySlider = document.getElementById('vlb-opacity');
-    if (opacitySlider) {
-        opacitySlider.addEventListener('input', () => {
-            const val = parseInt(opacitySlider.value);
-            // Use contrast filter: 100% = full contrast, 0% = minimum contrast (gray)
-            // This fades the white graph/text overlay while keeping the video visible
-            const contrast = 0.5 + (val / 100) * 0.5; // Range: 0.5 to 1.0
-            const brightness = 1 + (1 - val / 100) * 0.3; // Slight brightness boost when fading
-            video.style.filter = val < 100 ? `contrast(${contrast}) brightness(${brightness})` : '';
+    // Graph toggle button for AI videos
+    const graphToggleBtn = document.getElementById('vlb-graph-toggle');
+    if (graphToggleBtn) {
+        graphToggleBtn.addEventListener('click', () => {
+            if (window._aiGraphOverlay) {
+                const isVisible = window._aiGraphOverlay.toggle();
+                graphToggleBtn.textContent = isVisible ? 'Graphs: ON' : 'Graphs: OFF';
+                graphToggleBtn.classList.toggle('active', isVisible);
+            }
         });
+    }
+
+    // Graph opacity slider for AI videos
+    const graphOpacitySlider = document.getElementById('vlb-graph-opacity');
+    if (graphOpacitySlider) {
+        graphOpacitySlider.addEventListener('input', () => {
+            if (window._aiGraphOverlay) {
+                const val = parseInt(graphOpacitySlider.value) / 100;
+                window._aiGraphOverlay.setOpacity(val);
+            }
+        });
+    }
+
+    // Initialize AIGraphOverlay if available
+    const graphCanvas = document.getElementById('vlb-graph-canvas');
+    if (graphCanvas && typeof AIGraphOverlay !== 'undefined') {
+        window._aiGraphOverlay = new AIGraphOverlay(video, graphCanvas);
     }
 
     // Make video controls draggable
@@ -3306,13 +3321,20 @@ function closeVLB() {
     // Hide canvas overlay
     const overlay = document.getElementById('vlb-canvas-overlay');
     if (overlay) overlay.style.display = 'none';
-    // Hide and reset opacity slider
-    const opacityWrap = document.getElementById('vlb-opacity-wrap');
-    const opacitySlider = document.getElementById('vlb-opacity');
-    const opacityHint = document.getElementById('vlb-opacity-hint');
-    if (opacityWrap) opacityWrap.style.display = 'none';
-    if (opacityHint) opacityHint.style.display = 'none';
-    if (opacitySlider) opacitySlider.value = 100;
+    // Hide and reset graph controls
+    const graphControls = document.getElementById('vlb-graph-controls');
+    const graphHint = document.getElementById('vlb-graph-hint');
+    const graphToggleBtn = document.getElementById('vlb-graph-toggle');
+    if (graphControls) graphControls.style.display = 'none';
+    if (graphHint) graphHint.style.display = 'none';
+    if (graphToggleBtn) {
+        graphToggleBtn.textContent = 'Graphs: OFF';
+        graphToggleBtn.classList.remove('active');
+    }
+    // Hide graph overlay
+    if (window._aiGraphOverlay) {
+        window._aiGraphOverlay.setVisible(false);
+    }
     video.style.filter = '';
     vlb.classList.add('hidden');
 }
@@ -3489,11 +3511,30 @@ window._showAIResults = function (aiJobKey) {
     const delBtn = document.getElementById('vlb-delete-btn');
     if (delBtn) delBtn.style.display = 'none';
 
-    // Show opacity slider for AI videos
-    const opacityWrap = document.getElementById('vlb-opacity-wrap');
-    const opacityHint = document.getElementById('vlb-opacity-hint');
-    if (opacityWrap) opacityWrap.style.display = 'flex';
-    if (opacityHint) opacityHint.style.display = '';
+    // Show graph controls for AI videos
+    const graphControls = document.getElementById('vlb-graph-controls');
+    const graphHint = document.getElementById('vlb-graph-hint');
+    const graphToggleBtn = document.getElementById('vlb-graph-toggle');
+    if (graphControls) graphControls.style.display = 'flex';
+    if (graphHint) graphHint.style.display = '';
+
+    // Reset graph toggle state (graphs off by default)
+    if (graphToggleBtn) {
+        graphToggleBtn.textContent = 'Graphs: OFF';
+        graphToggleBtn.classList.remove('active');
+    }
+
+    // Load metrics JSON for interactive graph overlay
+    if (window._aiGraphOverlay) {
+        window._aiGraphOverlay.setVisible(false);  // Start with graphs hidden
+        // Metrics JSON has same path as video but with .json extension
+        const metricsJsonUrl = aiVideoUrl.replace(/_ai\.mp4$/, '_ai.json').replace(/\.mp4$/, '.json');
+        window._aiGraphOverlay.loadMetrics(metricsJsonUrl).then(loaded => {
+            if (loaded) {
+                console.log('[AI] Metrics loaded for graph overlay');
+            }
+        });
+    }
 };
 
 /**
@@ -3550,11 +3591,30 @@ window._showPrecomputedAI = function(aiVideoRelPath, bib) {
     const delBtn = document.getElementById('vlb-delete-btn');
     if (delBtn) delBtn.style.display = 'none';
 
-    // Show opacity slider for AI videos
-    const opacityWrap = document.getElementById('vlb-opacity-wrap');
-    const opacityHint = document.getElementById('vlb-opacity-hint');
-    if (opacityWrap) opacityWrap.style.display = 'flex';
-    if (opacityHint) opacityHint.style.display = '';
+    // Show graph controls for AI videos
+    const graphControls = document.getElementById('vlb-graph-controls');
+    const graphHint = document.getElementById('vlb-graph-hint');
+    const graphToggleBtn = document.getElementById('vlb-graph-toggle');
+    if (graphControls) graphControls.style.display = 'flex';
+    if (graphHint) graphHint.style.display = '';
+
+    // Reset graph toggle state (graphs off by default)
+    if (graphToggleBtn) {
+        graphToggleBtn.textContent = 'Graphs: OFF';
+        graphToggleBtn.classList.remove('active');
+    }
+
+    // Load metrics JSON for interactive graph overlay
+    if (window._aiGraphOverlay) {
+        window._aiGraphOverlay.setVisible(false);  // Start with graphs hidden
+        // Metrics JSON has same path as video but with .json extension
+        const metricsJsonUrl = aiVideoUrl.replace(/_ai\.mp4$/, '_ai.json').replace(/\.mp4$/, '.json');
+        window._aiGraphOverlay.loadMetrics(metricsJsonUrl).then(loaded => {
+            if (loaded) {
+                console.log('[AI] Metrics loaded for graph overlay');
+            }
+        });
+    }
 };
 
 
@@ -3567,7 +3627,8 @@ const VirtualRace = {
     modal: null,
     mode: 'V',
     layout: 'side',      // 'side', 'stack', or 'ghost'
-    athletes: [],        // Athletes with video data
+    athletes: [],        // Athletes with video data (filtered by run/section)
+    allAthleteData: [],  // Raw athlete data from manifest
     athleteA: null,
     athleteB: null,
     videoA: null,
@@ -3575,70 +3636,80 @@ const VirtualRace = {
     isPlaying: false,
     playbackRate: 1,
     syncRAF: null,
+    selectedRun: 'run1',
+    selectedCam: null,
+    availableRuns: [],           // e.g. ['run1', 'run2']
+    sectionsPerRun: {},          // e.g. { run1: ['Cam1','Cam3'], run2: ['Cam2'] }
 
     open() {
         this.modal = document.getElementById('virtualRaceModal');
         if (!this.modal || !manifest) return;
 
-        // Gather athletes with videos from all categories
-        this.athletes = [];
+        // Gather ALL athlete data from manifest (run/section agnostic)
+        this.allAthleteData = [];
         const seen = new Set();
         manifest.categories.forEach(cat => {
-            const gender = cat.id.includes('girl') ? 'g' : 'b';
+            const gender = cat.id.includes('Girls') || cat.id.includes('Women') ? 'g' : 'b';
             cat.athletes.forEach(a => {
-                // Find first video for this athlete
-                let videoUrl = null;
-                let duration = null;
-                if (a.montages) {
-                    for (const camId of Object.keys(a.montages)) {
-                        for (const runKey of Object.keys(a.montages[camId])) {
-                            const dets = a.montages[camId][runKey];
-                            if (Array.isArray(dets)) {
-                                const det = dets.find(d => d.video);
-                                if (det && det.video) {
-                                    videoUrl = manifest.media_base_url + '/' + det.video;
-                                    duration = det.section_time || null;
-                                    break;
-                                }
-                            }
-                        }
-                        if (videoUrl) break;
-                    }
-                }
                 const key = `${gender}${a.bib}`;
-                if (!seen.has(key) && videoUrl) {
+                if (!seen.has(key) && a.montages) {
                     seen.add(key);
-                    this.athletes.push({
+                    this.allAthleteData.push({
                         bib: a.bib,
                         name: `${a.first} ${a.last}`,
                         team: a.club || '',
                         gender,
-                        videoUrl,
-                        duration
+                        montages: a.montages
                     });
                 }
             });
         });
-        this.athletes.sort((a, b) => a.bib - b.bib);
+        this.allAthleteData.sort((a, b) => a.bib - b.bib);
+
+        // Discover available runs and sections (cameras) with valid video + section_time
+        const runCamSet = {};  // { run1: Set('Cam1','Cam3'), run2: Set('Cam2') }
+        this.allAthleteData.forEach(a => {
+            for (const camId of Object.keys(a.montages)) {
+                for (const runKey of Object.keys(a.montages[camId])) {
+                    const dets = a.montages[camId][runKey];
+                    if (Array.isArray(dets) && dets.some(d => d.video && d.section_time)) {
+                        if (!runCamSet[runKey]) runCamSet[runKey] = new Set();
+                        runCamSet[runKey].add(camId);
+                    }
+                }
+            }
+        });
+        this.availableRuns = Object.keys(runCamSet).sort();
+        this.sectionsPerRun = {};
+        for (const [runKey, camSet] of Object.entries(runCamSet)) {
+            // Sort cameras by index so Section 1 < Section 2 < Section 3
+            const camOrder = (manifest.cameras || []).map(c => c.id);
+            this.sectionsPerRun[runKey] = [...camSet].sort((a, b) => camOrder.indexOf(a) - camOrder.indexOf(b));
+        }
+
+        // Default selection
+        if (!this.availableRuns.includes(this.selectedRun)) {
+            this.selectedRun = this.availableRuns[0] || 'run1';
+        }
+        const sections = this.sectionsPerRun[this.selectedRun] || [];
+        if (!sections.includes(this.selectedCam)) {
+            this.selectedCam = sections[0] || null;
+        }
+
+        // Render run/section toggle buttons
+        this._renderRunTabs();
+        this._renderSectionTabs();
+
+        // Filter athletes for selected run/section
+        this._refreshAthletes();
 
         // Update mode tabs
         const hasVideos = this.athletes.length >= 2;
         this._setTabEnabled('V', hasVideos);
-        this._setTabEnabled('PM', true);  // Always available
-        this._setTabEnabled('AI', true);  // Always show, will show message if no AI videos
+        this._setTabEnabled('PM', true);
+        this._setTabEnabled('AI', true);
         this.mode = hasVideos ? 'V' : 'PM';
         this._setActiveTab(this.mode);
-
-        // Populate dropdowns
-        this._populateDropdowns();
-
-        // Default: pick first two athletes by bib
-        if (this.athletes.length >= 2) {
-            this.athleteA = this.athletes[0];
-            this.athleteB = this.athletes[1];
-            document.getElementById('vrSelectA').value = `${this.athleteA.gender}${this.athleteA.bib}`;
-            document.getElementById('vrSelectB').value = `${this.athleteB.gender}${this.athleteB.bib}`;
-        }
 
         // Setup layout tabs
         this.modal.querySelectorAll('.vr-layout-tab').forEach(tab => {
@@ -3723,6 +3794,125 @@ const VirtualRace = {
         this.renderContent();
     },
 
+    // ── Run / Section toggle methods ──────────────────────────────────────
+
+    setRun(runKey) {
+        if (runKey === this.selectedRun) return;
+        this.selectedRun = runKey;
+        this._renderRunTabs();
+        // Update section to first available for this run
+        const sections = this.sectionsPerRun[runKey] || [];
+        if (!sections.includes(this.selectedCam)) {
+            this.selectedCam = sections[0] || null;
+        }
+        this._renderSectionTabs();
+        this._pauseVideos();
+        this._stopSync();
+        this.isPlaying = false;
+        this._refreshAthletes();
+        this.renderContent();
+    },
+
+    setSection(camId) {
+        if (camId === this.selectedCam) return;
+        this.selectedCam = camId;
+        this._renderSectionTabs();
+        this._pauseVideos();
+        this._stopSync();
+        this.isPlaying = false;
+        this._refreshAthletes();
+        this.renderContent();
+    },
+
+    _renderRunTabs() {
+        const container = document.getElementById('vrRunTabs');
+        if (!container) return;
+        if (this.availableRuns.length <= 1) {
+            // Only one run — still show it but no toggling needed
+        }
+        container.innerHTML = this.availableRuns.map(runKey => {
+            const num = runKey.replace('run', '');
+            const active = runKey === this.selectedRun ? ' active' : '';
+            return `<button class="vr-run-tab${active}" data-run="${runKey}" onclick="VirtualRace.setRun('${runKey}')">Run ${num}</button>`;
+        }).join('');
+    },
+
+    _renderSectionTabs() {
+        const container = document.getElementById('vrSectionTabs');
+        if (!container) return;
+        const sections = this.sectionsPerRun[this.selectedRun] || [];
+        const camOrder = (manifest.cameras || []).map(c => c.id);
+        container.innerHTML = sections.map(camId => {
+            const idx = camOrder.indexOf(camId) + 1;
+            const active = camId === this.selectedCam ? ' active' : '';
+            return `<button class="vr-section-tab${active}" data-cam="${camId}" onclick="VirtualRace.setSection('${camId}')">Section ${idx}</button>`;
+        }).join('');
+    },
+
+    _refreshAthletes() {
+        // Filter allAthleteData to athletes with video + section_time for selected run/cam
+        const prevA = this.athleteA ? `${this.athleteA.gender}${this.athleteA.bib}` : null;
+        const prevB = this.athleteB ? `${this.athleteB.gender}${this.athleteB.bib}` : null;
+
+        this.athletes = [];
+        if (!this.selectedCam || !this.selectedRun) {
+            this._populateDropdowns();
+            return;
+        }
+
+        this.allAthleteData.forEach(a => {
+            const camData = a.montages[this.selectedCam];
+            if (!camData) return;
+            const runData = camData[this.selectedRun];
+            if (!Array.isArray(runData)) return;
+            const det = runData.find(d => d.video && d.section_time);
+            if (!det) return;
+
+            this.athletes.push({
+                bib: a.bib,
+                name: a.name,
+                team: a.team,
+                gender: a.gender,
+                videoUrl: manifest.media_base_url + '/' + det.video,
+                aiVideoUrl: det.ai_video ? manifest.media_base_url + '/' + det.ai_video : null,
+                duration: det.section_time,
+                thumb: det.thumb ? manifest.media_base_url + '/' + det.thumb : null,
+                full: det.full ? manifest.media_base_url + '/' + det.full : null,
+                fpsVariants: det.fps_variants || []
+            });
+        });
+
+        this._populateDropdowns();
+
+        // Try to re-select previous athletes, otherwise pick first two
+        const findA = this.athletes.find(a => `${a.gender}${a.bib}` === prevA);
+        const findB = this.athletes.find(a => `${a.gender}${a.bib}` === prevB);
+
+        if (findA) {
+            this.athleteA = findA;
+            document.getElementById('vrSelectA').value = prevA;
+        } else if (this.athletes.length >= 1) {
+            this.athleteA = this.athletes[0];
+            document.getElementById('vrSelectA').value = `${this.athleteA.gender}${this.athleteA.bib}`;
+        } else {
+            this.athleteA = null;
+        }
+
+        if (findB && findB !== this.athleteA) {
+            this.athleteB = findB;
+            document.getElementById('vrSelectB').value = prevB;
+        } else if (this.athletes.length >= 2) {
+            this.athleteB = this.athletes[1];
+            document.getElementById('vrSelectB').value = `${this.athleteB.gender}${this.athleteB.bib}`;
+        } else {
+            this.athleteB = null;
+        }
+
+        // Update mode tabs
+        const hasVideos = this.athletes.length >= 2;
+        this._setTabEnabled('V', hasVideos);
+    },
+
     renderContent() {
         const container = document.getElementById('vrContent');
         if (!container) return;
@@ -3789,29 +3979,9 @@ const VirtualRace = {
             return;
         }
 
-        // Get first available montage for each athlete
-        const getFirstMontage = (athlete) => {
-            const gender = athlete.gender;
-            const bib = athlete.bib;
-            for (const cat of manifest.categories) {
-                const catGender = cat.id.includes('girl') ? 'g' : 'b';
-                if (catGender !== gender) continue;
-                const a = cat.athletes.find(x => x.bib === bib);
-                if (!a || !a.montages) continue;
-                for (const camId of Object.keys(a.montages)) {
-                    for (const runKey of Object.keys(a.montages[camId])) {
-                        const dets = a.montages[camId][runKey];
-                        if (Array.isArray(dets) && dets.length > 0 && dets[0].full) {
-                            return manifest.media_base_url + '/' + dets[0].full;
-                        }
-                    }
-                }
-            }
-            return null;
-        };
-
-        const imgA = getFirstMontage(this.athleteA);
-        const imgB = getFirstMontage(this.athleteB);
+        // Use montage from selected run/section stored on athlete object
+        const imgA = this.athleteA.full || null;
+        const imgB = this.athleteB.full || null;
 
         const layoutClass = this.layout === 'stack' ? 'layout-stack' : (this.layout === 'ghost' ? 'layout-ghost' : '');
         container.innerHTML = `
@@ -3841,32 +4011,9 @@ const VirtualRace = {
             return;
         }
 
-        // Get AI video URLs for each athlete
-        const getAIVideo = (athlete) => {
-            const gender = athlete.gender;
-            const bib = athlete.bib;
-            for (const cat of manifest.categories) {
-                const catGender = cat.id.includes('girl') ? 'g' : 'b';
-                if (catGender !== gender) continue;
-                const a = cat.athletes.find(x => x.bib === bib);
-                if (!a || !a.montages) continue;
-                for (const camId of Object.keys(a.montages)) {
-                    for (const runKey of Object.keys(a.montages[camId])) {
-                        const dets = a.montages[camId][runKey];
-                        if (Array.isArray(dets)) {
-                            const det = dets.find(d => d.ai_video);
-                            if (det && det.ai_video) {
-                                return manifest.media_base_url + '/' + det.ai_video;
-                            }
-                        }
-                    }
-                }
-            }
-            return null;
-        };
-
-        const aiA = getAIVideo(this.athleteA);
-        const aiB = getAIVideo(this.athleteB);
+        // Use AI video from selected run/section stored on athlete object
+        const aiA = this.athleteA.aiVideoUrl || null;
+        const aiB = this.athleteB.aiVideoUrl || null;
 
         if (!aiA && !aiB) {
             container.innerHTML = '<div class="vr-empty">No AI videos available. Run AI analysis first.</div>';

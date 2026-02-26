@@ -604,6 +604,11 @@ body {
 .vr-close { width: 36px; height: 36px; border-radius: 50%; background: var(--border); color: var(--text); border: none; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; line-height: 1; }
 .vr-close:hover { background: var(--primary); color: white; }
 .vr-selectors { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+.vr-run-tabs, .vr-section-tabs { display: flex; gap: 2px; background: var(--border); border-radius: 6px; padding: 2px; }
+.vr-run-tab, .vr-section-tab { padding: 5px 14px; border: none; background: transparent; color: var(--text-muted); border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.15s; white-space: nowrap; }
+.vr-run-tab:hover:not(.disabled), .vr-section-tab:hover:not(.disabled) { color: var(--text); background: var(--surface); }
+.vr-run-tab.active, .vr-section-tab.active { background: var(--primary); color: white; }
+.vr-run-tab.disabled, .vr-section-tab.disabled { opacity: 0.3; cursor: not-allowed; }
 .vr-selector-group { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .vr-selector-group label { color: var(--text-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
 .vr-select { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; font-weight: 500; min-width: 0; flex: 1; max-width: 280px; cursor: pointer; }

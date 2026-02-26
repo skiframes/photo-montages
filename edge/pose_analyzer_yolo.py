@@ -1087,6 +1087,7 @@ class YOLOPoseAnalyzer:
         left_ski = None
         right_ski = None
         detections = []
+        yolo_boxes = None  # Track YOLO boxes for step 3 fallback
 
         # Step 1: Try SAM3 text prompts first (no YOLO needed)
         if self.sam_model is not None and self.sam_version == 'sam3':
@@ -1112,7 +1113,7 @@ class YOLOPoseAnalyzer:
                         detections = sam_detections
 
         # Step 3: Fall back to YOLO + dark pixel detection if SAM unavailable or failed
-        if not detections:
+        if not detections and yolo_boxes is not None:
             for box in yolo_boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                 conf = float(box.conf[0])
@@ -1298,146 +1299,201 @@ class YOLOPoseAnalyzer:
 
         return output
 
-    def _draw_metrics_graph(self, frame: np.ndarray, scale: float, graph_height: int,
-                             current_frame: int = None, total_frames: int = None,
-                             show_curves: bool = True) -> np.ndarray:
-        """Draw a full-page graph overlay of metrics over time.
+    def _draw_metrics_legend(self, frame: np.ndarray, scale: float,
+                              metrics: Optional[PoseMetrics] = None) -> np.ndarray:
+        """Draw metrics legend panel with current values (always visible).
 
-        Args:
-            show_curves: If False, only draws labels/scale/legend without the graph lines.
+        This shows real-time measurements. Graphs are rendered separately in the browser
+        from saved JSON data, allowing toggle on/off and opacity control.
         """
         output = frame.copy()
         h, w = frame.shape[:2]
 
-        if len(self.history.edge_symmetry) < 2:
-            return output
-
-        # Full-page graph overlay - leave space for Y-axis scale on left
-        left_margin = int(70 * scale)  # Space for Y-axis scale
-        right_margin = int(15 * scale)
-        graph_y = int(100 * scale)  # Start below legend
-        graph_h = h - graph_y - int(100 * scale)  # Leave space for logos at bottom
-        graph_w = w - left_margin - right_margin
-
-        # Semi-transparent dark overlay for entire graph area
-        overlay = output.copy()
-        cv2.rectangle(overlay, (left_margin, graph_y), (left_margin + graph_w, graph_y + graph_h),
-                     (20, 20, 20), -1)
-        cv2.addWeighted(overlay, 0.4, output, 0.6, 0, output)  # 40% opacity - see video behind
-
-        # Draw border
-        cv2.rectangle(output, (left_margin, graph_y), (left_margin + graph_w, graph_y + graph_h),
-                     (100, 100, 100), 2)
-
-        # Draw grid lines and Y-axis scale on the LEFT
         font = cv2.FONT_HERSHEY_SIMPLEX
-        scale_font = 0.6 * scale
-        scale_thickness = max(1, int(2 * scale))
-        for i in range(5):
-            y = graph_y + int(graph_h * i / 4)
-            cv2.line(output, (left_margin, y), (left_margin + graph_w, y), (60, 60, 60), 1)
-            # Y-axis labels on LEFT side of graph (0-100 scale)
-            label = str(100 - i * 25)
-            (tw, th), _ = cv2.getTextSize(label, font, scale_font, scale_thickness)
-            cv2.putText(output, label, (left_margin - tw - int(8 * scale), y + th // 2),
-                       font, scale_font, (200, 200, 200), scale_thickness, cv2.LINE_AA)
+        label_font = 0.55 * scale
+        value_font = 0.7 * scale
+        text_thickness = max(1, int(2 * scale))
+        value_thickness = max(2, int(2 * scale))
 
-        def draw_line(data, color, y_min, y_max):
-            if len(data) < 2:
-                return
-            points = []
-            for i, val in enumerate(data):
-                x = left_margin + int(i * graph_w / max(len(data) - 1, 1))
-                norm_val = (val - y_min) / (y_max - y_min) if y_max != y_min else 0.5
-                norm_val = max(0, min(1, norm_val))
-                y = graph_y + graph_h - int(norm_val * graph_h)
-                points.append((x, y))
-            for i in range(len(points) - 1):
-                cv2.line(output, points[i], points[i+1], color, max(2, int(3 * scale)), cv2.LINE_AA)
+        # Position: bottom-left corner, above any logos
+        panel_w = int(280 * scale)
+        panel_h = int(310 * scale)  # Taller to fit 5 main + 4 secondary metrics + warning
+        panel_x = int(15 * scale)
+        panel_y = h - panel_h - int(90 * scale)  # Leave space for logos
 
-        # Compute edge angle (90 - raw value) from history
+        # Semi-transparent background
+        overlay = output.copy()
+        cv2.rectangle(overlay, (panel_x, panel_y), (panel_x + panel_w, panel_y + panel_h),
+                     (20, 20, 20), -1)
+        cv2.addWeighted(overlay, 0.75, output, 0.25, 0, output)
+
+        # Border
+        cv2.rectangle(output, (panel_x, panel_y), (panel_x + panel_w, panel_y + panel_h),
+                     (80, 80, 80), 1)
+
+        # Title
+        cv2.putText(output, "METRICS PROTOTYPE", (panel_x + int(10 * scale), panel_y + int(22 * scale)),
+                   font, label_font, (200, 200, 200), text_thickness, cv2.LINE_AA)
+        # Warning note
+        cv2.putText(output, "(= There are errors!)", (panel_x + int(10 * scale), panel_y + int(38 * scale)),
+                   font, 0.4 * scale, (255, 100, 100), 1, cv2.LINE_AA)
+
+        # Compute current values
+        if metrics:
+            edge_angle = (90 - abs(metrics.edge_angle_left) + 90 - abs(metrics.edge_angle_right)) / 2
+            edge_sym = metrics.edge_symmetry_pct
+            fore_aft = 0.0
+            if metrics.fore_aft_left is not None and metrics.fore_aft_right is not None:
+                fore_aft = (metrics.fore_aft_left + metrics.fore_aft_right) / 2
+            elif metrics.fore_aft_left is not None:
+                fore_aft = metrics.fore_aft_left
+            elif metrics.fore_aft_right is not None:
+                fore_aft = metrics.fore_aft_right
+            angulation = metrics.body_angulation
+            inclination = metrics.body_inclination
+            # Secondary metrics
+            shoulder_slope = metrics.shoulder_angle_to_slope
+            hip_slope = metrics.hip_angle_to_slope
+            edge_left = 90 - abs(metrics.edge_angle_left)
+            edge_right = 90 - abs(metrics.edge_angle_right)
+            fa_left = metrics.fore_aft_left if metrics.fore_aft_left is not None else 0.0
+            fa_right = metrics.fore_aft_right if metrics.fore_aft_right is not None else 0.0
+        else:
+            edge_angle = edge_sym = fore_aft = angulation = inclination = 0.0
+            shoulder_slope = hip_slope = edge_left = edge_right = fa_left = fa_right = 0.0
+
+        # Main metrics (5): Edge Angle, Edge Similarity, Fore/Aft, Angulation, Inclination
+        # Note: OpenCV putText doesn't support Unicode, so use "deg" instead of "°"
+        main_items = [
+            ("Edge Angle", edge_angle, "deg", (255, 100, 100)),
+            ("Edge Similarity", edge_sym, "%", (0, 255, 0)),
+            ("Fore/Aft", fore_aft, "deg", (255, 200, 100)),
+            ("Angulation", angulation, "deg", (0, 255, 255)),
+            ("Inclination", inclination, "deg", (255, 180, 255)),
+        ]
+
+        # Secondary metrics (smaller): Shoulders/Slope, Hips/Slope, Edge R/L, Fore/Aft R/L
+        extra_items = [
+            ("Shoulders/Slope", shoulder_slope, "deg", (180, 100, 180)),
+            ("Hips/Slope", hip_slope, "deg", (180, 180, 100)),
+            ("Edge L/R", f"{edge_left:.0f}/{edge_right:.0f}", "deg", (255, 150, 150)),
+            ("Fore/Aft L/R", f"{fa_left:.0f}/{fa_right:.0f}", "deg", (255, 220, 150)),
+        ]
+
+        # Draw main metrics
+        line_h = int(28 * scale)
+        start_y = panel_y + int(55 * scale)  # Account for title + warning
+
+        for i, (name, value, unit, color) in enumerate(main_items):
+            y = start_y + i * line_h
+
+            # Color indicator square
+            sq_size = int(12 * scale)
+            cv2.rectangle(output, (panel_x + int(10 * scale), y - sq_size + 2),
+                         (panel_x + int(10 * scale) + sq_size, y + 2), color, -1)
+
+            # Label
+            cv2.putText(output, name, (panel_x + int(28 * scale), y),
+                       font, label_font, (180, 180, 180), text_thickness, cv2.LINE_AA)
+
+            # Value (right-aligned)
+            value_str = f"{value:.1f}{unit}"
+            (tw, _), _ = cv2.getTextSize(value_str, font, value_font, value_thickness)
+            cv2.putText(output, value_str, (panel_x + panel_w - tw - int(10 * scale), y),
+                       font, value_font, (255, 255, 255), value_thickness, cv2.LINE_AA)
+
+        # Draw additional metrics (smaller, below main metrics)
+        small_label_font = 0.45 * scale
+        small_value_font = 0.55 * scale
+        small_line_h = int(22 * scale)
+        extra_start_y = start_y + len(main_items) * line_h + int(8 * scale)
+
+        # Separator line
+        sep_y = extra_start_y - int(6 * scale)
+        cv2.line(output, (panel_x + int(10 * scale), sep_y),
+                (panel_x + panel_w - int(10 * scale), sep_y), (60, 60, 60), 1)
+
+        for i, (name, value, unit, color) in enumerate(extra_items):
+            y = extra_start_y + i * small_line_h
+
+            # Small color indicator
+            sq_size = int(8 * scale)
+            cv2.rectangle(output, (panel_x + int(10 * scale), y - sq_size + 2),
+                         (panel_x + int(10 * scale) + sq_size, y + 2), color, -1)
+
+            # Label (smaller)
+            cv2.putText(output, name, (panel_x + int(24 * scale), y),
+                       font, small_label_font, (150, 150, 150), 1, cv2.LINE_AA)
+
+            # Value (right-aligned, smaller) - handle both float and string values
+            if isinstance(value, str):
+                value_str = f"{value}{unit}"
+            else:
+                value_str = f"{value:.1f}{unit}"
+            (tw, _), _ = cv2.getTextSize(value_str, font, small_value_font, 1)
+            cv2.putText(output, value_str, (panel_x + panel_w - tw - int(10 * scale), y),
+                       font, small_value_font, (220, 220, 220), 1, cv2.LINE_AA)
+
+        return output
+
+    def get_metrics_for_export(self) -> dict:
+        """Get all metrics history as a dict for JSON export.
+
+        This data is used by the browser to render interactive graphs.
+        """
+        # Compute derived metrics
         edge_angle_avg = []
         for i in range(len(self.history.edge_left)):
             l = 90 - abs(self.history.edge_left[i])
             r = 90 - abs(self.history.edge_right[i]) if i < len(self.history.edge_right) else l
-            edge_angle_avg.append((l + r) / 2)
+            edge_angle_avg.append(round((l + r) / 2, 1))
 
-        # Compute average fore/aft from history
         fore_aft_avg = []
-        for i in range(len(self.history.fore_aft_left)):
+        for i in range(max(len(self.history.fore_aft_left), len(self.history.fore_aft_right))):
             l = self.history.fore_aft_left[i] if i < len(self.history.fore_aft_left) else 0
             r = self.history.fore_aft_right[i] if i < len(self.history.fore_aft_right) else 0
-            fore_aft_avg.append((l + r) / 2 if (l != 0 or r != 0) else 0)
+            fore_aft_avg.append(round((l + r) / 2, 1) if (l != 0 or r != 0) else 0)
 
-        # Draw metrics curves only if show_curves is True
-        if show_curves:
-            draw_line(edge_angle_avg, (255, 100, 100), 0, 90)  # Red - edge angle (90-value)
-            draw_line(self.history.edge_symmetry, (0, 255, 0), 0, 100)  # Green - edge similarity
-            draw_line(fore_aft_avg, (255, 200, 100), -30, 30)  # Orange - fore/aft balance
-            draw_line(self.history.angulation, (0, 255, 255), 0, 60)  # Cyan - angulation
-            draw_line(self.history.inclination, (255, 180, 255), -60, 60)  # Pink - inclination
-
-        # Draw current position line (vertical white line)
-        if current_frame is not None and total_frames and total_frames > 1:
-            pos_x = left_margin + int(current_frame * graph_w / (total_frames - 1))
-            cv2.line(output, (pos_x, graph_y), (pos_x, graph_y + graph_h), (255, 255, 255), 3)
-
-        # Calculate averages for legend
-        avg_edge = sum(edge_angle_avg) / len(edge_angle_avg) if edge_angle_avg else 0
-        avg_sym = sum(self.history.edge_symmetry) / len(self.history.edge_symmetry) if self.history.edge_symmetry else 0
-        avg_fa = sum(fore_aft_avg) / len(fore_aft_avg) if fore_aft_avg else 0
-        avg_ang = sum(self.history.angulation) / len(self.history.angulation) if self.history.angulation else 0
-        avg_incl = sum(self.history.inclination) / len(self.history.inclination) if self.history.inclination else 0
-        avg_shoulder = sum(abs(x) for x in self.history.shoulder) / len(self.history.shoulder) if self.history.shoulder else 0
-        avg_hip = sum(abs(x) for x in self.history.hip) / len(self.history.hip) if self.history.hip else 0
-        avg_edge_l = 90 - sum(abs(x) for x in self.history.edge_left) / len(self.history.edge_left) if self.history.edge_left else 0
-        avg_edge_r = 90 - sum(abs(x) for x in self.history.edge_right) / len(self.history.edge_right) if self.history.edge_right else 0
-        fa_l_vals = [x for x in self.history.fore_aft_left if x is not None]
-        fa_r_vals = [x for x in self.history.fore_aft_right if x is not None]
-        avg_fa_l = sum(fa_l_vals) / len(fa_l_vals) if fa_l_vals else 0
-        avg_fa_r = sum(fa_r_vals) / len(fa_r_vals) if fa_r_vals else 0
-
-        # Legend - BIGGER text, always visible above graph
-        legend_font_scale = 0.9 * scale  # Bigger labels
-        text_thickness = max(2, int(3 * scale))
-        leg_y = graph_y - int(15 * scale)  # Position above graph
-        sq_size = int(18 * scale)  # Bigger color squares
-
-        # Draw solid legend background (always visible)
-        legend_bg = output.copy()
-        cv2.rectangle(legend_bg, (left_margin - int(10 * scale), leg_y - sq_size - int(10 * scale)),
-                     (w - right_margin, leg_y + int(12 * scale)), (30, 30, 30), -1)
-        cv2.addWeighted(legend_bg, 0.85, output, 0.15, 0, output)  # More opaque for visibility
-
-        # Line 1: Graphed metrics with full names - BIGGER
-        leg_items = [
-            (f"Edge angle: {avg_edge:.0f}", (255, 100, 100)),
-            (f"Edge similarity: {avg_sym:.0f}%", (0, 255, 0)),
-            (f"Fore/Aft: {avg_fa:.0f}", (255, 200, 100)),
-            (f"Angulation: {avg_ang:.0f}", (0, 255, 255)),
-            (f"Inclination: {avg_incl:.0f}", (255, 180, 255)),
-        ]
-
-        leg_x = left_margin
-        for label, color in leg_items:
-            cv2.rectangle(output, (leg_x, leg_y - sq_size + 4), (leg_x + sq_size, leg_y + 4), color, -1)
-            cv2.putText(output, label, (leg_x + sq_size + 8, leg_y + 2), font, legend_font_scale,
-                       (255, 255, 255), text_thickness, cv2.LINE_AA)
-            (tw, _), _ = cv2.getTextSize(label, font, legend_font_scale, text_thickness)
-            leg_x += sq_size + tw + int(25 * scale)
-
-        # Line 2: Non-graphed values (below the graph) - also bigger
-        line2_y = graph_y + graph_h + int(30 * scale)
-        line2_bg = output.copy()
-        cv2.rectangle(line2_bg, (left_margin - int(10 * scale), line2_y - int(22 * scale)),
-                     (w - right_margin, line2_y + int(10 * scale)), (30, 30, 30), -1)
-        cv2.addWeighted(line2_bg, 0.85, output, 0.15, 0, output)
-
-        extra_text = f"Shoulder/slope: {avg_shoulder:.0f}   Hip/slope: {avg_hip:.0f}   Edge L:{avg_edge_l:.0f} R:{avg_edge_r:.0f}   Fore/Aft L:{avg_fa_l:.0f} R:{avg_fa_r:.0f}"
-        cv2.putText(output, extra_text, (left_margin, line2_y), font, legend_font_scale * 0.85,
-                   (220, 220, 220), text_thickness, cv2.LINE_AA)
-
-        return output
+        return {
+            "metrics": [
+                {
+                    "name": "Edge Angle",
+                    "data": edge_angle_avg,
+                    "color": "#ff6464",
+                    "min": 0, "max": 90, "unit": "°"
+                },
+                {
+                    "name": "Edge Similarity",
+                    "data": [round(x, 1) for x in self.history.edge_symmetry],
+                    "color": "#00ff00",
+                    "min": 0, "max": 100, "unit": "%"
+                },
+                {
+                    "name": "Fore/Aft",
+                    "data": fore_aft_avg,
+                    "color": "#ffc864",
+                    "min": -30, "max": 30, "unit": "°"
+                },
+                {
+                    "name": "Angulation",
+                    "data": [round(x, 1) for x in self.history.angulation],
+                    "color": "#00ffff",
+                    "min": 0, "max": 60, "unit": "°"
+                },
+                {
+                    "name": "Inclination",
+                    "data": [round(x, 1) for x in self.history.inclination],
+                    "color": "#ffb4ff",
+                    "min": -60, "max": 60, "unit": "°"
+                }
+            ],
+            "summary": {
+                "shoulder_avg": round(sum(abs(x) for x in self.history.shoulder) / len(self.history.shoulder), 1) if self.history.shoulder else 0,
+                "hip_avg": round(sum(abs(x) for x in self.history.hip) / len(self.history.hip), 1) if self.history.hip else 0,
+                "edge_left_avg": round(90 - sum(abs(x) for x in self.history.edge_left) / len(self.history.edge_left), 1) if self.history.edge_left else 0,
+                "edge_right_avg": round(90 - sum(abs(x) for x in self.history.edge_right) / len(self.history.edge_right), 1) if self.history.edge_right else 0,
+            }
+        }
 
     def _draw_extended_lines(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
         """Draw extended lines through shoulders and hips (no slope reference lines)."""
@@ -1626,15 +1682,12 @@ class YOLOPoseAnalyzer:
         # Draw fall line from snow level
         output = self._draw_fall_line(output, keypoints, scale)
 
-        # Draw metrics graph - larger with position indicator
-        graph_height = int(120 * scale)
-        output = self._draw_metrics_graph(output, scale, graph_height, frame_num, total_frames,
-                                          show_curves=self.show_graph_curves)
+        # Draw metrics legend panel (always visible, shows current values)
+        # Graphs are rendered in browser from JSON data - allows toggle/opacity control
+        output = self._draw_metrics_legend(output, scale, metrics)
 
         # Draw gate info box in top-right corner
         output = self._draw_gate_info_box(output, scale)
-
-        # Note: Bottom measurements removed - all metrics now in graph legend
 
         return output
 
@@ -1695,7 +1748,6 @@ def main():
 
     # Set gate info if provided
     if args.gate_info:
-        import json
         try:
             gate_data = json.loads(args.gate_info)
             analyzer.set_gate_info(
@@ -1747,11 +1799,18 @@ def main():
     frame_num = 0
     poses_detected = 0
 
+    # Keep track of last known pose for intermediate frames (when sample_rate > 1)
+    last_keypoints = None
+    last_metrics = None
+    last_left_ski = None
+    last_right_ski = None
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
+        # Run pose analysis only on sampled frames
         if frame_num % args.sample_rate == 0:
             result = analyzer.analyze_frame(frame, frame_id=frame_num)
             keypoints, metrics, left_ski, right_ski = result
@@ -1760,24 +1819,64 @@ def main():
                 poses_detected += 1
                 if metrics:
                     all_metrics.append(metrics)
-                annotated = analyzer.draw_overlay(frame, keypoints, metrics, left_ski, right_ski,
+                # Save for reuse on intermediate frames
+                last_keypoints = keypoints
+                last_metrics = metrics
+                last_left_ski = left_ski
+                last_right_ski = right_ski
+
+        # Always write every frame to output video (for smooth playback)
+        if last_keypoints is not None:
+            try:
+                annotated = analyzer.draw_overlay(frame, last_keypoints, last_metrics,
+                                                   last_left_ski, last_right_ski,
                                                    frame_num=frame_num, total_frames=total_frames)
                 if out_video:
                     out_video.write(annotated)
-                if args.output_frames:
+                if args.output_frames and frame_num % args.sample_rate == 0:
                     cv2.imwrite(f"{args.output_frames}/frame_{frame_num:05d}.jpg", annotated)
-            else:
+            except Exception as e:
+                print(f"\nError at frame {frame_num}: {e}")
                 if out_video:
-                    out_video.write(frame)
+                    out_video.write(frame)  # Write original frame on error
+        else:
+            # No pose detected yet, write original frame
+            if out_video:
+                out_video.write(frame)
 
         print(f"\rProgress: {(frame_num + 1) / total_frames * 100:.1f}% | Poses: {poses_detected}", end='', flush=True)
         frame_num += 1
 
     print(f"\n\nDone! Detected pose in {poses_detected} frames.")
 
-    cap.release()
+    try:
+        cap.release()
+    except Exception as e:
+        print(f"Warning: Error releasing video capture: {e}")
+
     if out_video:
-        out_video.release()
+        try:
+            out_video.release()
+        except Exception as e:
+            print(f"Warning: Error releasing video writer: {e}")
+
+    # Export metrics JSON for browser-based graph rendering
+    if args.output_video and all_metrics:
+        try:
+            metrics_json_path = Path(args.output_video).with_suffix('.json')
+            metrics_data = analyzer.get_metrics_for_export()
+            metrics_data['video_info'] = {
+                'fps': fps,
+                'total_frames': total_frames,
+                'frames_analyzed': poses_detected,
+                'width': frame_width,
+                'height': frame_height,
+            }
+            with open(metrics_json_path, 'w') as f:
+                json.dump(metrics_data, f)
+            print(f"Metrics JSON saved to: {metrics_json_path}")
+        except Exception as e:
+            print(f"Warning: Could not save metrics JSON: {e}")
 
     if all_metrics:
         print("\nSummary:")
