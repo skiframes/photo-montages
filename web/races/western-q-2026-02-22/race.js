@@ -39,6 +39,7 @@ const SECTION_COLORS_CSS = { 'Cam1': '#f59e0b', 'Cam2': '#0891b2', 'Cam3': '#8b5
 // Raycaster for gate hover tooltips
 let raycaster, mouse;
 let gateHoverTargets = [];
+let sectionLabelTargets = []; // clickable section labels in 3D view
 
 /**
  * Get per-run camera coverage for the active run.
@@ -529,7 +530,9 @@ async function init3D() {
     container.addEventListener('mousemove', onMouseMove3D);
     container.addEventListener('mouseleave', () => {
         document.getElementById('info-tooltip').classList.add('hidden');
+        container.style.cursor = '';
     });
+    container.addEventListener('click', onClick3D);
 
     window.addEventListener('resize', onResize3D);
     // Debug: press 'C' to log camera position for setting defaults
@@ -582,6 +585,33 @@ function onMouseMove3D(event) {
         }
     } else {
         tooltip.classList.add('hidden');
+    }
+
+    // Check section label hover for pointer cursor
+    if (sectionLabelTargets.length > 0) {
+        const sectionSprites = sectionLabelTargets.map(t => t.sprite);
+        const sectionHits = raycaster.intersectObjects(sectionSprites, false);
+        container.style.cursor = sectionHits.length > 0 ? 'pointer' : '';
+    }
+}
+
+function onClick3D(event) {
+    if (!raycaster || !camera3d || sectionLabelTargets.length === 0) return;
+    const container = document.getElementById('three-container');
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera3d);
+    const sprites = sectionLabelTargets.map(t => t.sprite);
+    const intersects = raycaster.intersectObjects(sprites, false);
+
+    if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        const target = sectionLabelTargets.find(t => t.sprite === hit);
+        if (target) {
+            showSectionPopup(target.camId);
+        }
     }
 }
 
@@ -939,6 +969,75 @@ window.focusOnSection = function focusOnSection(camId) {
     }
 }
 
+window.focusOnSection2D = function focusOnSection2D(camId) {
+    // Switch to 2D map tab
+    const map2dTab = document.querySelector('#view-tabs .tab[data-view="map2d"]');
+    if (map2dTab) map2dTab.click();
+
+    const doFocus = () => {
+        if (!leafletMap || !manifest || !manifest.course) return;
+
+        const cam = manifest.cameras.find(c => c.id === camId);
+        if (!cam) return;
+
+        const coverage = getCamCoverage(cam);
+        if (coverage.length === 0) return;
+
+        const course = manifest.course[activeRun] || manifest.course.run1;
+        const gates = course.gates || [];
+        const coveredGates = gates.filter(g => coverage.includes(g.number));
+        if (coveredGates.length === 0) return;
+
+        // Build bounds from covered gates + camera position
+        const bounds = coveredGates.map(g => [g.lat, g.lon]);
+        if (cam.position && cam.position.lat) {
+            bounds.push([cam.position.lat, cam.position.lon]);
+        }
+        leafletMap.flyToBounds(bounds, { padding: [60, 60], maxZoom: 19, duration: 0.8 });
+    };
+
+    // Leaflet may not be ready yet if tab was never opened
+    if (!leafletMap) {
+        setTimeout(doFocus, 500);
+    } else {
+        // Small delay for tab switch animation
+        setTimeout(doFocus, 100);
+    }
+}
+
+// ── Section Trigger Zone Popup ──────────────────────────────────────────
+window.showSectionPopup = function showSectionPopup(camId) {
+    const cam = manifest.cameras.find(c => c.id === camId);
+    if (!cam || !cam.trigger_zone_image) return;
+
+    const idx = manifest.cameras.indexOf(cam) + 1;
+    const coverage = getCamCoverage(cam);
+    const gatesStr = coverage.length > 0 ? `Gates ${coverage.join(', ')}` : '';
+
+    document.getElementById('sp-title').textContent =
+        `Section ${idx} \u2014 Camera ${cam.edge_camera} (${gatesStr})`;
+    document.getElementById('sp-img').src = cam.trigger_zone_image;
+    document.getElementById('sp-info').textContent = cam.note || '';
+    document.getElementById('section-popup').classList.remove('hidden');
+}
+
+function closeSectionPopup() {
+    document.getElementById('section-popup').classList.add('hidden');
+}
+
+// Bind popup close handlers once DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    const popup = document.getElementById('section-popup');
+    if (!popup) return;
+    popup.querySelector('.sp-backdrop').addEventListener('click', closeSectionPopup);
+    popup.querySelector('.sp-close').addEventListener('click', closeSectionPopup);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !popup.classList.contains('hidden')) {
+            closeSectionPopup();
+        }
+    });
+});
+
 function getTerrainElevAt(x, z) {
     const tm = terrainMeta;
     const halfExtent = tm.extent_m;
@@ -1055,6 +1154,7 @@ function clearCourseOverlay() {
     gateMeshes = []; camMeshes = []; camFovMeshes = []; sectionMeshes = []; labelSprites = [];
     terrainInfoSprites = [];
     gateHoverTargets = [];
+    sectionLabelTargets = [];
 }
 
 function makeTextSprite(text, opts = {}) {
@@ -1750,7 +1850,7 @@ function drawCameraSections(gates) {
             sectionMeshes.push(line);
         }
 
-        // Section label as floating sprite
+        // Section label as floating sprite (clickable for trigger zone popup)
         const midGate = coveredGates[Math.floor(coveredGates.length / 2)];
         const midPos = geoTo3D(midGate.lat, midGate.lon, midGate.dem_elev || midGate.elev);
 
@@ -1759,12 +1859,18 @@ function drawCameraSections(gates) {
         const gv = parseInt(hexColor.slice(3,5), 16) || 0;
         const b = parseInt(hexColor.slice(5,7), 16) || 0;
         const sectionBg = `rgba(${r},${gv},${b},0.8)`;
-        const sectionLabel = makeTextSprite('Section ' + sectionNum, {
+        const labelText = cam.trigger_zone_image ? '\u{1F4F7} Section ' + sectionNum : 'Section ' + sectionNum;
+        const sectionLabel = makeTextSprite(labelText, {
             bgColor: sectionBg, color: '#fff', scale: 7, fontSize: 24
         });
         sectionLabel.position.set(midPos.x + 12, midPos.y + 6, midPos.z);
         worldGroup.add(sectionLabel);
         labelSprites.push(sectionLabel);
+
+        // Register clickable target for trigger zone popup
+        if (cam.trigger_zone_image) {
+            sectionLabelTargets.push({ sprite: sectionLabel, camId: cam.id });
+        }
     });
 }
 
@@ -2205,22 +2311,36 @@ function updateLeafletOverlay() {
                 mToLatLon(farDist, farLeft),     // far-left
             ];
 
-            // Shaded trapezoid polygon
-            leafletLayers.sections.push(L.polygon(trapCorners, {
+            // Shaded trapezoid polygon (clickable for trigger zone popup)
+            const sectionPoly = L.polygon(trapCorners, {
                 color: sectionColor, weight: 2, opacity: 0.7,
                 dashArray: '8,6',
                 fillColor: sectionColor, fillOpacity: 0.12
-            }).addTo(leafletMap));
+            }).addTo(leafletMap);
+            if (cam.trigger_zone_image) {
+                sectionPoly.on('click', () => showSectionPopup(cam.id));
+                // Add pointer cursor to SVG path
+                sectionPoly.on('add', () => {
+                    const el = sectionPoly.getElement();
+                    if (el) el.style.cursor = 'pointer';
+                });
+            }
+            leafletLayers.sections.push(sectionPoly);
 
-            // Section label
+            // Section label (clickable for trigger zone popup)
             const midGate = covGates[Math.floor(covGates.length / 2)];
-            leafletLayers.sections.push(L.marker([midGate.lat, midGate.lon], {
+            const labelIcon = cam.trigger_zone_image ? '\u{1F4F7} ' : '';
+            const sectionMarker = L.marker([midGate.lat, midGate.lon], {
                 icon: L.divIcon({
                     className: 'cam-label-2d',
-                    html: `<span style="color:${sectionColor};font-size:11px;">Section ${sectionNum}</span>`,
-                    iconSize: [70, 16], iconAnchor: [-12, 8]
+                    html: `<span style="color:${sectionColor};font-size:11px;cursor:${cam.trigger_zone_image ? 'pointer' : 'default'}">${labelIcon}Section ${sectionNum}</span>`,
+                    iconSize: [85, 16], iconAnchor: [-12, 8]
                 })
-            }).addTo(leafletMap));
+            }).addTo(leafletMap);
+            if (cam.trigger_zone_image) {
+                sectionMarker.on('click', () => showSectionPopup(cam.id));
+            }
+            leafletLayers.sections.push(sectionMarker);
         }
     });
 
@@ -2445,14 +2565,21 @@ function renderResults() {
     headerHtml += `<th class="th-group" colspan="2" rowspan="1"></th>`;
     headerHtml += `<th class="th-group" colspan="3" rowspan="1"></th>`;
     activeSections.forEach(({ cam, sectionIdx }) => {
-        headerHtml += `<th class="th-section-group th-section-clickable" colspan="4" onclick="focusOnSection('${cam.id}')" title="Click to view Section ${sectionIdx} in 3D map">Section ${sectionIdx}</th>`;
+        const icons = '<span class="section-nav-icons">'
+            + `<span class="section-nav-btn" onclick="event.stopPropagation(); focusOnSection('${cam.id}')" title="View in 3D map">\u{1F30D}</span>`
+            + `<span class="section-nav-btn" onclick="event.stopPropagation(); focusOnSection2D('${cam.id}')" title="View in 2D map">\u{1F5FA}\uFE0F</span>`
+            + (cam.trigger_zone_image
+                ? `<span class="section-nav-btn" onclick="event.stopPropagation(); showSectionPopup('${cam.id}')" title="View trigger zones">\u{1F4F7}</span>`
+                : '')
+            + '</span>';
+        headerHtml += `<th class="th-section-group th-section-clickable" colspan="4" onclick="focusOnSection('${cam.id}')" title="Click to view Section ${sectionIdx} in 3D map">${icons}Section ${sectionIdx}</th>`;
     });
     headerHtml += '</tr><tr>';
     // Row 3: Column headers
     const rankSortCls = sortColumn === 'rank' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
     const timeSortCls = sortColumn === 'time' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
     const bibSortCls = sortColumn === 'bib' ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
-    headerHtml += `<th class="col-rank sortable ${rankSortCls}" onclick="handleSort('rank')">Rank <span class="sort-arrow">${sortColumn === 'rank' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
+    headerHtml += `<th class="col-rank sortable ${rankSortCls}" onclick="handleSort('rank')">Run Rank <span class="sort-arrow">${sortColumn === 'rank' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
     headerHtml += `<th class="col-time sortable ${timeSortCls}" onclick="handleSort('time')">Time <span class="sort-arrow">${sortColumn === 'time' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
     headerHtml += `<th class="col-bib sortable ${bibSortCls}" onclick="handleSort('bib')">Bib <span class="sort-arrow">${sortColumn === 'bib' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}</span></th>`;
     headerHtml += `<th class="col-name">Name</th>`;
@@ -2865,7 +2992,7 @@ function setupVideoLightbox() {
     const canvas = document.createElement('canvas');
     canvas.id = 'vlb-canvas-overlay';
     canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;border-radius:var(--radius);pointer-events:none;display:none;';
-    video.parentElement.style.position = 'relative';
+    // Note: vlb-video-wrap already has position:absolute in CSS which serves as positioning context
     video.parentElement.appendChild(canvas);
 
     function captureFrameToCanvas() {
@@ -3081,8 +3208,12 @@ function setupVideoLightbox() {
 
     // Initialize AIGraphOverlay if available
     const graphCanvas = document.getElementById('vlb-graph-canvas');
+    console.log('[VLB] Checking AIGraphOverlay:', typeof AIGraphOverlay, 'canvas:', graphCanvas);
     if (graphCanvas && typeof AIGraphOverlay !== 'undefined') {
         window._aiGraphOverlay = new AIGraphOverlay(video, graphCanvas);
+        console.log('[VLB] AIGraphOverlay initialized:', window._aiGraphOverlay);
+    } else {
+        console.warn('[VLB] AIGraphOverlay not available or canvas not found');
     }
 
     // Make video controls draggable
@@ -3529,11 +3660,24 @@ window._showAIResults = function (aiJobKey) {
         window._aiGraphOverlay.setVisible(false);  // Start with graphs hidden
         // Metrics JSON has same path as video but with .json extension
         const metricsJsonUrl = aiVideoUrl.replace(/_ai\.mp4$/, '_ai.json').replace(/\.mp4$/, '.json');
-        window._aiGraphOverlay.loadMetrics(metricsJsonUrl).then(loaded => {
-            if (loaded) {
-                console.log('[AI] Metrics loaded for graph overlay');
-            }
-        });
+        console.log('[AI] Loading metrics from:', metricsJsonUrl);
+        // Wait for video to have dimensions before loading metrics
+        const loadMetricsWhenReady = () => {
+            window._aiGraphOverlay.loadMetrics(metricsJsonUrl).then(loaded => {
+                if (loaded) {
+                    console.log('[AI] Metrics loaded, triggering resize');
+                    window._aiGraphOverlay._onResize();
+                }
+            });
+        };
+        if (video.videoWidth > 0) {
+            loadMetricsWhenReady();
+        } else {
+            video.addEventListener('loadedmetadata', function onMeta() {
+                video.removeEventListener('loadedmetadata', onMeta);
+                loadMetricsWhenReady();
+            });
+        }
     }
 };
 
@@ -3609,11 +3753,24 @@ window._showPrecomputedAI = function(aiVideoRelPath, bib) {
         window._aiGraphOverlay.setVisible(false);  // Start with graphs hidden
         // Metrics JSON has same path as video but with .json extension
         const metricsJsonUrl = aiVideoUrl.replace(/_ai\.mp4$/, '_ai.json').replace(/\.mp4$/, '.json');
-        window._aiGraphOverlay.loadMetrics(metricsJsonUrl).then(loaded => {
-            if (loaded) {
-                console.log('[AI] Metrics loaded for graph overlay');
-            }
-        });
+        console.log('[AI] Loading metrics from:', metricsJsonUrl);
+        // Wait for video to have dimensions before loading metrics
+        const loadMetricsWhenReady = () => {
+            window._aiGraphOverlay.loadMetrics(metricsJsonUrl).then(loaded => {
+                if (loaded) {
+                    console.log('[AI] Metrics loaded, triggering resize');
+                    window._aiGraphOverlay._onResize();
+                }
+            });
+        };
+        if (video.videoWidth > 0) {
+            loadMetricsWhenReady();
+        } else {
+            video.addEventListener('loadedmetadata', function onMeta() {
+                video.removeEventListener('loadedmetadata', onMeta);
+                loadMetricsWhenReady();
+            });
+        }
     }
 };
 

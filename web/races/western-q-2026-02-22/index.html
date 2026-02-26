@@ -1418,6 +1418,17 @@ buffer = deque(maxlen=int(fps * pre_buffer_seconds) + <span class="number">1</sp
         </div>
     </div>
 
+    <!-- Section Trigger Zone Popup -->
+    <div id="section-popup" class="hidden">
+        <div class="sp-backdrop"></div>
+        <div class="sp-content">
+            <button class="sp-close">&times;</button>
+            <h3 id="sp-title"></h3>
+            <img id="sp-img" src="" alt="Trigger zone calibration">
+            <p id="sp-info"></p>
+        </div>
+    </div>
+
     <!-- Video Lightbox -->
     <div id="video-lightbox" class="hidden">
         <div class="vlb-backdrop"></div>
@@ -1472,7 +1483,7 @@ buffer = deque(maxlen=int(fps * pre_buffer_seconds) + <span class="number">1</sp
     <!-- Disclaimer Footer -->
     <footer id="disclaimer">
         <p>Official results are available at: <a href="https://www.nhalpine.org/2026-results" target="_blank" rel="noopener">nhalpine.org/2026-results</a></p>
-        <p><strong>*Section Times Disclaimer:</strong> Intermediate section times are unofficial estimates derived from camera analysis, not from official timing equipment. They are provided as a coaching aid only and should not be used for any official purpose. Accuracy is &plusmn;0.08s</p>
+        <p><strong>*Section Times Disclaimer:</strong> Intermediate section times are unofficial estimates derived from camera analysis, not from official timing equipment. They are provided as a coaching aid only and should not be used for any official purpose.</p>
     </footer>
 
     <!-- Virtual Race Modal -->

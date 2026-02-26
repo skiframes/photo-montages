@@ -541,6 +541,20 @@ body {
     cursor: default;
 }
 
+/* ── Section Trigger Zone Popup ────────────────────────────────────────── */
+#section-popup { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; }
+#section-popup.hidden { display: none; }
+.sp-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px); }
+.sp-content { position: relative; max-width: 900px; width: 90vw; max-height: 90vh; background: var(--surface); border-radius: var(--radius-lg, 12px); box-shadow: var(--shadow-lg); overflow: hidden; display: flex; flex-direction: column; }
+.sp-close { position: absolute; top: 8px; right: 10px; background: rgba(0,0,0,0.4); border: none; color: #fff; font-size: 28px; cursor: pointer; z-index: 10; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }
+.sp-close:hover { background: rgba(0,0,0,0.7); }
+#sp-title { margin: 0; padding: 14px 50px 10px 18px; font-size: 15px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); }
+#sp-img { width: 100%; max-height: 70vh; object-fit: contain; display: block; }
+#sp-info { margin: 0; padding: 10px 18px 14px; font-size: 12px; color: var(--text-muted); }
+.section-nav-icons { display: inline-flex; gap: 2px; margin-right: 5px; vertical-align: middle; }
+.section-nav-btn { cursor: pointer; opacity: 0.55; transition: opacity 0.15s; font-size: 12px; line-height: 1; }
+.section-nav-btn:hover { opacity: 1; }
+
 /* ── Lightbox (nearly full-screen) ─────────────────────────────────────── */
 #lightbox { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; }
 #lightbox.hidden { display: none; }
@@ -663,7 +677,7 @@ body {
 .vlb-prev { left: 12px; }
 .vlb-next { right: 12px; }
 .vlb-prev:hover, .vlb-next:hover { background: rgba(37,99,235,0.8); }
-.vlb-video-wrap { position: absolute; top: 0; left: 0; right: 0; bottom: 90px; display: flex; align-items: center; justify-content: center; }
+.vlb-video-wrap { position: absolute; top: 10px; left: 60px; right: 60px; bottom: 90px; display: flex; align-items: center; justify-content: center; }
 #vlb-video { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border-radius: var(--radius); background: #000; }
 .vlb-controls {
     position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);

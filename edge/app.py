@@ -793,19 +793,108 @@ def parse_vola_csv(filepath):
     return results
 
 
-def build_racers_from_start_times(start_times, camera_id, estimated_duration=40.0):
+def get_gate_offset_pct(edge_camera_id, race_date=None, run_number=None, vola_file=None):
+    """
+    Compute gate-based offset percentage for a camera from race_manifest.json.
+
+    Uses the camera's first covered gate / total gates to determine what
+    fraction of the run has elapsed when a racer reaches this camera.
+
+    Args:
+        edge_camera_id: Edge camera ID (e.g., 'R1', 'R2', 'Axis', 'R3')
+        race_date: ISO date string (e.g., '2026-02-22')
+        run_number: 'run1' or 'run2'
+        vola_file: Path to Vola CSV (used to infer race_date and run_number)
+
+    Returns:
+        float or None: offset percentage (0-100), or None if not determinable.
+    """
+    # Try to determine race_date and run_number from vola_file if not provided
+    if vola_file and not run_number:
+        vola_path = Path(vola_file)
+        fname_lower = vola_path.stem.lower()
+        if 'run2' in fname_lower:
+            run_number = 'run2'
+        elif 'run1' in fname_lower:
+            run_number = 'run1'
+
+    if vola_file and not race_date:
+        vola_path = Path(vola_file)
+        date_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', vola_path.parent.name)
+        if date_match:
+            race_date = f"{date_match.group(3)}-{date_match.group(1)}-{date_match.group(2)}"
+
+    if not race_date or not run_number:
+        return None
+
+    # Find race_manifest.json
+    manifest_path = None
+    if WEB_RACES_DIR.exists():
+        for race_dir in WEB_RACES_DIR.iterdir():
+            if race_date in race_dir.name:
+                candidate = race_dir / 'race_manifest.json'
+                if candidate.exists():
+                    manifest_path = candidate
+                    break
+
+    if not manifest_path:
+        return None
+
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        # Get total gates for this run
+        course = manifest.get('course', {})
+        run_course = course.get(run_number, {})
+        total_gates = len(run_course.get('gates', []))
+        if total_gates == 0:
+            return None
+
+        # Find this camera in the manifest by edge_camera field
+        cameras = manifest.get('cameras', [])
+        for cam in cameras:
+            if cam.get('edge_camera') == edge_camera_id:
+                gates_key = f'gates_covered_{run_number}'
+                gates_covered = cam.get(gates_key, [])
+                if gates_covered:
+                    first_gate = min(gates_covered)
+                    offset = (first_gate / total_gates) * 100
+                    print(f"[OFFSET] {edge_camera_id} ({cam.get('id')}) {run_number}: "
+                          f"gate {first_gate}/{total_gates} = {offset:.1f}%")
+                    return offset
+                else:
+                    print(f"[OFFSET] {edge_camera_id} has no gates for {run_number}")
+                    return None
+
+        print(f"[OFFSET] Camera {edge_camera_id} not found in manifest")
+        return None
+
+    except Exception as e:
+        print(f"[OFFSET] Error computing gate offset: {e}")
+        return None
+
+
+def build_racers_from_start_times(start_times, camera_id, estimated_duration=40.0,
+                                   gate_offset_pct=None):
     """
     Build racer list with camera timing windows from start times dict.
 
     Args:
         start_times: dict of {bib: start_seconds}
-        camera_id: camera ID for offset calculation
+        camera_id: camera ID for offset calculation (fallback)
         estimated_duration: estimated run duration in seconds (CSV has no end times)
+        gate_offset_pct: override offset percentage based on gate position (0-100).
+            If provided, uses this instead of the hardcoded CAMERAS offset.
+            E.g., camera at gates 19-20 of 24 total → gate_offset_pct=79.
 
     Returns:
         list of racer dicts with timing windows
     """
-    camera_offset_pct = CAMERAS.get(camera_id, {}).get('offset_pct', 0) / 100.0
+    if gate_offset_pct is not None:
+        camera_offset_pct = gate_offset_pct / 100.0
+    else:
+        camera_offset_pct = CAMERAS.get(camera_id, {}).get('offset_pct', 0) / 100.0
 
     racers = []
     for bib in sorted(start_times.keys()):
@@ -960,13 +1049,19 @@ def parse_vola_file():
 
     try:
         start_times = parse_vola_csv(file_path)
-        camera_offset_pct = CAMERAS.get(camera_id, {}).get('offset_pct', 0) / 100.0
-        racers = build_racers_from_start_times(start_times, camera_id)
+        gate_offset = get_gate_offset_pct(camera_id, vola_file=file_path)
+        racers = build_racers_from_start_times(start_times, camera_id,
+                                                gate_offset_pct=gate_offset)
+        # Report actual offset used
+        if gate_offset is not None:
+            effective_offset = gate_offset
+        else:
+            effective_offset = CAMERAS.get(camera_id, {}).get('offset_pct', 0)
 
         return jsonify({
             'file': file_path,
             'camera_id': camera_id,
-            'camera_offset_pct': camera_offset_pct * 100,
+            'camera_offset_pct': effective_offset,
             'racers': racers,
             'total_racers': len(racers),
         })
@@ -1073,7 +1168,9 @@ def get_racers_for_video():
 
     try:
         start_times = parse_vola_csv(file_path)
-        all_racers = build_racers_from_start_times(start_times, camera_id)
+        gate_offset = get_gate_offset_pct(camera_id, vola_file=file_path)
+        all_racers = build_racers_from_start_times(start_times, camera_id,
+                                                    gate_offset_pct=gate_offset)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1831,10 +1928,15 @@ def get_videos_for_race():
             # (e.g., boys bib 10 and girls bib 10 are different athletes)
             racers = []
 
+            # Compute gate-based offset from manifest
+            gate_offset = get_gate_offset_pct(camera_id, race_date=race_date_override,
+                                               run_number=run_number)
+
             if boys_csv:
                 boys_times = parse_vola_csv(str(boys_csv[0]))
                 bib_to_racer_boys = load_race_manifest(str(boys_csv[0]))
-                boys_racers = build_racers_from_start_times(boys_times, camera_id)
+                boys_racers = build_racers_from_start_times(boys_times, camera_id,
+                                                             gate_offset_pct=gate_offset)
                 for racer in boys_racers:
                     racer_info = bib_to_racer_boys.get(racer['bib'], {})
                     racer['name'] = racer_info.get('name', '')
@@ -1845,7 +1947,8 @@ def get_videos_for_race():
             if girls_csv:
                 girls_times = parse_vola_csv(str(girls_csv[0]))
                 bib_to_racer_girls = load_race_manifest(str(girls_csv[0]))
-                girls_racers = build_racers_from_start_times(girls_times, camera_id)
+                girls_racers = build_racers_from_start_times(girls_times, camera_id,
+                                                              gate_offset_pct=gate_offset)
                 for racer in girls_racers:
                     racer_info = bib_to_racer_girls.get(racer['bib'], {})
                     racer['name'] = racer_info.get('name', '')
@@ -1865,7 +1968,9 @@ def get_videos_for_race():
 
             bib_to_racer = load_race_manifest(vola_file)
             start_times = parse_vola_csv(vola_file)
-            racers = build_racers_from_start_times(start_times, camera_id)
+            gate_offset = get_gate_offset_pct(camera_id, vola_file=vola_file)
+            racers = build_racers_from_start_times(start_times, camera_id,
+                                                    gate_offset_pct=gate_offset)
 
             # Enrich racers with name/team/gender from start list
             for racer in racers:
@@ -2690,6 +2795,16 @@ def populate_manifest_with_montages():
                     bib_lookup[fb] = []
                 bib_lookup[fb].append((fr_cat_idx, ai, 'forerunners'))
 
+        # Build set of (cam_id, run_key) pairs where section_times should be suppressed
+        # This allows manual removal of inaccurate section times that persist across repopulation
+        suppressed_section_times = set()
+        for cam in manifest.get('cameras', []):
+            cam_id_check = cam.get('id', '')
+            for run_key_suppress in cam.get('suppress_section_times', []):
+                suppressed_section_times.add((cam_id_check, run_key_suppress))
+        if suppressed_section_times:
+            print(f"  Suppressing section_times for: {suppressed_section_times}")
+
         # Scan staging directory: {CamX}/{runN}/{bib}[_thumb|_fps].jpg
         updated_count = 0
         cam_ids = set()
@@ -2869,7 +2984,7 @@ def populate_manifest_with_montages():
                         'full': full_path,
                         'fps_variants': fps_variants,
                     }
-                    if section_time is not None:
+                    if section_time is not None and (cam_id, run_key) not in suppressed_section_times:
                         montage_entry['section_time'] = section_time
                     if trigger_time:
                         montage_entry['trigger_time'] = trigger_time
