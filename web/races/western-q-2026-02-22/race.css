@@ -551,9 +551,8 @@ body {
 #sp-title { margin: 0; padding: 14px 50px 10px 18px; font-size: 15px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); }
 #sp-img { width: 100%; max-height: 70vh; object-fit: contain; display: block; }
 #sp-info { margin: 0; padding: 10px 18px 14px; font-size: 12px; color: var(--text-muted); }
-.section-nav-icons { display: inline-flex; gap: 2px; margin-right: 5px; vertical-align: middle; }
-.section-nav-btn { cursor: pointer; opacity: 0.55; transition: opacity 0.15s; font-size: 12px; line-height: 1; }
-.section-nav-btn:hover { opacity: 1; }
+.section-nav-icons { display: inline-flex; gap: 2px; margin-left: 5px; vertical-align: middle; }
+.section-nav-btn { cursor: pointer; font-size: 12px; line-height: 1; }
 
 /* ── Lightbox (nearly full-screen) ─────────────────────────────────────── */
 #lightbox { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; }

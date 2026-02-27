@@ -1008,15 +1008,20 @@ window.focusOnSection2D = function focusOnSection2D(camId) {
 // ── Section Trigger Zone Popup ──────────────────────────────────────────
 window.showSectionPopup = function showSectionPopup(camId) {
     const cam = manifest.cameras.find(c => c.id === camId);
-    if (!cam || !cam.trigger_zone_image) return;
+    if (!cam) return;
+    // Support per-run trigger_zone_images (new) or single trigger_zone_image (legacy)
+    const zoneImages = cam.trigger_zone_images || {};
+    const zoneImage = zoneImages[activeRun] || zoneImages['run1'] || cam.trigger_zone_image;
+    if (!zoneImage) return;
 
     const idx = manifest.cameras.indexOf(cam) + 1;
     const coverage = getCamCoverage(cam);
     const gatesStr = coverage.length > 0 ? `Gates ${coverage.join(', ')}` : '';
+    const runLabel = activeRun.replace('run', 'Run ');
 
     document.getElementById('sp-title').textContent =
-        `Section ${idx} \u2014 Camera ${cam.edge_camera} (${gatesStr})`;
-    document.getElementById('sp-img').src = cam.trigger_zone_image;
+        `Section ${idx} ${runLabel} \u2014 Camera ${cam.edge_camera} (${gatesStr})`;
+    document.getElementById('sp-img').src = zoneImage;
     document.getElementById('sp-info').textContent = cam.note || '';
     document.getElementById('section-popup').classList.remove('hidden');
 }
@@ -1859,7 +1864,8 @@ function drawCameraSections(gates) {
         const gv = parseInt(hexColor.slice(3,5), 16) || 0;
         const b = parseInt(hexColor.slice(5,7), 16) || 0;
         const sectionBg = `rgba(${r},${gv},${b},0.8)`;
-        const labelText = cam.trigger_zone_image ? '\u{1F4F7} Section ' + sectionNum : 'Section ' + sectionNum;
+        const hasZoneImg = cam.trigger_zone_images || cam.trigger_zone_image;
+        const labelText = hasZoneImg ? '\u{1F4F7} Section ' + sectionNum : 'Section ' + sectionNum;
         const sectionLabel = makeTextSprite(labelText, {
             bgColor: sectionBg, color: '#fff', scale: 7, fontSize: 24
         });
@@ -1868,7 +1874,7 @@ function drawCameraSections(gates) {
         labelSprites.push(sectionLabel);
 
         // Register clickable target for trigger zone popup
-        if (cam.trigger_zone_image) {
+        if (hasZoneImg) {
             sectionLabelTargets.push({ sprite: sectionLabel, camId: cam.id });
         }
     });
@@ -2317,7 +2323,8 @@ function updateLeafletOverlay() {
                 dashArray: '8,6',
                 fillColor: sectionColor, fillOpacity: 0.12
             }).addTo(leafletMap);
-            if (cam.trigger_zone_image) {
+            const hasZoneImg2d = cam.trigger_zone_images || cam.trigger_zone_image;
+            if (hasZoneImg2d) {
                 sectionPoly.on('click', () => showSectionPopup(cam.id));
                 // Add pointer cursor to SVG path
                 sectionPoly.on('add', () => {
@@ -2329,15 +2336,15 @@ function updateLeafletOverlay() {
 
             // Section label (clickable for trigger zone popup)
             const midGate = covGates[Math.floor(covGates.length / 2)];
-            const labelIcon = cam.trigger_zone_image ? '\u{1F4F7} ' : '';
+            const labelIcon = hasZoneImg2d ? '\u{1F4F7} ' : '';
             const sectionMarker = L.marker([midGate.lat, midGate.lon], {
                 icon: L.divIcon({
                     className: 'cam-label-2d',
-                    html: `<span style="color:${sectionColor};font-size:11px;cursor:${cam.trigger_zone_image ? 'pointer' : 'default'}">${labelIcon}Section ${sectionNum}</span>`,
+                    html: `<span style="color:${sectionColor};font-size:11px;cursor:${hasZoneImg2d ? 'pointer' : 'default'}">${labelIcon}Section ${sectionNum}</span>`,
                     iconSize: [85, 16], iconAnchor: [-12, 8]
                 })
             }).addTo(leafletMap);
-            if (cam.trigger_zone_image) {
+            if (hasZoneImg2d) {
                 sectionMarker.on('click', () => showSectionPopup(cam.id));
             }
             leafletLayers.sections.push(sectionMarker);
@@ -2567,12 +2574,12 @@ function renderResults() {
     activeSections.forEach(({ cam, sectionIdx }) => {
         const icons = '<span class="section-nav-icons">'
             + `<span class="section-nav-btn" onclick="event.stopPropagation(); focusOnSection('${cam.id}')" title="View in 3D map">\u{1F30D}</span>`
-            + `<span class="section-nav-btn" onclick="event.stopPropagation(); focusOnSection2D('${cam.id}')" title="View in 2D map">\u{1F5FA}\uFE0F</span>`
-            + (cam.trigger_zone_image
+            + `<span class="section-nav-btn" onclick="event.stopPropagation(); focusOnSection2D('${cam.id}')" title="View in 2D map">\u{1F9ED}</span>`
+            + ((cam.trigger_zone_images || cam.trigger_zone_image)
                 ? `<span class="section-nav-btn" onclick="event.stopPropagation(); showSectionPopup('${cam.id}')" title="View trigger zones">\u{1F4F7}</span>`
                 : '')
             + '</span>';
-        headerHtml += `<th class="th-section-group th-section-clickable" colspan="4" onclick="focusOnSection('${cam.id}')" title="Click to view Section ${sectionIdx} in 3D map">${icons}Section ${sectionIdx}</th>`;
+        headerHtml += `<th class="th-section-group th-section-clickable" colspan="4" onclick="focusOnSection('${cam.id}')" title="Click to view Section ${sectionIdx} in 3D map">Section ${sectionIdx} ${icons}</th>`;
     });
     headerHtml += '</tr><tr>';
     // Row 3: Column headers
@@ -2698,7 +2705,7 @@ function athleteRow(a, cat, ranks, activeSections, isForerunner) {
         // Section time cell (with disclaimer tooltip)
         const stDisclaimer = 'Unofficial estimate from camera analysis, not official timing. For coaching use only.';
         if (sectionTime != null) {
-            html += `<td class="col-section-time" title="${stDisclaimer}"><span class="section-time-val">${sectionTime.toFixed(1)}</span></td>`;
+            html += `<td class="col-section-time" title="${stDisclaimer}"><span class="section-time-val">${(Math.floor(sectionTime * 10) / 10).toFixed(1)}</span></td>`;
         } else {
             html += `<td class="col-section-time"><span class="section-time-na">&mdash;</span></td>`;
         }
