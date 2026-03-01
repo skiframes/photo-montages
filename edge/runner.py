@@ -87,8 +87,9 @@ class SkiFramesRunner:
         # Track generated montages (A/B pairs)
         self.montage_pairs: list[MontageResultPair] = []
 
-        # Source FPS (will be set when video is opened)
-        self.source_fps = 30.0
+        # Source FPS - can be overridden in config, otherwise detected from video
+        self.source_fps_override = self.raw_config.get('source_fps')  # e.g., 30.0 or 60.0
+        self.source_fps = self.source_fps_override or 30.0  # Default, updated when video opens
 
         # Vola racer data for naming montages
         self.vola_racers: List[Dict] = self.raw_config.get('vola_racers', [])
@@ -120,6 +121,9 @@ class SkiFramesRunner:
         # Gate info for overlay (gate number, slope, distance, etc.)
         self.gate_info: Optional[Dict] = self.raw_config.get('gate_info') or None
         self.gate_info_corner: str = self.raw_config.get('gate_info_corner', 'top-right')
+
+        # Video clip generation (can disable to save memory on J40)
+        self.generate_videos: bool = self.raw_config.get('generate_videos', True)
 
         # Track which racers have been matched (prevent duplicate matches)
         self.matched_racer_indices: set = set()
@@ -167,6 +171,8 @@ class SkiFramesRunner:
             print(f"  Staging: {self.staging_output_dir}")
             print(f"  Section: {self.section_id}, Run: {self.run_number}")
         print(f"  Montage FPS list: {self.montage_fps_list}")
+        if self.source_fps_override:
+            print(f"  Source FPS override: {self.source_fps_override}")
         if self.vola_racers:
             print(f"  Vola racers loaded: {len(self.vola_racers)} ({self.vola_race})")
             # Show timing coverage summary
@@ -574,11 +580,11 @@ class SkiFramesRunner:
                     gate_info_corner=self.gate_info_corner,
                 )
 
-            if result:
-                # Use FPS value as variant key (e.g., "4.0fps")
-                fps_key = f"{fps_val:.1f}fps"
-                for variant_key, montage_result in result.results.items():
-                    merged_results[fps_key] = montage_result
+                if result:
+                    # Use FPS value as variant key (e.g., "4.0fps")
+                    fps_key = f"{fps_val:.1f}fps"
+                    for variant_key, montage_result in result.results.items():
+                        merged_results[fps_key] = montage_result
 
         if merged_results:
             # Compute elapsed time (seconds) between start and end trigger zones
@@ -611,42 +617,43 @@ class SkiFramesRunner:
                 except Exception as e:
                     print(f"  Embedding skipped: {e}")
 
-            # Generate video clip from raw frames
+            # Generate video clip from raw frames (can be disabled via config to save memory)
             video_clip_path = None
-            try:
-                video_dir = os.path.join(self.session_dir, 'videos')
-                video_filename = f"run_{run.run_number:03d}_{run.start_time.strftime('%H%M%S')}.mp4"
-                video_out_path = os.path.join(video_dir, video_filename)
+            if self.generate_videos:
+                try:
+                    video_dir = os.path.join(self.session_dir, 'videos')
+                    video_filename = f"run_{run.run_number:03d}_{run.start_time.strftime('%H%M%S')}.mp4"
+                    video_out_path = os.path.join(video_dir, video_filename)
 
-                # Build crop region (reuse same logic as embedding/montage)
-                vid_crop_region = self.raw_config.get('crop_zone')
-                if not vid_crop_region and self.raw_config.get('start_zone') and self.raw_config.get('end_zone'):
-                    try:
-                        from montage import CropRegion
-                        frame_h, frame_w = run.frames[0].shape[:2]
-                        cr = CropRegion.from_zones(
-                            self.raw_config['start_zone'],
-                            self.raw_config['end_zone'],
-                            frame_w, frame_h
-                        )
-                        vid_crop_region = {'x': cr.x, 'y': cr.y, 'w': cr.w, 'h': cr.h}
-                    except Exception:
-                        pass
+                    # Build crop region (reuse same logic as embedding/montage)
+                    vid_crop_region = self.raw_config.get('crop_zone')
+                    if not vid_crop_region and self.raw_config.get('start_zone') and self.raw_config.get('end_zone'):
+                        try:
+                            from montage import CropRegion
+                            frame_h, frame_w = run.frames[0].shape[:2]
+                            cr = CropRegion.from_zones(
+                                self.raw_config['start_zone'],
+                                self.raw_config['end_zone'],
+                                frame_w, frame_h
+                            )
+                            vid_crop_region = {'x': cr.x, 'y': cr.y, 'w': cr.w, 'h': cr.h}
+                        except Exception:
+                            pass
 
-                video_clip_path = generate_video_clip(
-                    frames=run.frames,
-                    output_path=video_out_path,
-                    source_fps=self.source_fps,
-                    crop_region=vid_crop_region,
-                    selected_logos=self.selected_logos,
-                    gate_info=self.gate_info,
-                    gate_info_corner=self.gate_info_corner,
-                )
-                if video_clip_path:
-                    size_kb = os.path.getsize(video_clip_path) / 1024
-                    print(f"  Video clip: {video_filename} ({size_kb:.0f} KB)")
-            except Exception as e:
-                print(f"  Video clip skipped: {e}")
+                    video_clip_path = generate_video_clip(
+                        frames=run.frames,
+                        output_path=video_out_path,
+                        source_fps=self.source_fps,
+                        crop_region=vid_crop_region,
+                        selected_logos=self.selected_logos,
+                        gate_info=self.gate_info,
+                        gate_info_corner=self.gate_info_corner,
+                    )
+                    if video_clip_path:
+                        size_kb = os.path.getsize(video_clip_path) / 1024
+                        print(f"  Video clip: {video_filename} ({size_kb:.0f} KB)")
+                except Exception as e:
+                    print(f"  Video clip skipped: {e}")
 
             # Trajectory generation disabled for now
             trajectory_path = None
@@ -676,11 +683,20 @@ class SkiFramesRunner:
             if racer:
                 merged_pair.racer_bib = racer.get('bib')
             self.montage_pairs.append(merged_pair)
+            print(f"  Added run {run.run_number} to montage_pairs (total: {len(self.montage_pairs)})")
 
+        print(f"  Updating manifest (merged_results: {bool(merged_results)}, pairs: {len(self.montage_pairs)})")
         self._update_manifest()
+
+        # Explicitly free frame memory to prevent OOM
+        if hasattr(run, 'frames') and run.frames is not None:
+            del run.frames
+            import gc
+            gc.collect()
 
     def _update_manifest(self):
         """Update the session manifest file."""
+        print(f"  [MANIFEST] Writing manifest with {len(self.montage_pairs)} runs to {self.session_dir}")
         runs = []
         for pair in self.montage_pairs:
             run_entry = {
@@ -739,12 +755,18 @@ class SkiFramesRunner:
         """Process a video file."""
         print(f"\nProcessing video: {video_path}")
 
-        # Get video FPS for montage generation
+        # Get video FPS for montage generation (config override takes precedence)
         import cv2
         cap = cv2.VideoCapture(video_path)
         if cap.isOpened():
-            self.source_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            detected_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
             cap.release()
+            if self.source_fps_override:
+                print(f"  Source FPS: {self.source_fps_override} (config override, detected {detected_fps:.1f})")
+                self.source_fps = self.source_fps_override
+            else:
+                print(f"  Source FPS: {detected_fps:.1f} (auto-detected)")
+                self.source_fps = detected_fps
 
         # Parse video start time from filename (Reolink format)
         video_start_time = parse_reolink_video_start_time(video_path, self.race_date)
@@ -785,12 +807,16 @@ class SkiFramesRunner:
 
             print(f"\nProcessing video {i+1}/{len(video_paths)}: {video_path}")
 
-            # Get video FPS for montage generation
+            # Get video FPS for montage generation (config override takes precedence)
             import cv2
             cap = cv2.VideoCapture(video_path)
             if cap.isOpened():
-                self.source_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+                detected_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
                 cap.release()
+                if self.source_fps_override:
+                    self.source_fps = self.source_fps_override
+                else:
+                    self.source_fps = detected_fps
 
             # Parse video start time from filename (Reolink format)
             video_start_time = parse_reolink_video_start_time(video_path, self.race_date)
@@ -832,14 +858,18 @@ class SkiFramesRunner:
         """Monitor RTSP stream."""
         url = rtsp_url or self.config.camera_url
         print(f"\nMonitoring RTSP stream: {url}")
-        # Probe stream FPS before starting detection so _on_run_complete
-        # uses the correct source_fps for frame sampling
+        # Probe stream FPS before starting detection (config override takes precedence)
         import cv2
         probe = cv2.VideoCapture(url)
         if probe.isOpened():
-            self.source_fps = probe.get(cv2.CAP_PROP_FPS) or 30.0
+            detected_fps = probe.get(cv2.CAP_PROP_FPS) or 30.0
             probe.release()
-            print(f"  Source FPS: {self.source_fps}")
+            if self.source_fps_override:
+                print(f"  Source FPS: {self.source_fps_override} (config override, detected {detected_fps:.1f})")
+                self.source_fps = self.source_fps_override
+            else:
+                print(f"  Source FPS: {detected_fps:.1f} (auto-detected)")
+                self.source_fps = detected_fps
         self.engine.run_on_rtsp(url)
         self._print_summary()
 
