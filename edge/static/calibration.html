@@ -1476,9 +1476,6 @@
                 <select id="camera">
                     <option value="">Loading cameras...</option>
                 </select>
-                <div class="help-text" id="cameraOffsetInfo" style="display: none;">
-                    Time offset: <span id="cameraOffsetPct">0</span>% into run
-                </div>
             </div>
 
             <div id="videoSelect">
@@ -1524,9 +1521,6 @@
                     <select id="volaCamera">
                         <option value="">Loading cameras...</option>
                     </select>
-                    <div class="help-text" id="volaCameraOffsetInfo">
-                        Time offset: <span id="volaCameraOffsetPct">0</span>% into run
-                    </div>
 
                     <div id="volaSectionInfo" style="margin-top: 8px; padding: 8px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; font-size: 13px; display: none;">
                         <strong id="volaSectionLabel">Section ?</strong>
@@ -1833,8 +1827,9 @@
                 </div>
             </div>
         </div>
+        </div><!-- end freeSkiMode -->
 
-        <!-- Processing Status -->
+        <!-- Processing Status (outside sub-modes so always visible when active) -->
         <div id="processingStatus" class="card" style="display: none;">
             <div class="card-title">Processing</div>
             <div id="processingInfo" style="margin-bottom: 12px;">
@@ -1869,7 +1864,6 @@
                 Stop Session
             </button>
         </div>
-        </div><!-- end freeSkiMode -->
         </div><!-- end montageMode -->
     </div>
 
@@ -1931,7 +1925,6 @@
             panStart: { x: 0, y: 0 },
             panStartOffset: { x: 0, y: 0 },
             cameraId: null,
-            cameraOffsetPct: 0,  // Camera time offset percentage
             endMode: 'duration',  // 'zone' or 'duration'
             runDurationSeconds: 2.0,
             montageFpsList: [4.0],
@@ -2066,12 +2059,10 @@
             volaRun1: document.getElementById('volaRun1'),
             volaRun2: document.getElementById('volaRun2'),
             volaCamera: document.getElementById('volaCamera'),
-            volaCameraOffsetInfo: document.getElementById('volaCameraOffsetInfo'),
             volaSectionInfo: document.getElementById('volaSectionInfo'),
             volaSectionLabel: document.getElementById('volaSectionLabel'),
             volaSectionGates: document.getElementById('volaSectionGates'),
             volaStagingPath: document.getElementById('volaStagingPath'),
-            volaCameraOffsetPct: document.getElementById('volaCameraOffsetPct'),
             volaRacersInfo: document.getElementById('volaRacersInfo'),
             volaRacerCount: document.getElementById('volaRacerCount'),
             volaFirstRacer: document.getElementById('volaFirstRacer'),
@@ -2079,8 +2070,6 @@
             loadVolaData: document.getElementById('loadVolaData'),
             populateManifest: document.getElementById('populateManifest'),
             populateManifestResult: document.getElementById('populateManifestResult'),
-            cameraOffsetInfo: document.getElementById('cameraOffsetInfo'),
-            cameraOffsetPct: document.getElementById('cameraOffsetPct'),
             raceDate: document.getElementById('raceDate'),
             availableDates: document.getElementById('availableDates'),
             volaVideoCount: document.getElementById('volaVideoCount'),
@@ -2255,24 +2244,10 @@
 
                 if (cameras.length > 0) {
                     state.cameraId = cameras[0].id;
-                    state.cameraOffsetPct = cameras[0].offset_pct || 0;
                     state.volaCamera = cameras[0].id;
-                    updateCameraOffsetDisplay();
                 }
             } catch (e) {
                 showStatus('Failed to load cameras', 'error');
-            }
-        }
-
-        function updateCameraOffsetDisplay() {
-            const camera = state.cameras.find(c => c.id === state.cameraId);
-            if (camera) {
-                elements.cameraOffsetPct.textContent = camera.offset_pct || 0;
-                elements.cameraOffsetInfo.style.display = 'block';
-            }
-            const volaCamera = state.cameras.find(c => c.id === state.volaCamera);
-            if (volaCamera) {
-                elements.volaCameraOffsetPct.textContent = volaCamera.offset_pct || 0;
             }
         }
 
@@ -2525,13 +2500,29 @@
                 }
 
                 mgr.style.display = 'block';
-                list.innerHTML = sessions.map(s => {
+
+                // Fetch run counts for running sessions
+                const sessionCards = await Promise.all(sessions.map(async s => {
                     const c = s.config;
                     const endStr = c.session_end_time
                         ? new Date(c.session_end_time).toLocaleTimeString()
                         : 'Unknown';
                     const startStr = c.session_start_time
                         ? new Date(c.session_start_time).toLocaleTimeString()
+                        : '';
+
+                    // Get run count for running sessions
+                    let runsDetected = 0;
+                    if (s.is_running && s.job_id) {
+                        try {
+                            const statusRes = await fetch(`/api/process/status/${s.job_id}`);
+                            const statusData = await statusRes.json();
+                            runsDetected = statusData.runs_detected || 0;
+                        } catch (e) { /* ignore */ }
+                    }
+
+                    const runsBadge = s.is_running
+                        ? `<span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-left: 8px;">${runsDetected} runs</span>`
                         : '';
                     const statusBadge = s.is_running
                         ? '<span style="color: #16a34a; font-weight: 600;">&#9679; Running</span>'
@@ -2549,7 +2540,7 @@
                                     border-radius: 8px; font-size: 13px;">
                             <div style="flex: 1; min-width: 0;">
                                 <div style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                    ${statusBadge} &nbsp;${label}
+                                    ${statusBadge}${runsBadge} &nbsp;${label}
                                 </div>
                                 <div style="color: #64748b; font-size: 12px; margin-top: 2px;">
                                     ${startStr ? startStr + ' \u2013 ' : ''}${endStr}
@@ -2565,7 +2556,8 @@
                             </button>
                         </div>
                     `;
-                }).join('');
+                }));
+                list.innerHTML = sessionCards.join('');
             } catch (e) {
                 console.error('Failed to load sessions:', e);
             }
@@ -2631,17 +2623,11 @@
 
             elements.camera.addEventListener('change', () => {
                 state.cameraId = elements.camera.value;
-                const camera = state.cameras.find(c => c.id === state.cameraId);
-                if (camera) {
-                    state.cameraOffsetPct = camera.offset_pct || 0;
-                }
-                updateCameraOffsetDisplay();
             });
 
             // Vola camera change
             elements.volaCamera.addEventListener('change', () => {
                 state.volaCamera = elements.volaCamera.value;
-                updateCameraOffsetDisplay();
                 updateSectionInfo();
             });
 
