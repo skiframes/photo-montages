@@ -157,63 +157,68 @@ class SlopeGeometry:
 
     def edge_angle_from_ski_base(self, ski: dict) -> float:
         """
-        Calculate ski edge angle from the ski base orientation relative to slope.
+        Calculate ski edge angle from the apparent aspect ratio of the ski base.
 
-        Edge angle = angle between ski base (bottom of ski) and slope plane.
-        Uses the rotated rectangle from ski detection to get base orientation.
+        A ski base is a 3D rectangle (~150cm long × 8cm wide).
+        When flat on snow, we see mainly the top surface (~6.5cm wide).
+        When edged, we see more of the base face, making it appear wider.
 
-        0° = ski flat on slope
-        90° = ski on full edge (perpendicular to slope)
+        The apparent aspect ratio reveals the edge angle:
+        - Flat (0° edge): aspect ratio ≈ 150/6.5 = 23:1 (seeing narrow top)
+        - Full edge (90°): aspect ratio ≈ 150/8 = 18.75:1 (seeing base face)
+
+        Edge angle = arcsin((ref_flat_ratio - apparent_ratio) / (ref_flat_ratio - ref_edge_ratio))
 
         Args:
-            ski: Ski detection dict with 'rotated_rect' and 'ski_line'
+            ski: Ski detection dict with 'ski_length', 'ski_base_width', 'rotated_rect'
 
         Returns:
-            Edge angle in degrees
+            Edge angle in degrees (0 = flat on snow, 90 = on full edge)
         """
         if not ski:
             return 0.0
 
-        # Get ski base orientation from rotated rect
-        rotated_rect = ski.get('rotated_rect')
-        ski_line = ski.get('ski_line')
+        ski_length = ski.get('ski_length', 0)
+        ski_width = ski.get('ski_base_width', 0)
 
-        if rotated_rect is None or ski_line is None:
+        if ski_length <= 0 or ski_width <= 0:
             return 0.0
 
-        # The rotated rect has 4 corners
-        # Find the short edge (ski base width direction)
-        pts = rotated_rect
+        # Apparent aspect ratio in pixels
+        apparent_ratio = ski_length / ski_width
 
-        # Calculate edge lengths
-        edge1_len = math.sqrt((pts[1][0]-pts[0][0])**2 + (pts[1][1]-pts[0][1])**2)
-        edge2_len = math.sqrt((pts[2][0]-pts[1][0])**2 + (pts[2][1]-pts[1][1])**2)
+        # Physical ski dimensions and viewing geometry
+        # SAM3 segments the visible ski silhouette including boot/binding region.
+        # The apparent aspect ratio varies widely based on:
+        # - Camera viewing angle
+        # - What part of ski is visible
+        # - Boot/binding inclusion
+        #
+        # Empirical observations from SAM3 detections:
+        # - Very wide detections (ratio 2-4): flat ski with boot, seen from front
+        # - Medium detections (ratio 5-10): ski at angle, partial boot visible
+        # - Narrow detections (ratio 10-20): edged ski, thin profile dominant
+        #
+        # Key insight: HIGHER ratio = thinner profile = MORE edged
+        ref_flat_ratio = 3.0    # Very wide detection (flat, frontal view with boot)
+        ref_edge_ratio = 15.0   # Narrow profile (edged ski)
 
-        # Short edge is the ski base width direction
-        if edge1_len < edge2_len:
-            # Edge 0-1 is short (base width)
-            base_dx = pts[1][0] - pts[0][0]
-            base_dy = pts[1][1] - pts[0][1]
+        # Edge angle from aspect ratio change
+        # Higher ratio = more edged (thinner profile)
+        # Lower ratio = flatter (wider appearance)
+        ratio_range = ref_edge_ratio - ref_flat_ratio
+
+        if apparent_ratio <= ref_flat_ratio:
+            # Very wide appearance = flat or even inverted
+            edge_angle = 0.0
+        elif apparent_ratio >= ref_edge_ratio:
+            # Very narrow profile = full edge or beyond
+            edge_angle = 90.0
         else:
-            # Edge 1-2 is short (base width)
-            base_dx = pts[2][0] - pts[1][0]
-            base_dy = pts[2][1] - pts[1][1]
-
-        # Ski base angle from horizontal in image
-        base_angle = math.degrees(math.atan2(base_dy, base_dx))
-
-        # Slope line angle (perpendicular to fall line)
-        # Fall line is at fall_line_angle from vertical
-        # Slope line is at fall_line_angle from horizontal
-        slope_line_angle = self.fall_line_angle_deg
-
-        # Edge angle = difference between ski base and slope line
-        edge_angle = base_angle - slope_line_angle
-
-        # Normalize to 0-90 range (absolute edge angle)
-        edge_angle = abs(edge_angle)
-        while edge_angle > 90:
-            edge_angle = 180 - edge_angle
+            # Linear interpolation: higher ratio = more edge
+            normalized = (apparent_ratio - ref_flat_ratio) / ratio_range
+            # Use arcsin for smooth transition
+            edge_angle = math.degrees(math.asin(min(1.0, max(0.0, normalized))))
 
         return edge_angle
 
@@ -1600,45 +1605,141 @@ class YOLOPoseAnalyzer:
     def _draw_ski_rectangles(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
                               left_ski: Optional[dict] = None, right_ski: Optional[dict] = None,
                               metrics: Optional[PoseMetrics] = None) -> np.ndarray:
-        """Draw ski base with full width rectangle when available, otherwise just the center line."""
+        """Draw ski base as 3D rectangle showing edge angle relative to slope."""
         output = frame.copy()
         thickness = max(2, int(3 * scale))
 
-        def draw_ski(ski, color):
+        def draw_ski_3d(ski, color, edge_angle_deg: float):
+            """Draw ski as a 3D box showing the base face tilted at edge_angle."""
             if not ski:
                 return
-            # Draw rotated rectangle if available (shows full ski base width)
-            if ski.get('rotated_rect') is not None:
-                box_pts = ski['rotated_rect']
-                cv2.drawContours(output, [box_pts], 0, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-                cv2.drawContours(output, [box_pts], 0, color, thickness, cv2.LINE_AA)
-                # Also draw center line
-                if ski.get('ski_line'):
-                    pt1, pt2 = ski['ski_line']
-                    cv2.line(output, pt1, pt2, (0, 0, 0), max(1, thickness - 1), cv2.LINE_AA)
-            elif ski.get('ski_line'):
-                # Fallback to just the line
-                pt1, pt2 = ski['ski_line']
-                cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-                cv2.line(output, pt1, pt2, color, thickness, cv2.LINE_AA)
 
-            # Show ski base width debug info (larger font for visibility)
-            if ski.get('ski_base_width') and ski.get('center'):
-                cx, cy = int(ski['center'][0]), int(ski['center'][1])
-                width_px = ski['ski_base_width']
+            ski_line = ski.get('ski_line')
+            if not ski_line:
+                return
+
+            pt1, pt2 = ski_line
+            ski_length = ski.get('ski_length', 0)
+            ski_width = ski.get('ski_base_width', 0)
+
+            if ski_length <= 0:
+                ski_length = math.sqrt((pt2[0]-pt1[0])**2 + (pt2[1]-pt1[1])**2)
+            if ski_width <= 0:
+                ski_width = ski_length / 20  # Default aspect ratio
+
+            # Calculate ski direction vector
+            dx = pt2[0] - pt1[0]
+            dy = pt2[1] - pt1[1]
+            length = math.sqrt(dx*dx + dy*dy)
+            if length < 1:
+                return
+
+            # Unit vectors along ski and perpendicular
+            ux, uy = dx / length, dy / length  # Along ski
+            px, py = -uy, ux  # Perpendicular (in image plane)
+
+            # The ski base face tilts based on edge angle
+            # At 0°, we see the top surface (narrow)
+            # At 90°, we see the base face (wider)
+            edge_rad = math.radians(edge_angle_deg)
+
+            # Calculate apparent width based on edge angle
+            # Base width projects: base_face_visible = width * sin(edge_angle)
+            # Ski thickness for 3D effect
+            SKI_THICKNESS_RATIO = 0.02  # ~3cm thickness for 150cm ski
+            thickness_px = ski_length * SKI_THICKNESS_RATIO
+
+            # 3D box vertices:
+            # Bottom face (base) has 4 corners, top face has 4 corners
+            # At edge angle θ:
+            # - Base face appears tilted, showing its width
+            # - We draw parallelogram to show 3D perspective
+
+            cx = (pt1[0] + pt2[0]) / 2
+            cy = (pt1[1] + pt2[1]) / 2
+            half_len = length / 2
+            half_width = ski_width / 2
+
+            # Edge creates a visual offset perpendicular to ski
+            # More edge = base face tilts toward camera = appears to shift
+            edge_offset = thickness_px * math.sin(edge_rad) * 0.5
+
+            # Draw 3D ski base box:
+            # 1. Bottom edge (base edge contacting snow)
+            # 2. Top edge (top surface edge)
+            # 3. Connecting edges showing the tilted base face
+
+            # Base edge (contact with snow) - shifted based on edge angle
+            base1 = (int(pt1[0] - px * edge_offset), int(pt1[1] - py * edge_offset))
+            base2 = (int(pt2[0] - px * edge_offset), int(pt2[1] - py * edge_offset))
+
+            # Top surface edge - opposite side
+            top_offset = half_width - edge_offset
+            top1 = (int(pt1[0] + px * top_offset), int(pt1[1] + py * top_offset))
+            top2 = (int(pt2[0] + px * top_offset), int(pt2[1] + py * top_offset))
+
+            # Bottom surface edge - base face showing
+            base_face_height = thickness_px * math.cos(edge_rad)  # How much of base face visible
+            bottom1 = (int(pt1[0] - px * (edge_offset + base_face_height)), int(pt1[1] - py * (edge_offset + base_face_height)))
+            bottom2 = (int(pt2[0] - px * (edge_offset + base_face_height)), int(pt2[1] - py * (edge_offset + base_face_height)))
+
+            # Draw filled 3D shape
+            # Side face (base) - darker shade to show depth
+            if edge_angle_deg > 5:
+                base_face = np.array([base1, base2, bottom2, bottom1], dtype=np.int32)
+                # Semi-transparent fill for base face
+                overlay = output.copy()
+                dark_color = tuple(max(0, int(c * 0.4)) for c in color)
+                cv2.fillPoly(overlay, [base_face], dark_color)
+                cv2.addWeighted(overlay, 0.5, output, 0.5, 0, output)
+
+            # Top face
+            top_face = np.array([base1, base2, top2, top1], dtype=np.int32)
+            overlay = output.copy()
+            cv2.fillPoly(overlay, [top_face], color)
+            cv2.addWeighted(overlay, 0.3, output, 0.7, 0, output)
+
+            # Draw edges with thick lines
+            # Contact edge (where ski meets snow) - brightest
+            cv2.line(output, base1, base2, (0, 0, 0), thickness + 3, cv2.LINE_AA)
+            cv2.line(output, base1, base2, (0, 255, 255), thickness + 1, cv2.LINE_AA)  # Cyan = contact edge
+
+            # Other edges
+            cv2.line(output, top1, top2, (0, 0, 0), thickness + 1, cv2.LINE_AA)
+            cv2.line(output, top1, top2, color, thickness - 1, cv2.LINE_AA)
+            cv2.line(output, base1, top1, (0, 0, 0), thickness, cv2.LINE_AA)
+            cv2.line(output, base1, top1, color, thickness - 1, cv2.LINE_AA)
+            cv2.line(output, base2, top2, (0, 0, 0), thickness, cv2.LINE_AA)
+            cv2.line(output, base2, top2, color, thickness - 1, cv2.LINE_AA)
+
+            # If edge angle > 5°, draw the base face edge
+            if edge_angle_deg > 5:
+                cv2.line(output, bottom1, bottom2, (0, 0, 0), thickness, cv2.LINE_AA)
+                cv2.line(output, bottom1, bottom2, tuple(max(0, int(c * 0.6)) for c in color), thickness - 1, cv2.LINE_AA)
+                cv2.line(output, base1, bottom1, (0, 0, 0), thickness, cv2.LINE_AA)
+                cv2.line(output, base2, bottom2, (0, 0, 0), thickness, cv2.LINE_AA)
+
+            # Show edge angle and aspect ratio debug info
+            if ski.get('center'):
+                cx_ski, cy_ski = int(ski['center'][0]), int(ski['center'][1])
+                ratio = ski_length / ski_width if ski_width > 0 else 0
                 method = ski.get('method', '?')
-                label = f"W:{width_px:.0f}px ({method})"
-                debug_font = 0.6 * scale
-                cv2.putText(output, label, (cx - int(60 * scale), cy + int(45 * scale)),
+                label = f"{edge_angle_deg:.0f}° AR:{ratio:.1f} ({method})"
+                debug_font = 0.65 * scale
+                cv2.putText(output, label, (cx_ski - int(80 * scale), cy_ski + int(50 * scale)),
                            cv2.FONT_HERSHEY_SIMPLEX, debug_font, (0, 0, 0),
-                           max(2, int(2 * scale)), cv2.LINE_AA)  # Black outline
-                cv2.putText(output, label, (cx - int(60 * scale), cy + int(45 * scale)),
+                           max(2, int(2 * scale)), cv2.LINE_AA)
+                cv2.putText(output, label, (cx_ski - int(80 * scale), cy_ski + int(50 * scale)),
                            cv2.FONT_HERSHEY_SIMPLEX, debug_font, (255, 255, 0),
-                           max(1, int(scale)), cv2.LINE_AA)  # Yellow text
+                           max(1, int(scale)), cv2.LINE_AA)
 
-        # Left ski in cyan, right ski in white
-        draw_ski(left_ski, (255, 255, 0))  # Cyan
-        draw_ski(right_ski, (255, 255, 255))  # White
+        # Get edge angles from metrics if available
+        edge_left = metrics.edge_angle_left if metrics else 45.0
+        edge_right = metrics.edge_angle_right if metrics else 45.0
+
+        # Draw 3D ski representations
+        draw_ski_3d(left_ski, (255, 255, 0), edge_left)  # Cyan
+        draw_ski_3d(right_ski, (255, 255, 255), edge_right)  # White
 
         # Draw ski edge contact points "L" and "R" under ankles on internal side
         def get_pt(idx):
@@ -1803,16 +1904,16 @@ class YOLOPoseAnalyzer:
         h, w = frame.shape[:2]
 
         font = cv2.FONT_HERSHEY_SIMPLEX
-        label_font = 0.55 * scale
-        value_font = 0.7 * scale
+        label_font = 0.6 * scale
+        value_font = 0.75 * scale
         text_thickness = max(1, int(2 * scale))
         value_thickness = max(2, int(2 * scale))
 
-        # Position: TOP-left corner
-        panel_w = int(300 * scale)
-        panel_h = int(420 * scale)  # Taller to fit title + warning + metrics + model info
+        # Position: Lower on left side (30% down from top)
+        panel_w = int(340 * scale)
+        panel_h = int(520 * scale)  # Taller to fit title + warning + metrics + model info with larger fonts
         panel_x = int(15 * scale)
-        panel_y = int(15 * scale)  # Top-left corner
+        panel_y = int(h * 0.25)  # 25% down from top
 
         # Semi-transparent background
         overlay = output.copy()
@@ -1898,9 +1999,9 @@ class YOLOPoseAnalyzer:
                        font, value_font, (255, 255, 255), value_thickness, cv2.LINE_AA)
 
         # Draw additional metrics (smaller, below main metrics)
-        small_label_font = 0.45 * scale
-        small_value_font = 0.55 * scale
-        small_line_h = int(22 * scale)
+        small_label_font = 0.55 * scale
+        small_value_font = 0.65 * scale
+        small_line_h = int(26 * scale)
         extra_start_y = start_y + len(main_items) * line_h + int(8 * scale)
 
         # Separator line
@@ -1937,8 +2038,8 @@ class YOLOPoseAnalyzer:
                 (panel_x + panel_w - int(10 * scale), model_start_y - int(6 * scale)), (60, 60, 60), 1)
 
         # Model info (larger font for better visibility)
-        model_font = 0.5 * scale
-        model_line_h = int(22 * scale)
+        model_font = 0.6 * scale
+        model_line_h = int(26 * scale)
         model_color = (150, 150, 150)
 
         # Pose model
