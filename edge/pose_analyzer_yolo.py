@@ -1043,6 +1043,49 @@ class YOLOPoseAnalyzer:
 
         return ((com_x, com_y), com_inside)
 
+    def _compute_edge_angle(self, ski: dict, slope_ref_angle: float) -> float:
+        """
+        Calculate edge angle from ski base orientation relative to slope.
+
+        Args:
+            ski: Ski detection dict with 'rotated_rect' from SAM3
+            slope_ref_angle: Slope angle from SAM3 snow detection or calibration
+
+        Returns:
+            Edge angle in degrees (0 = flat on slope, 90 = full edge)
+        """
+        if not ski:
+            return 0.0
+
+        rotated_rect = ski.get('rotated_rect')
+        if rotated_rect is None:
+            return 0.0
+
+        pts = rotated_rect
+
+        # Find short edge (ski base width direction)
+        edge1_len = math.sqrt((pts[1][0]-pts[0][0])**2 + (pts[1][1]-pts[0][1])**2)
+        edge2_len = math.sqrt((pts[2][0]-pts[1][0])**2 + (pts[2][1]-pts[1][1])**2)
+
+        if edge1_len < edge2_len:
+            base_dx = pts[1][0] - pts[0][0]
+            base_dy = pts[1][1] - pts[0][1]
+        else:
+            base_dx = pts[2][0] - pts[1][0]
+            base_dy = pts[2][1] - pts[1][1]
+
+        # Ski base width angle
+        base_width_angle = math.degrees(math.atan2(base_dy, base_dx))
+
+        # Edge angle = difference from slope reference
+        edge_angle = abs(base_width_angle - slope_ref_angle)
+
+        # Normalize to 0-90
+        while edge_angle > 90:
+            edge_angle = 180 - edge_angle
+
+        return edge_angle
+
     def compute_metrics(self, keypoints: np.ndarray,
                         left_ski: Optional[dict] = None,
                         right_ski: Optional[dict] = None,
@@ -1133,21 +1176,29 @@ class YOLOPoseAnalyzer:
             knee_angle_right = angle_at_joint(right_hip[:2], right_knee[:2], right_ankle[:2])
 
         # Edge angles: ski base tilt relative to slope plane
-        # Slope plane = calibration/terrain (independent 3D reference)
+        # Slope plane = SAM3-detected snow surface (real 3D terrain)
         # Ski base = SAM3-detected ski orientation
         # Edge angle = angle between ski base and slope plane
         edge_angle_left = 0.0
         edge_angle_right = 0.0
 
-        # Use calibration slope as reference (NOT ski-derived - that would be circular)
-        self._current_local_slope = None  # Always use calibration for overlays
+        # Detect slope from snow surface using SAM3 (preferred over calibration)
+        sam3_slope = getattr(self, '_sam3_detected_slope', None)
+        if sam3_slope is not None:
+            # Use SAM3-detected slope angle
+            slope_ref_angle = sam3_slope
+        else:
+            # Fallback to calibration slope
+            slope_ref_angle = geom.fall_line_angle_deg
 
-        # Edge angle = ski base orientation vs calibration slope plane
+        self._current_local_slope = slope_ref_angle
+
+        # Edge angle = ski base orientation vs detected slope
         if left_ski:
-            edge_angle_left = geom.edge_angle_from_ski_base(left_ski)
+            edge_angle_left = self._compute_edge_angle(left_ski, slope_ref_angle)
 
         if right_ski:
-            edge_angle_right = geom.edge_angle_from_ski_base(right_ski)
+            edge_angle_right = self._compute_edge_angle(right_ski, slope_ref_angle)
 
         # Edge symmetry as percentage (100% = perfect)
         max_edge = max(abs(edge_angle_left), abs(edge_angle_right), 1)
@@ -1226,6 +1277,10 @@ class YOLOPoseAnalyzer:
 
         # Detect skis (uses SAM3 if available)
         left_ski, right_ski = self._detect_skis(frame, person_kpts, frame_id)
+
+        # Detect slope from snow surface using SAM3 (for edge angle calculation)
+        if self.use_sam and self.sam_version == 'sam3':
+            self._detect_slope_from_snow(frame)
 
         # Get SAM3 body mask for refined metrics (inclination, CoM inside/outside)
         body_mask = None
@@ -1432,6 +1487,78 @@ class YOLOPoseAnalyzer:
         except Exception as e:
             print(f"SAM3 text segmentation error: {e}")
             return []
+
+    def _detect_slope_from_snow(self, frame: np.ndarray) -> Optional[float]:
+        """
+        Use SAM3 to segment snow/terrain and derive slope angle.
+
+        SAM3 text prompt "snow" segments the snow surface.
+        The slope angle is derived from the snow surface orientation.
+
+        Returns:
+            Slope angle in degrees (from horizontal), or None if detection fails
+        """
+        if self.sam3_text_predictor is None or self.sam_version != 'sam3':
+            return None
+
+        try:
+            # Set the image for SAM3
+            self.sam3_text_predictor.set_image(frame)
+
+            # Query with text prompt "snow"
+            results = self.sam3_text_predictor(text=["snow"])
+
+            if not results or len(results) == 0:
+                return None
+
+            # Find the largest snow mask (main terrain)
+            best_mask = None
+            best_area = 0
+
+            for result in results:
+                if not hasattr(result, 'masks') or result.masks is None:
+                    continue
+
+                masks = result.masks.data.cpu().numpy()
+                for mask in masks:
+                    mask_binary = (mask > 0.5).astype(np.uint8)
+                    area = np.sum(mask_binary)
+                    if area > best_area:
+                        best_area = area
+                        best_mask = mask_binary
+
+            if best_mask is None or best_area < 1000:
+                return None
+
+            # Find contours of snow surface
+            contours, _ = cv2.findContours(best_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return None
+
+            # Use the largest contour (main snow surface)
+            largest = max(contours, key=cv2.contourArea)
+
+            if len(largest) < 10:
+                return None
+
+            # Fit a line to the snow surface boundary
+            # The slope of this line represents the terrain angle
+            line = cv2.fitLine(largest, cv2.DIST_L2, 0, 0.01, 0.01)
+            vx, vy = float(line[0][0]), float(line[1][0])
+
+            # Calculate slope angle from horizontal
+            # atan2(vy, vx) gives angle of the line
+            slope_angle = math.degrees(math.atan2(vy, vx))
+
+            # Store the detected slope for visualization
+            self._sam3_detected_slope = slope_angle
+            self._sam3_snow_mask = best_mask
+
+            return slope_angle
+
+        except Exception as e:
+            print(f"SAM3 snow detection error: {e}")
+            return None
 
     def _find_ski_base_line(self, frame: np.ndarray, x1: int, y1: int, x2: int, y2: int) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """Find the ski base line by detecting dark pixels within the bounding box.
