@@ -561,6 +561,7 @@ class YOLOPoseAnalyzer:
         # Auto-detect CUDA device
         import torch
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model_size = model_size  # Store for display
 
         model_name = f'yolov8{model_size}-pose.pt'
         print(f"Loading {model_name} on {self.device}...")
@@ -1232,12 +1233,20 @@ class YOLOPoseAnalyzer:
                         cx, cy = float(line[2][0]), float(line[3][0])
 
                         rect = cv2.minAreaRect(largest_contour)
-                        length = max(rect[1]) / 2
+                        rect_center, rect_size, rect_angle = rect
+                        # rect_size is (width, height) - longer dimension is ski length
+                        ski_length = max(rect_size)
+                        ski_base_width = min(rect_size)  # Width of the ski base (for edge angle)
+                        length = ski_length / 2
 
                         pt1 = (int(cx - vx * length), int(cy - vy * length))
                         pt2 = (int(cx + vx * length), int(cy + vy * length))
                         ski_line = (pt1, pt2)
                         direction_angle = math.degrees(math.atan2(vy, vx))
+
+                        # Get rotated rect corners for drawing the full ski base
+                        box_points = cv2.boxPoints(rect)
+                        box_points = np.int32(box_points)
 
                         if i < len(boxes):
                             x1, y1, x2, y2 = boxes[i]
@@ -1254,6 +1263,9 @@ class YOLOPoseAnalyzer:
                             'center': (cx, cy),
                             'direction_angle': direction_angle,
                             'ski_line': ski_line,
+                            'ski_base_width': ski_base_width,  # Width of ski base in pixels
+                            'ski_length': ski_length,  # Length of ski in pixels
+                            'rotated_rect': box_points,  # 4 corners of rotated bounding box
                             'width': width,
                             'height': height,
                             'is_side_view': is_side_view,
@@ -1394,6 +1406,10 @@ class YOLOPoseAnalyzer:
                 # Side view if ski box is elongated (width > 1.5 * height)
                 is_side_view = width > 1.5 * height
 
+                # Estimate ski base width from bounding box (less accurate than SAM)
+                ski_base_width = min(width, height)  # Approximate width
+                ski_length = max(width, height)
+
                 detections.append({
                     'box': (x1, y1, x2, y2),
                     'conf': conf,
@@ -1403,6 +1419,8 @@ class YOLOPoseAnalyzer:
                     'height': height,
                     'is_side_view': is_side_view,
                     'ski_line': ski_line,
+                    'ski_base_width': ski_base_width,  # Width of ski base in pixels
+                    'ski_length': ski_length,  # Length of ski in pixels
                     'method': 'yolo'
                 })
 
@@ -1433,21 +1451,41 @@ class YOLOPoseAnalyzer:
     def _draw_ski_rectangles(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
                               left_ski: Optional[dict] = None, right_ski: Optional[dict] = None,
                               metrics: Optional[PoseMetrics] = None) -> np.ndarray:
-        """Draw ski base lines only (no bounding boxes)."""
+        """Draw ski base with full width rectangle when available, otherwise just the center line."""
         output = frame.copy()
         thickness = max(2, int(3 * scale))
 
-        # Draw left ski line (no rectangle)
-        if left_ski and left_ski.get('ski_line'):
-            pt1, pt2 = left_ski['ski_line']
-            cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-            cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
+        def draw_ski(ski, color):
+            if not ski:
+                return
+            # Draw rotated rectangle if available (shows full ski base width)
+            if ski.get('rotated_rect') is not None:
+                box_pts = ski['rotated_rect']
+                cv2.drawContours(output, [box_pts], 0, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+                cv2.drawContours(output, [box_pts], 0, color, thickness, cv2.LINE_AA)
+                # Also draw center line
+                if ski.get('ski_line'):
+                    pt1, pt2 = ski['ski_line']
+                    cv2.line(output, pt1, pt2, (0, 0, 0), max(1, thickness - 1), cv2.LINE_AA)
+            elif ski.get('ski_line'):
+                # Fallback to just the line
+                pt1, pt2 = ski['ski_line']
+                cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+                cv2.line(output, pt1, pt2, color, thickness, cv2.LINE_AA)
 
-        # Draw right ski line (no rectangle)
-        if right_ski and right_ski.get('ski_line'):
-            pt1, pt2 = right_ski['ski_line']
-            cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-            cv2.line(output, pt1, pt2, (255, 255, 255), thickness, cv2.LINE_AA)
+            # Show ski base width debug info
+            if ski.get('ski_base_width') and ski.get('center'):
+                cx, cy = int(ski['center'][0]), int(ski['center'][1])
+                width_px = ski['ski_base_width']
+                method = ski.get('method', '?')
+                label = f"W:{width_px:.0f}px ({method})"
+                cv2.putText(output, label, (cx - 40, cy + int(30 * scale)),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.35 * scale, (255, 255, 255),
+                           max(1, int(scale)), cv2.LINE_AA)
+
+        # Left ski in cyan, right ski in white
+        draw_ski(left_ski, (255, 255, 0))  # Cyan
+        draw_ski(right_ski, (255, 255, 255))  # White
 
         return output
 
@@ -1573,7 +1611,7 @@ class YOLOPoseAnalyzer:
 
         # Position: TOP-left corner
         panel_w = int(300 * scale)
-        panel_h = int(340 * scale)  # Taller to fit title + warning + 5 main + 4 secondary metrics
+        panel_h = int(420 * scale)  # Taller to fit title + warning + metrics + model info
         panel_x = int(15 * scale)
         panel_y = int(15 * scale)  # Top-left corner
 
@@ -1692,6 +1730,40 @@ class YOLOPoseAnalyzer:
             cv2.putText(output, value_str, (panel_x + panel_w - tw - int(10 * scale), y),
                        font, small_value_font, (220, 220, 220), 1, cv2.LINE_AA)
 
+        # Model info section at the bottom
+        model_start_y = extra_start_y + len(extra_items) * small_line_h + int(12 * scale)
+
+        # Separator line
+        cv2.line(output, (panel_x + int(10 * scale), model_start_y - int(6 * scale)),
+                (panel_x + panel_w - int(10 * scale), model_start_y - int(6 * scale)), (60, 60, 60), 1)
+
+        # Model info (very small font)
+        model_font = 0.35 * scale
+        model_line_h = int(16 * scale)
+        model_color = (120, 120, 120)
+
+        # Pose model
+        cv2.putText(output, f"Pose: yolov8{self.model_size}-pose",
+                   (panel_x + int(10 * scale), model_start_y),
+                   font, model_font, model_color, 1, cv2.LINE_AA)
+
+        # Device
+        cv2.putText(output, f"Device: {self.device}",
+                   (panel_x + int(10 * scale), model_start_y + model_line_h),
+                   font, model_font, model_color, 1, cv2.LINE_AA)
+
+        # SAM version
+        sam_str = self.sam_version if self.sam_version else "none"
+        cv2.putText(output, f"SAM: {sam_str}",
+                   (panel_x + int(10 * scale), model_start_y + 2 * model_line_h),
+                   font, model_font, model_color, 1, cv2.LINE_AA)
+
+        # Ski detector
+        ski_str = "yolo+sam" if self.ski_detector and self.sam_model else ("yolo" if self.ski_detector else "none")
+        cv2.putText(output, f"Ski: {ski_str}",
+                   (panel_x + int(10 * scale), model_start_y + 3 * model_line_h),
+                   font, model_font, model_color, 1, cv2.LINE_AA)
+
         return output
 
     def get_metrics_for_export(self) -> dict:
@@ -1756,7 +1828,7 @@ class YOLOPoseAnalyzer:
     def _draw_extended_lines(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
         """Draw extended lines through shoulders and hips (no slope reference lines)."""
         output = frame.copy()
-        line_ext = int(100 * scale)
+        line_ext = int(50 * scale)  # Reduced by half for cleaner visualization
         thickness = max(2, int(3 * scale))
 
         def get_pt(idx):
@@ -1941,6 +2013,16 @@ class YOLOPoseAnalyzer:
             cv2.putText(output, "BB", (bx + r + 3, by + 3),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.35 * scale, (255, 200, 100),
                        max(1, int(scale)), cv2.LINE_AA)
+
+            # Draw line from belly button to center of neck (spine line)
+            ls = keypoints[Keypoints.LEFT_SHOULDER]
+            rs = keypoints[Keypoints.RIGHT_SHOULDER]
+            if ls[2] > 0.3 and rs[2] > 0.3:
+                neck_x = int((ls[0] + rs[0]) / 2)
+                neck_y = int((ls[1] + rs[1]) / 2)
+                # Draw spine line (orange, dashed effect with shorter segments)
+                cv2.line(output, (bx, by), (neck_x, neck_y), (255, 200, 100),
+                        max(2, int(3 * scale)), cv2.LINE_AA)
 
         # Draw center of mass (CoM)
         if metrics and metrics.center_of_mass:
