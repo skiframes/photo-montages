@@ -60,6 +60,16 @@ except ImportError:
     except ImportError:
         pass
 
+# Depth Anything v2 for monocular depth estimation (for dynamic slope detection)
+HAS_DEPTH = False
+DepthAnythingModel = None
+DepthAnythingProcessor = None
+try:
+    from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+    HAS_DEPTH = True
+except ImportError:
+    pass
+
 
 @dataclass
 class SlopeGeometry:
@@ -150,6 +160,106 @@ class SlopeGeometry:
             if cross_len > 0:
                 # Roll angle from cross-slope tilt
                 geom.roll_deg = math.degrees(math.atan2(cross_dy, cross_dx))
+
+        geom._compute_3d_vectors()
+
+        return geom
+
+    @classmethod
+    def from_depth_map(cls, depth_map: np.ndarray, snow_mask: np.ndarray,
+                       skier_position: Tuple[float, float], local_radius: int = 150) -> Optional['SlopeGeometry']:
+        """
+        Compute local slope geometry from depth map and snow mask.
+
+        Uses monocular depth estimation to get 3D terrain shape, then fits
+        a plane to the snow surface near the skier's position.
+
+        Args:
+            depth_map: HxW array of depth values (higher = farther)
+            snow_mask: HxW binary mask of snow surface
+            skier_position: (x, y) position of skier in image
+            local_radius: Radius around skier to sample for local slope
+
+        Returns:
+            SlopeGeometry with fall_line, pitch, roll from fitted plane
+        """
+        if depth_map is None or snow_mask is None:
+            return None
+
+        h, w = depth_map.shape[:2]
+        cx, cy = int(skier_position[0]), int(skier_position[1])
+
+        # Define local region around skier (below them, where slope is)
+        # Sample points below the skier's feet
+        y_start = max(0, cy)
+        y_end = min(h, cy + local_radius * 2)
+        x_start = max(0, cx - local_radius)
+        x_end = min(w, cx + local_radius)
+
+        if y_end <= y_start or x_end <= x_start:
+            return None
+
+        # Get depth values within snow mask in local region
+        local_snow = snow_mask[y_start:y_end, x_start:x_end]
+        local_depth = depth_map[y_start:y_end, x_start:x_end]
+
+        # Sample points where snow is detected
+        snow_points = np.where(local_snow > 0)
+        if len(snow_points[0]) < 100:
+            return None
+
+        # Create 3D point cloud: (x, y, depth)
+        # x, y are image coordinates, depth from depth estimation
+        points_y = snow_points[0] + y_start  # Image Y
+        points_x = snow_points[1] + x_start  # Image X
+        points_z = local_depth[snow_points]  # Depth
+
+        # Subsample for efficiency (max 1000 points)
+        if len(points_x) > 1000:
+            indices = np.random.choice(len(points_x), 1000, replace=False)
+            points_x = points_x[indices]
+            points_y = points_y[indices]
+            points_z = points_z[indices]
+
+        # Fit a plane to the 3D points: ax + by + c = z
+        # Using least squares: [x, y, 1] @ [a, b, c].T = z
+        A = np.column_stack([points_x, points_y, np.ones(len(points_x))])
+        try:
+            coeffs, residuals, rank, s = np.linalg.lstsq(A, points_z, rcond=None)
+        except np.linalg.LinAlgError:
+            return None
+
+        a, b, c = coeffs
+
+        # Plane normal vector: (-a, -b, 1) normalized
+        normal = np.array([-a, -b, 1.0])
+        normal = normal / np.linalg.norm(normal)
+
+        # Fall line direction: steepest descent on the plane
+        # Project gravity (0, 1, 0) onto plane and normalize
+        # Fall line in image = direction where depth increases fastest
+        fall_line_2d = np.array([a, b])
+        fall_line_len = np.linalg.norm(fall_line_2d)
+
+        if fall_line_len < 0.001:
+            # Nearly horizontal slope
+            fall_line_angle = 0.0
+            pitch = 0.0
+        else:
+            fall_line_2d = fall_line_2d / fall_line_len
+            # Angle from vertical (positive Y is down in image)
+            fall_line_angle = math.degrees(math.atan2(fall_line_2d[0], fall_line_2d[1]))
+            # Pitch from the slope of the plane
+            pitch = math.degrees(math.atan(fall_line_len))
+
+        geom = cls()
+        geom.fall_line_angle_deg = fall_line_angle
+        geom.pitch_deg = pitch
+        geom.slope_normal = normal
+
+        # Cross-slope direction (perpendicular to fall line in image plane)
+        cross_slope_2d = np.array([-fall_line_2d[1], fall_line_2d[0]]) if fall_line_len > 0.001 else np.array([1, 0])
+        geom.roll_deg = math.degrees(math.atan2(cross_slope_2d[1], cross_slope_2d[0]))
 
         geom._compute_3d_vectors()
 
@@ -785,6 +895,26 @@ class YOLOPoseAnalyzer:
         # Compatibility aliases
         self.sam3_predictor = self.sam_model  # Legacy alias
 
+        # Depth estimation for dynamic slope detection
+        self.depth_model = None
+        self.depth_processor = None
+        self._cached_depth_map = None
+        self._cached_snow_mask = None
+
+        if HAS_DEPTH:
+            try:
+                print("Loading Depth Anything v2 for slope estimation...")
+                # Use small model for speed, can use larger for accuracy
+                model_id = "depth-anything/Depth-Anything-V2-Small-hf"
+                self.depth_processor = AutoImageProcessor.from_pretrained(model_id)
+                self.depth_model = AutoModelForDepthEstimation.from_pretrained(model_id)
+                self.depth_model.to(self.device)
+                self.depth_model.eval()
+                print(f"Depth Anything v2 loaded on {self.device}.")
+            except Exception as e:
+                print(f"Failed to load depth model: {e}")
+                print("Falling back to ski-direction slope estimation.")
+
         # Gate info for display (set via set_gate_info())
         self.current_gate = None
 
@@ -1176,20 +1306,21 @@ class YOLOPoseAnalyzer:
             knee_angle_right = angle_at_joint(right_hip[:2], right_knee[:2], right_ankle[:2])
 
         # Edge angles: ski base tilt relative to slope plane
-        # Slope plane derived from SAM3-detected ski directions (they point downhill)
-        # Edge angle = how much ski base width tilts away from cross-slope
+        # Slope plane from depth estimation (best) or calibration (fallback)
         edge_angle_left = 0.0
         edge_angle_right = 0.0
 
-        # Derive slope from detected ski orientations (SAM3)
-        # Ski long axis = fall line direction (skis point downhill)
-        # This is NOT circular: we use ski DIRECTION for slope, then compare ski BASE TILT
-        ski_slope = SlopeGeometry.from_detected_skis(left_ski, right_ski)
-        if ski_slope is not None:
-            slope_ref_angle = ski_slope.fall_line_angle_deg
+        # Priority for slope estimation:
+        # 1. Depth-based slope (from Depth Anything + SAM3 snow mask)
+        # 2. Calibration-based slope (from 4-pole calibration file)
+        depth_slope = getattr(self, '_depth_slope_geometry', None)
+        if depth_slope is not None:
+            slope_ref_angle = depth_slope.fall_line_angle_deg
+            self._current_slope_source = 'depth'
         else:
             # Fallback to calibration
             slope_ref_angle = geom.fall_line_angle_deg
+            self._current_slope_source = 'calibration'
 
         self._current_local_slope = slope_ref_angle
 
@@ -1280,6 +1411,28 @@ class YOLOPoseAnalyzer:
 
         # Detect skis (uses SAM3 if available)
         left_ski, right_ski = self._detect_skis(frame, person_kpts, frame_id)
+
+        # Clear depth/snow cache for new frame
+        self._cached_depth_map = None
+        self._cached_snow_mask = None
+
+        # Estimate slope from depth map (dynamic 3D terrain detection)
+        self._depth_slope_geometry = None
+        if self.depth_model is not None:
+            # Use ankle position as skier location for local slope estimation
+            left_ankle = person_kpts[Keypoints.LEFT_ANKLE]
+            right_ankle = person_kpts[Keypoints.RIGHT_ANKLE]
+            if left_ankle[2] > 0.3 and right_ankle[2] > 0.3:
+                skier_pos = ((left_ankle[0] + right_ankle[0]) / 2,
+                            (left_ankle[1] + right_ankle[1]) / 2)
+            elif left_ankle[2] > 0.3:
+                skier_pos = (left_ankle[0], left_ankle[1])
+            elif right_ankle[2] > 0.3:
+                skier_pos = (right_ankle[0], right_ankle[1])
+            else:
+                skier_pos = (frame.shape[1] / 2, frame.shape[0] * 0.7)
+
+            self._depth_slope_geometry = self._estimate_slope_from_depth(frame, skier_pos)
 
         # Get SAM3 body mask for refined metrics (inclination, CoM inside/outside)
         body_mask = None
@@ -1558,6 +1711,107 @@ class YOLOPoseAnalyzer:
         except Exception as e:
             print(f"SAM3 snow detection error: {e}")
             return None
+
+    def _estimate_depth(self, frame: np.ndarray) -> Optional[np.ndarray]:
+        """
+        Estimate depth map using Depth Anything v2.
+
+        Returns:
+            HxW numpy array of depth values (higher = farther)
+        """
+        if self.depth_model is None or self.depth_processor is None:
+            return None
+
+        try:
+            import torch
+            from PIL import Image
+
+            # Convert BGR to RGB PIL Image
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(rgb)
+
+            # Process image
+            inputs = self.depth_processor(images=pil_image, return_tensors="pt")
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+            # Inference
+            with torch.no_grad():
+                outputs = self.depth_model(**inputs)
+                predicted_depth = outputs.predicted_depth
+
+            # Interpolate to original size
+            prediction = torch.nn.functional.interpolate(
+                predicted_depth.unsqueeze(1),
+                size=frame.shape[:2],
+                mode="bicubic",
+                align_corners=False,
+            )
+
+            # Convert to numpy
+            depth_map = prediction.squeeze().cpu().numpy()
+
+            return depth_map
+
+        except Exception as e:
+            print(f"Depth estimation error: {e}")
+            return None
+
+    def _estimate_slope_from_depth(self, frame: np.ndarray,
+                                    skier_position: Tuple[float, float]) -> Optional[SlopeGeometry]:
+        """
+        Estimate local slope using depth map + snow mask.
+
+        Combines monocular depth estimation with SAM3 snow segmentation
+        to fit a 3D plane to the terrain near the skier.
+
+        Args:
+            frame: Video frame
+            skier_position: (x, y) position of skier's feet
+
+        Returns:
+            SlopeGeometry with fall_line, pitch, roll from fitted plane
+        """
+        # Get depth map (cached if already computed this frame)
+        if self._cached_depth_map is None:
+            self._cached_depth_map = self._estimate_depth(frame)
+
+        if self._cached_depth_map is None:
+            return None
+
+        # Get snow mask from SAM3
+        if self._cached_snow_mask is None and self.sam3_text_predictor is not None:
+            try:
+                self.sam3_text_predictor.set_image(frame)
+                results = self.sam3_text_predictor(text=["snow"])
+
+                if results and len(results) > 0:
+                    for result in results:
+                        if hasattr(result, 'masks') and result.masks is not None:
+                            masks = result.masks.data.cpu().numpy()
+                            if len(masks) > 0:
+                                # Use largest snow mask
+                                areas = [np.sum(m > 0.5) for m in masks]
+                                best_idx = np.argmax(areas)
+                                self._cached_snow_mask = (masks[best_idx] > 0.5).astype(np.uint8)
+                                break
+            except Exception as e:
+                print(f"Snow mask error: {e}")
+
+        if self._cached_snow_mask is None:
+            # No snow mask - use lower half of frame as terrain estimate
+            h, w = frame.shape[:2]
+            self._cached_snow_mask = np.zeros((h, w), dtype=np.uint8)
+            self._cached_snow_mask[h//2:, :] = 1
+
+        # Fit slope plane to depth + snow mask
+        slope_geom = SlopeGeometry.from_depth_map(
+            self._cached_depth_map,
+            self._cached_snow_mask,
+            skier_position,
+            local_radius=200
+        )
+
+        return slope_geom
 
     def _find_ski_base_line(self, frame: np.ndarray, x1: int, y1: int, x2: int, y2: int) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """Find the ski base line by detecting dark pixels within the bounding box.
