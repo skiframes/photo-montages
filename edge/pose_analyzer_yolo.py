@@ -904,16 +904,35 @@ class YOLOPoseAnalyzer:
         if HAS_DEPTH:
             try:
                 print("Loading Depth Anything v2 for slope estimation...")
-                # Use small model for speed, can use larger for accuracy
-                model_id = "depth-anything/Depth-Anything-V2-Small-hf"
-                self.depth_processor = AutoImageProcessor.from_pretrained(model_id)
-                self.depth_model = AutoModelForDepthEstimation.from_pretrained(model_id)
+                # Look for local model first (for servers without network access)
+                local_paths = [
+                    'edge/depth_anything_v2_small',
+                    'depth_anything_v2_small',
+                    str(Path.home() / 'photo-montages' / 'edge' / 'depth_anything_v2_small'),
+                ]
+                model_path = None
+                for path in local_paths:
+                    if Path(path).exists():
+                        model_path = path
+                        break
+
+                if model_path:
+                    print(f"  Loading from local: {model_path}")
+                    self.depth_processor = AutoImageProcessor.from_pretrained(model_path)
+                    self.depth_model = AutoModelForDepthEstimation.from_pretrained(model_path)
+                else:
+                    # Fall back to HuggingFace download
+                    model_id = "depth-anything/Depth-Anything-V2-Small-hf"
+                    print(f"  Downloading from HuggingFace: {model_id}")
+                    self.depth_processor = AutoImageProcessor.from_pretrained(model_id)
+                    self.depth_model = AutoModelForDepthEstimation.from_pretrained(model_id)
+
                 self.depth_model.to(self.device)
                 self.depth_model.eval()
                 print(f"Depth Anything v2 loaded on {self.device}.")
             except Exception as e:
                 print(f"Failed to load depth model: {e}")
-                print("Falling back to ski-direction slope estimation.")
+                print("Falling back to calibration-based slope estimation.")
 
         # Gate info for display (set via set_gate_info())
         self.current_gate = None
