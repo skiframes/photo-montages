@@ -157,68 +157,59 @@ class SlopeGeometry:
 
     def edge_angle_from_ski_base(self, ski: dict) -> float:
         """
-        Calculate ski edge angle from the apparent aspect ratio of the ski base.
+        Calculate ski edge angle from ski base orientation relative to calibrated slope.
 
-        A ski base is a 3D rectangle (~150cm long × 8cm wide).
-        When flat on snow, we see mainly the top surface (~6.5cm wide).
-        When edged, we see more of the base face, making it appear wider.
+        Uses SAM3 rotated rectangle to get ski base orientation, then compares
+        to the slope plane defined by calibration (gate_line_axis = fall line).
 
-        The apparent aspect ratio reveals the edge angle:
-        - Flat (0° edge): aspect ratio ≈ 150/6.5 = 23:1 (seeing narrow top)
-        - Full edge (90°): aspect ratio ≈ 150/8 = 18.75:1 (seeing base face)
-
-        Edge angle = arcsin((ref_flat_ratio - apparent_ratio) / (ref_flat_ratio - ref_edge_ratio))
+        Edge angle = how much ski base tilts away from the slope plane.
+        0° = ski flat on slope (base parallel to slope)
+        90° = ski on full edge (base perpendicular to slope)
 
         Args:
-            ski: Ski detection dict with 'ski_length', 'ski_base_width', 'rotated_rect'
+            ski: Ski detection dict with 'rotated_rect' from SAM3 segmentation
 
         Returns:
-            Edge angle in degrees (0 = flat on snow, 90 = on full edge)
+            Edge angle in degrees
         """
         if not ski:
             return 0.0
 
-        ski_length = ski.get('ski_length', 0)
-        ski_width = ski.get('ski_base_width', 0)
+        rotated_rect = ski.get('rotated_rect')
+        ski_line = ski.get('ski_line')
 
-        if ski_length <= 0 or ski_width <= 0:
+        if rotated_rect is None or ski_line is None:
             return 0.0
 
-        # Apparent aspect ratio in pixels
-        apparent_ratio = ski_length / ski_width
+        # SAM3 rotated rectangle has 4 corners
+        # Find the short edge (ski base width direction)
+        pts = rotated_rect
 
-        # Physical ski dimensions and viewing geometry
-        # SAM3 segments the visible ski silhouette including boot/binding region.
-        # The apparent aspect ratio varies widely based on:
-        # - Camera viewing angle
-        # - What part of ski is visible
-        # - Boot/binding inclusion
-        #
-        # Empirical observations from SAM3 detections:
-        # - Very wide detections (ratio 2-4): flat ski with boot, seen from front
-        # - Medium detections (ratio 5-10): ski at angle, partial boot visible
-        # - Narrow detections (ratio 10-20): edged ski, thin profile dominant
-        #
-        # Key insight: HIGHER ratio = thinner profile = MORE edged
-        ref_flat_ratio = 3.0    # Very wide detection (flat, frontal view with boot)
-        ref_edge_ratio = 15.0   # Narrow profile (edged ski)
+        edge1_len = math.sqrt((pts[1][0]-pts[0][0])**2 + (pts[1][1]-pts[0][1])**2)
+        edge2_len = math.sqrt((pts[2][0]-pts[1][0])**2 + (pts[2][1]-pts[1][1])**2)
 
-        # Edge angle from aspect ratio change
-        # Higher ratio = more edged (thinner profile)
-        # Lower ratio = flatter (wider appearance)
-        ratio_range = ref_edge_ratio - ref_flat_ratio
-
-        if apparent_ratio <= ref_flat_ratio:
-            # Very wide appearance = flat or even inverted
-            edge_angle = 0.0
-        elif apparent_ratio >= ref_edge_ratio:
-            # Very narrow profile = full edge or beyond
-            edge_angle = 90.0
+        # Short edge = ski base width direction (perpendicular to ski length)
+        if edge1_len < edge2_len:
+            base_dx = pts[1][0] - pts[0][0]
+            base_dy = pts[1][1] - pts[0][1]
         else:
-            # Linear interpolation: higher ratio = more edge
-            normalized = (apparent_ratio - ref_flat_ratio) / ratio_range
-            # Use arcsin for smooth transition
-            edge_angle = math.degrees(math.asin(min(1.0, max(0.0, normalized))))
+            base_dx = pts[2][0] - pts[1][0]
+            base_dy = pts[2][1] - pts[1][1]
+
+        # Ski base width angle from horizontal
+        base_width_angle = math.degrees(math.atan2(base_dy, base_dx))
+
+        # Cross-slope direction from calibration (perpendicular to fall line)
+        # fall_line_angle_deg is the fall line direction from vertical
+        # Cross-slope is perpendicular = fall_line_angle_deg from horizontal
+        cross_slope_angle = self.fall_line_angle_deg
+
+        # Edge angle = difference between ski base orientation and cross-slope
+        edge_angle = abs(base_width_angle - cross_slope_angle)
+
+        # Normalize to 0-90 range
+        while edge_angle > 90:
+            edge_angle = 180 - edge_angle
 
         return edge_angle
 
@@ -1727,12 +1718,11 @@ class YOLOPoseAnalyzer:
                 cv2.line(output, base1, bottom1, (0, 0, 0), thickness, cv2.LINE_AA)
                 cv2.line(output, base2, bottom2, (0, 0, 0), thickness, cv2.LINE_AA)
 
-            # Show edge angle and aspect ratio debug info
+            # Show edge angle debug info (calibration-based)
             if ski.get('center'):
                 cx_ski, cy_ski = int(ski['center'][0]), int(ski['center'][1])
-                ratio = ski_length / ski_width if ski_width > 0 else 0
                 method = ski.get('method', '?')
-                label = f"{edge_angle_deg:.0f}° AR:{ratio:.1f} ({method})"
+                label = f"{edge_angle_deg:.0f}° ({method})"
                 debug_font = 0.65 * scale
                 cv2.putText(output, label, (cx_ski - int(80 * scale), cy_ski + int(50 * scale)),
                            cv2.FONT_HERSHEY_SIMPLEX, debug_font, (0, 0, 0),
