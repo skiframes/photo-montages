@@ -23,6 +23,7 @@ Keypoints (COCO format):
 import math
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Tuple, Deque, Dict
 from collections import deque
@@ -83,6 +84,138 @@ class SlopeGeometry:
     slope_normal: Optional[np.ndarray] = None      # Normal to slope surface
     fall_line_3d: Optional[np.ndarray] = None      # Fall line direction in 3D
     cross_slope_3d: Optional[np.ndarray] = None    # Across-slope direction in 3D
+
+    @classmethod
+    def from_detected_skis(cls, left_ski: Optional[dict], right_ski: Optional[dict]) -> Optional['SlopeGeometry']:
+        """
+        Compute local slope geometry from detected ski orientations.
+
+        The two skis on snow define the slope plane:
+        - Average ski direction = fall line direction
+        - Line connecting ski centers = cross-slope direction
+        - Slope normal = cross product of these vectors
+
+        Returns None if insufficient ski data.
+        """
+        # Need at least one ski with a line
+        skis_with_lines = []
+        if left_ski and left_ski.get('ski_line'):
+            skis_with_lines.append(left_ski)
+        if right_ski and right_ski.get('ski_line'):
+            skis_with_lines.append(right_ski)
+
+        if not skis_with_lines:
+            return None
+
+        geom = cls()
+
+        # Compute average ski direction (approximates fall line in image)
+        directions = []
+        centers = []
+        for ski in skis_with_lines:
+            pt1, pt2 = ski['ski_line']
+            dx = pt2[0] - pt1[0]
+            dy = pt2[1] - pt1[1]
+            length = math.sqrt(dx*dx + dy*dy)
+            if length > 0:
+                # Normalize and ensure pointing "downhill" (positive Y)
+                dir_x, dir_y = dx / length, dy / length
+                if dir_y < 0:
+                    dir_x, dir_y = -dir_x, -dir_y
+                directions.append((dir_x, dir_y))
+
+            if ski.get('center'):
+                centers.append(ski['center'])
+
+        if not directions:
+            return None
+
+        # Average direction = fall line direction
+        avg_dx = sum(d[0] for d in directions) / len(directions)
+        avg_dy = sum(d[1] for d in directions) / len(directions)
+
+        # Fall line angle from vertical (0 = straight down)
+        geom.fall_line_angle_deg = math.degrees(math.atan2(avg_dx, avg_dy))
+
+        # Estimate pitch from ski foreshortening (rough heuristic)
+        # If skis appear shorter than expected, we're viewing at steeper angle
+        # Default to typical race slope pitch
+        geom.pitch_deg = 28.0
+
+        # Compute cross-slope direction if we have two ski centers
+        if len(centers) >= 2:
+            cross_dx = centers[1][0] - centers[0][0]
+            cross_dy = centers[1][1] - centers[0][1]
+            cross_len = math.sqrt(cross_dx*cross_dx + cross_dy*cross_dy)
+            if cross_len > 0:
+                # Roll angle from cross-slope tilt
+                geom.roll_deg = math.degrees(math.atan2(cross_dy, cross_dx))
+
+        geom._compute_3d_vectors()
+
+        return geom
+
+    def edge_angle_from_ski_base(self, ski: dict) -> float:
+        """
+        Calculate ski edge angle from the ski base orientation relative to slope.
+
+        Edge angle = angle between ski base (bottom of ski) and slope plane.
+        Uses the rotated rectangle from ski detection to get base orientation.
+
+        0° = ski flat on slope
+        90° = ski on full edge (perpendicular to slope)
+
+        Args:
+            ski: Ski detection dict with 'rotated_rect' and 'ski_line'
+
+        Returns:
+            Edge angle in degrees
+        """
+        if not ski:
+            return 0.0
+
+        # Get ski base orientation from rotated rect
+        rotated_rect = ski.get('rotated_rect')
+        ski_line = ski.get('ski_line')
+
+        if rotated_rect is None or ski_line is None:
+            return 0.0
+
+        # The rotated rect has 4 corners
+        # Find the short edge (ski base width direction)
+        pts = rotated_rect
+
+        # Calculate edge lengths
+        edge1_len = math.sqrt((pts[1][0]-pts[0][0])**2 + (pts[1][1]-pts[0][1])**2)
+        edge2_len = math.sqrt((pts[2][0]-pts[1][0])**2 + (pts[2][1]-pts[1][1])**2)
+
+        # Short edge is the ski base width direction
+        if edge1_len < edge2_len:
+            # Edge 0-1 is short (base width)
+            base_dx = pts[1][0] - pts[0][0]
+            base_dy = pts[1][1] - pts[0][1]
+        else:
+            # Edge 1-2 is short (base width)
+            base_dx = pts[2][0] - pts[1][0]
+            base_dy = pts[2][1] - pts[1][1]
+
+        # Ski base angle from horizontal in image
+        base_angle = math.degrees(math.atan2(base_dy, base_dx))
+
+        # Slope line angle (perpendicular to fall line)
+        # Fall line is at fall_line_angle from vertical
+        # Slope line is at fall_line_angle from horizontal
+        slope_line_angle = self.fall_line_angle_deg
+
+        # Edge angle = difference between ski base and slope line
+        edge_angle = base_angle - slope_line_angle
+
+        # Normalize to 0-90 range (absolute edge angle)
+        edge_angle = abs(edge_angle)
+        while edge_angle > 90:
+            edge_angle = 180 - edge_angle
+
+        return edge_angle
 
     @classmethod
     def from_calibration_file(cls, calibration_path: str) -> 'SlopeGeometry':
@@ -401,11 +534,10 @@ class Keypoints:
     FACE_KEYPOINTS = {NOSE, LEFT_EYE, RIGHT_EYE, LEFT_EAR, RIGHT_EAR}
 
 
-# Skeleton connections for drawing (no arms/forearms - only torso and legs)
+# Skeleton connections for drawing (no arms/forearms, no shoulder-to-hip lines)
 SKELETON = [
     (Keypoints.LEFT_SHOULDER, Keypoints.RIGHT_SHOULDER),
-    (Keypoints.LEFT_SHOULDER, Keypoints.LEFT_HIP),
-    (Keypoints.RIGHT_SHOULDER, Keypoints.RIGHT_HIP),
+    # Removed shoulder-to-hip lines per user request - keep only leg and hip connections
     (Keypoints.LEFT_HIP, Keypoints.RIGHT_HIP),
     (Keypoints.LEFT_HIP, Keypoints.LEFT_KNEE),
     (Keypoints.LEFT_KNEE, Keypoints.LEFT_ANKLE),
@@ -644,6 +776,8 @@ class YOLOPoseAnalyzer:
         # Track current frame for SAM (to avoid re-setting image)
         self._current_frame_id = None
         self._frame_counter = 0  # Auto-incrementing frame ID
+        # Current local slope geometry (computed per-frame from ski detection)
+        self._current_local_slope = None
         # Compatibility aliases
         self.sam3_predictor = self.sam_model  # Legacy alias
 
@@ -655,6 +789,15 @@ class YOLOPoseAnalyzer:
 
         # Graph display settings
         self.show_graph_curves = False  # Default: don't show curves (toggle via Graph button)
+
+        # Video timestamp for overlay (set via set_video_timestamp())
+        self.video_timestamp = None
+        self.video_source_name = None
+
+    def set_video_timestamp(self, timestamp: datetime, source_name: str = None):
+        """Set video timestamp and source name for overlay display."""
+        self.video_timestamp = timestamp
+        self.video_source_name = source_name
 
     def set_logos(self, logos: List[str]):
         """Set logos to overlay at bottom-left corner."""
@@ -985,16 +1128,22 @@ class YOLOPoseAnalyzer:
         if right_hip and right_knee and right_ankle:
             knee_angle_right = angle_at_joint(right_hip[:2], right_knee[:2], right_ankle[:2])
 
-        # Edge angles using 3D slope geometry
-        # How much the ski is tilted from the slope surface
+        # Edge angles: ski base tilt relative to slope plane
+        # Slope plane = calibration/terrain (independent 3D reference)
+        # Ski base = SAM3-detected ski orientation
+        # Edge angle = angle between ski base and slope plane
         edge_angle_left = 0.0
         edge_angle_right = 0.0
 
-        if left_knee and left_ankle:
-            edge_angle_left = geom.edge_angle_from_tibia(left_knee[:2], left_ankle[:2])
+        # Use calibration slope as reference (NOT ski-derived - that would be circular)
+        self._current_local_slope = None  # Always use calibration for overlays
 
-        if right_knee and right_ankle:
-            edge_angle_right = geom.edge_angle_from_tibia(right_knee[:2], right_ankle[:2])
+        # Edge angle = ski base orientation vs calibration slope plane
+        if left_ski:
+            edge_angle_left = geom.edge_angle_from_ski_base(left_ski)
+
+        if right_ski:
+            edge_angle_right = geom.edge_angle_from_ski_base(right_ski)
 
         # Edge symmetry as percentage (100% = perfect)
         max_edge = max(abs(edge_angle_left), abs(edge_angle_right), 1)
@@ -1473,24 +1622,68 @@ class YOLOPoseAnalyzer:
                 cv2.line(output, pt1, pt2, (0, 0, 0), thickness + 2, cv2.LINE_AA)
                 cv2.line(output, pt1, pt2, color, thickness, cv2.LINE_AA)
 
-            # Show ski base width debug info
+            # Show ski base width debug info (larger font for visibility)
             if ski.get('ski_base_width') and ski.get('center'):
                 cx, cy = int(ski['center'][0]), int(ski['center'][1])
                 width_px = ski['ski_base_width']
                 method = ski.get('method', '?')
                 label = f"W:{width_px:.0f}px ({method})"
-                cv2.putText(output, label, (cx - 40, cy + int(30 * scale)),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.35 * scale, (255, 255, 255),
-                           max(1, int(scale)), cv2.LINE_AA)
+                debug_font = 0.6 * scale
+                cv2.putText(output, label, (cx - int(60 * scale), cy + int(45 * scale)),
+                           cv2.FONT_HERSHEY_SIMPLEX, debug_font, (0, 0, 0),
+                           max(2, int(2 * scale)), cv2.LINE_AA)  # Black outline
+                cv2.putText(output, label, (cx - int(60 * scale), cy + int(45 * scale)),
+                           cv2.FONT_HERSHEY_SIMPLEX, debug_font, (255, 255, 0),
+                           max(1, int(scale)), cv2.LINE_AA)  # Yellow text
 
         # Left ski in cyan, right ski in white
         draw_ski(left_ski, (255, 255, 0))  # Cyan
         draw_ski(right_ski, (255, 255, 255))  # White
 
+        # Draw ski edge contact points "L" and "R" under ankles on internal side
+        def get_pt(idx):
+            kp = keypoints[idx]
+            if kp[2] > 0.3:
+                return (int(kp[0]), int(kp[1]))
+            return None
+
+        la = get_pt(Keypoints.LEFT_ANKLE)
+        ra = get_pt(Keypoints.RIGHT_ANKLE)
+        edge_font = 0.6 * scale
+        edge_pt_radius = max(5, int(6 * scale))
+
+        # For left ski: edge point is on internal side (toward right ski)
+        # Position: below ankle, offset toward the center
+        if la:
+            # Edge contact point below left ankle, offset right (internal side)
+            offset_x = int(15 * scale)  # Offset toward center
+            offset_y = int(35 * scale)  # Below ankle
+            edge_pt_l = (la[0] + offset_x, la[1] + offset_y)
+            # Draw point with "L" label
+            cv2.circle(output, edge_pt_l, edge_pt_radius, (0, 0, 0), -1)
+            cv2.circle(output, edge_pt_l, edge_pt_radius, (0, 255, 255), 2)  # Cyan ring
+            cv2.putText(output, "L", (edge_pt_l[0] - int(5 * scale), edge_pt_l[1] + int(4 * scale)),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4 * scale, (0, 255, 255),
+                       max(1, int(scale)), cv2.LINE_AA)
+
+        # For right ski: edge point is on internal side (toward left ski)
+        if ra:
+            # Edge contact point below right ankle, offset left (internal side)
+            offset_x = int(-15 * scale)  # Offset toward center
+            offset_y = int(35 * scale)  # Below ankle
+            edge_pt_r = (ra[0] + offset_x, ra[1] + offset_y)
+            # Draw point with "R" label
+            cv2.circle(output, edge_pt_r, edge_pt_radius, (0, 0, 0), -1)
+            cv2.circle(output, edge_pt_r, edge_pt_radius, (255, 255, 255), 2)  # White ring
+            cv2.putText(output, "R", (edge_pt_r[0] - int(5 * scale), edge_pt_r[1] + int(4 * scale)),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4 * scale, (255, 255, 255),
+                       max(1, int(scale)), cv2.LINE_AA)
+
         return output
 
     def _draw_slope_line(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
-        """Draw slope line (dotted) perpendicular to fall line - the snow surface reference."""
+        """Draw slope line (dotted) perpendicular to fall line - the snow surface reference.
+        Uses ski-derived local slope when available for accuracy."""
         output = frame.copy()
 
         def get_pt(idx):
@@ -1508,9 +1701,11 @@ class YOLOPoseAnalyzer:
             snow_offset = int(40 * scale)  # Below ankle
             center_pt = (ankle_mid[0], ankle_mid[1] + snow_offset)
 
+            # Use calibrated slope angle (from gate positions / terrain)
+            slope_angle = self.slope_angle_deg
+
             # Slope line is perpendicular to fall line (horizontal on the slope surface)
-            # Fall line angle is slope_angle_deg from vertical, so slope line is at slope_angle_deg from horizontal
-            slope_line_angle_rad = math.radians(self.slope_angle_deg)
+            slope_line_angle_rad = math.radians(slope_angle)
             line_len = int(200 * scale)
 
             # Extend in both directions
@@ -1545,17 +1740,18 @@ class YOLOPoseAnalyzer:
                         pos += gap_len
                     drawing = not drawing
 
-            # Label "SLOPE" at right end
+            # Label "SLOPE" at right end - always from calibration
             font = cv2.FONT_HERSHEY_SIMPLEX
             label = "SLOPE"
             label_pos = (pt2[0] + int(10 * scale), pt2[1])
-            cv2.putText(output, label, label_pos, font, 0.5 * scale, (255, 255, 255),
+            cv2.putText(output, label, label_pos, font, 0.45 * scale, (255, 255, 255),
                        max(1, int(2 * scale)), cv2.LINE_AA)
 
         return output
 
     def _draw_fall_line(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
-        """Draw fall line arrow starting from snow level between skis."""
+        """Draw fall line arrow starting from snow level between skis.
+        Uses ski-derived local slope when available for accuracy."""
         output = frame.copy()
 
         def get_pt(idx):
@@ -1573,9 +1769,12 @@ class YOLOPoseAnalyzer:
             snow_offset = int(40 * scale)  # Below ankle
             start_pt = (ankle_mid[0], ankle_mid[1] + snow_offset)
 
+            # Use calibrated slope angle (from gate positions / terrain)
+            slope_angle = self.slope_angle_deg
+
             # Fall line direction (perpendicular to slope line, pointing downhill)
             line_len = int(150 * scale)
-            angle_rad = math.radians(90 + self.slope_angle_deg)
+            angle_rad = math.radians(90 + slope_angle)
             dx = int(line_len * math.cos(angle_rad))
             dy = int(line_len * math.sin(angle_rad))
             end_pt = (start_pt[0] + dx, start_pt[1] + dy)
@@ -1584,11 +1783,11 @@ class YOLOPoseAnalyzer:
             cv2.arrowedLine(output, start_pt, end_pt, (0, 165, 255), int(4 * scale),
                            tipLength=0.15, line_type=cv2.LINE_AA)
 
-            # Label
+            # Label - always from calibration
             font = cv2.FONT_HERSHEY_SIMPLEX
             label = "FALL LINE"
             label_pos = (end_pt[0] + int(10 * scale), end_pt[1])
-            cv2.putText(output, label, label_pos, font, 0.6 * scale, (0, 165, 255),
+            cv2.putText(output, label, label_pos, font, 0.5 * scale, (0, 165, 255),
                        max(1, int(2 * scale)), cv2.LINE_AA)
 
         return output
@@ -1737,10 +1936,10 @@ class YOLOPoseAnalyzer:
         cv2.line(output, (panel_x + int(10 * scale), model_start_y - int(6 * scale)),
                 (panel_x + panel_w - int(10 * scale), model_start_y - int(6 * scale)), (60, 60, 60), 1)
 
-        # Model info (very small font)
-        model_font = 0.35 * scale
-        model_line_h = int(16 * scale)
-        model_color = (120, 120, 120)
+        # Model info (larger font for better visibility)
+        model_font = 0.5 * scale
+        model_line_h = int(22 * scale)
+        model_color = (150, 150, 150)
 
         # Pose model
         cv2.putText(output, f"Pose: yolov8{self.model_size}-pose",
@@ -1988,9 +2187,9 @@ class YOLOPoseAnalyzer:
         # Draw extended shoulder and hip lines
         output = self._draw_extended_lines(output, keypoints, scale)
 
-        # Draw keypoints (skip face and arms)
+        # Draw keypoints (skip only face, include arms/elbows/wrists as points only)
         for i, kp in enumerate(keypoints):
-            if i in Keypoints.FACE_KEYPOINTS or i in ARM_KEYPOINTS:
+            if i in Keypoints.FACE_KEYPOINTS:
                 continue
             if kp[2] > 0.3:
                 pt = (int(kp[0]), int(kp[1]))
@@ -2000,8 +2199,10 @@ class YOLOPoseAnalyzer:
                     color = (0, 255, 255)
                 else:
                     color = (0, 165, 255)
-                cv2.circle(output, pt, point_radius, color, -1)
-                cv2.circle(output, pt, point_radius + 1, (255, 255, 255), 1)
+                # Arm keypoints get slightly smaller radius but are drawn
+                r = point_radius if i not in ARM_KEYPOINTS else max(2, int(3 * scale))
+                cv2.circle(output, pt, r, color, -1)
+                cv2.circle(output, pt, r + 1, (255, 255, 255), 1)
 
         # Draw belly button point
         if metrics and metrics.belly_button:
@@ -2015,14 +2216,30 @@ class YOLOPoseAnalyzer:
                        max(1, int(scale)), cv2.LINE_AA)
 
             # Draw line from belly button to center of neck (spine line)
+            # Neck is between shoulders but higher - use nose as reference
             ls = keypoints[Keypoints.LEFT_SHOULDER]
             rs = keypoints[Keypoints.RIGHT_SHOULDER]
+            nose = keypoints[Keypoints.NOSE]
             if ls[2] > 0.3 and rs[2] > 0.3:
-                neck_x = int((ls[0] + rs[0]) / 2)
-                neck_y = int((ls[1] + rs[1]) / 2)
-                # Draw spine line (orange, dashed effect with shorter segments)
+                shoulder_mid_x = (ls[0] + rs[0]) / 2
+                shoulder_mid_y = (ls[1] + rs[1]) / 2
+
+                # Neck is ~30% of way from shoulder midpoint to nose
+                if nose[2] > 0.3:
+                    neck_x = int(shoulder_mid_x + 0.3 * (nose[0] - shoulder_mid_x))
+                    neck_y = int(shoulder_mid_y + 0.3 * (nose[1] - shoulder_mid_y))
+                else:
+                    # Fallback: estimate neck 20% above shoulder midpoint toward frame center
+                    neck_x = int(shoulder_mid_x)
+                    neck_y = int(shoulder_mid_y - 0.15 * abs(ls[1] - keypoints[Keypoints.LEFT_HIP][1]))
+
+                # Draw spine line (orange)
                 cv2.line(output, (bx, by), (neck_x, neck_y), (255, 200, 100),
                         max(2, int(3 * scale)), cv2.LINE_AA)
+
+                # Draw neck point
+                cv2.circle(output, (neck_x, neck_y), max(3, int(4 * scale)), (255, 200, 100), -1)
+                cv2.circle(output, (neck_x, neck_y), max(4, int(5 * scale)), (255, 255, 255), 1)
 
         # Draw center of mass (CoM)
         if metrics and metrics.center_of_mass:
@@ -2078,6 +2295,28 @@ class YOLOPoseAnalyzer:
 
         # Draw gate info box in top-right corner
         output = self._draw_gate_info_box(output, scale)
+
+        # Draw date/time overlay in bottom-right corner
+        if self.video_timestamp:
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            date_str = self.video_timestamp.strftime("%Y-%m-%d %H:%M:%S")
+            if self.video_source_name:
+                date_str = f"{self.video_source_name} | {date_str}"
+
+            ts_font_scale = 0.5 * scale
+            ts_thickness = max(1, int(scale))
+            (tw, th), _ = cv2.getTextSize(date_str, font, ts_font_scale, ts_thickness)
+
+            # Position in bottom-right, above any logos
+            margin = int(15 * scale)
+            ts_x = w - tw - margin
+            ts_y = h - margin - int(80 * scale)  # Above logo area
+
+            # Semi-transparent background
+            cv2.rectangle(output, (ts_x - 5, ts_y - th - 5),
+                         (ts_x + tw + 5, ts_y + 5), (0, 0, 0), -1)
+            cv2.putText(output, date_str, (ts_x, ts_y), font, ts_font_scale,
+                       (200, 200, 200), ts_thickness, cv2.LINE_AA)
 
         return output
 
@@ -2176,6 +2415,19 @@ def main():
 
     print(f"Video: {frame_width}x{frame_height} @ {fps:.1f}fps, {total_frames} frames")
 
+    # Extract video timestamp from file modification time and set on analyzer
+    import os
+    video_path = Path(args.video_path)
+    try:
+        # Try to get file modification time
+        mtime = os.path.getmtime(args.video_path)
+        video_timestamp = datetime.fromtimestamp(mtime)
+        source_name = video_path.stem  # Filename without extension
+        analyzer.set_video_timestamp(video_timestamp, source_name)
+        print(f"Video timestamp: {video_timestamp.strftime('%Y-%m-%d %H:%M:%S')} ({source_name})")
+    except Exception as e:
+        print(f"Warning: Could not get video timestamp: {e}")
+
     out_video = None
     if args.output_video:
         print(f"Output: {args.output_video}")
@@ -2261,6 +2513,9 @@ def main():
                 'frames_analyzed': poses_detected,
                 'width': frame_width,
                 'height': frame_height,
+                'source_name': analyzer.video_source_name,
+                'timestamp': analyzer.video_timestamp.isoformat() if analyzer.video_timestamp else None,
+                'processed_at': datetime.now().isoformat(),
             }
             with open(metrics_json_path, 'w') as f:
                 json.dump(metrics_data, f)
