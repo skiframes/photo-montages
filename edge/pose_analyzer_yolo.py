@@ -1176,29 +1176,32 @@ class YOLOPoseAnalyzer:
             knee_angle_right = angle_at_joint(right_hip[:2], right_knee[:2], right_ankle[:2])
 
         # Edge angles: ski base tilt relative to slope plane
-        # Slope plane = SAM3-detected snow surface (real 3D terrain)
-        # Ski base = SAM3-detected ski orientation
-        # Edge angle = angle between ski base and slope plane
+        # Slope plane derived from SAM3-detected ski directions (they point downhill)
+        # Edge angle = how much ski base width tilts away from cross-slope
         edge_angle_left = 0.0
         edge_angle_right = 0.0
 
-        # Detect slope from snow surface using SAM3 (preferred over calibration)
-        sam3_slope = getattr(self, '_sam3_detected_slope', None)
-        if sam3_slope is not None:
-            # Use SAM3-detected slope angle
-            slope_ref_angle = sam3_slope
+        # Derive slope from detected ski orientations (SAM3)
+        # Ski long axis = fall line direction (skis point downhill)
+        # This is NOT circular: we use ski DIRECTION for slope, then compare ski BASE TILT
+        ski_slope = SlopeGeometry.from_detected_skis(left_ski, right_ski)
+        if ski_slope is not None:
+            slope_ref_angle = ski_slope.fall_line_angle_deg
         else:
-            # Fallback to calibration slope
+            # Fallback to calibration
             slope_ref_angle = geom.fall_line_angle_deg
 
         self._current_local_slope = slope_ref_angle
 
-        # Edge angle = ski base orientation vs detected slope
+        # Edge angle = ski base width orientation vs cross-slope (perpendicular to fall line)
+        # Cross-slope angle = fall_line_angle + 90°
+        cross_slope_angle = slope_ref_angle + 90
+
         if left_ski:
-            edge_angle_left = self._compute_edge_angle(left_ski, slope_ref_angle)
+            edge_angle_left = self._compute_edge_angle(left_ski, cross_slope_angle)
 
         if right_ski:
-            edge_angle_right = self._compute_edge_angle(right_ski, slope_ref_angle)
+            edge_angle_right = self._compute_edge_angle(right_ski, cross_slope_angle)
 
         # Edge symmetry as percentage (100% = perfect)
         max_edge = max(abs(edge_angle_left), abs(edge_angle_right), 1)
@@ -1277,10 +1280,6 @@ class YOLOPoseAnalyzer:
 
         # Detect skis (uses SAM3 if available)
         left_ski, right_ski = self._detect_skis(frame, person_kpts, frame_id)
-
-        # Detect slope from snow surface using SAM3 (for edge angle calculation)
-        if self.use_sam and self.sam_version == 'sam3':
-            self._detect_slope_from_snow(frame)
 
         # Get SAM3 body mask for refined metrics (inclination, CoM inside/outside)
         body_mask = None
