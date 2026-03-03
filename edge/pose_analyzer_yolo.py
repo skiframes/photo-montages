@@ -701,8 +701,16 @@ class YOLOPoseAnalyzer:
         self.model_size = model_size  # Store for display
 
         model_name = f'yolov8{model_size}-pose.pt'
-        print(f"Loading {model_name} on {self.device}...")
-        self.model = YOLO(model_name)
+        # Look for model in local directories first (avoid network download)
+        model_path = model_name
+        for path in [model_name, f'edge/{model_name}', f'~/photo-montages/edge/{model_name}',
+                     f'{Path.home()}/{model_name}', f'{Path.home()}/photo-montages/edge/{model_name}']:
+            expanded = Path(path).expanduser()
+            if expanded.exists():
+                model_path = str(expanded)
+                break
+        print(f"Loading {model_path} on {self.device}...")
+        self.model = YOLO(model_path)
         self.model.to(self.device)
         print(f"Model loaded on {self.device}.")
 
