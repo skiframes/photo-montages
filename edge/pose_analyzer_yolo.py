@@ -550,10 +550,15 @@ class YOLOPoseAnalyzer:
         self.history = MetricsHistory()
         self.ski_detector = None
 
+        # Auto-detect CUDA device
+        import torch
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
         model_name = f'yolov8{model_size}-pose.pt'
-        print(f"Loading {model_name}...")
+        print(f"Loading {model_name} on {self.device}...")
         self.model = YOLO(model_name)
-        print("Model loaded.")
+        self.model.to(self.device)
+        print(f"Model loaded on {self.device}.")
 
         # Load custom ski detector if available
         if ski_model_path is None:
@@ -565,8 +570,9 @@ class YOLOPoseAnalyzer:
                     break
 
         if ski_model_path and Path(ski_model_path).exists():
-            print(f"Loading ski detector from {ski_model_path}...")
+            print(f"Loading ski detector from {ski_model_path} on {self.device}...")
             self.ski_detector = YOLO(ski_model_path)
+            self.ski_detector.to(self.device)
             print("Ski detector loaded.")
         else:
             print("Ski detector not found. Run train_ski_detector.py to train one.")
@@ -1315,11 +1321,11 @@ class YOLOPoseAnalyzer:
         text_thickness = max(1, int(2 * scale))
         value_thickness = max(2, int(2 * scale))
 
-        # Position: bottom-left corner, above any logos
-        panel_w = int(280 * scale)
-        panel_h = int(310 * scale)  # Taller to fit 5 main + 4 secondary metrics + warning
+        # Position: TOP-left corner
+        panel_w = int(300 * scale)
+        panel_h = int(340 * scale)  # Taller to fit title + warning + 5 main + 4 secondary metrics
         panel_x = int(15 * scale)
-        panel_y = h - panel_h - int(90 * scale)  # Leave space for logos
+        panel_y = int(15 * scale)  # Top-left corner
 
         # Semi-transparent background
         overlay = output.copy()
@@ -1331,12 +1337,14 @@ class YOLOPoseAnalyzer:
         cv2.rectangle(output, (panel_x, panel_y), (panel_x + panel_w, panel_y + panel_h),
                      (80, 80, 80), 1)
 
-        # Title
-        cv2.putText(output, "METRICS PROTOTYPE", (panel_x + int(10 * scale), panel_y + int(22 * scale)),
-                   font, label_font, (200, 200, 200), text_thickness, cv2.LINE_AA)
-        # Warning note
-        cv2.putText(output, "(= There are errors!)", (panel_x + int(10 * scale), panel_y + int(38 * scale)),
-                   font, 0.4 * scale, (255, 100, 100), 1, cv2.LINE_AA)
+        # Title (bigger)
+        title_font = 0.8 * scale
+        cv2.putText(output, "METRICS PROTOTYPE", (panel_x + int(10 * scale), panel_y + int(28 * scale)),
+                   font, title_font, (255, 255, 255), max(2, int(2 * scale)), cv2.LINE_AA)
+        # Warning note (yellow, bigger but smaller than title)
+        warning_font = 0.55 * scale
+        cv2.putText(output, "= There are errors!", (panel_x + int(10 * scale), panel_y + int(50 * scale)),
+                   font, warning_font, (0, 255, 255), max(1, int(1.5 * scale)), cv2.LINE_AA)
 
         # Compute current values
         if metrics:
@@ -1382,7 +1390,7 @@ class YOLOPoseAnalyzer:
 
         # Draw main metrics
         line_h = int(28 * scale)
-        start_y = panel_y + int(55 * scale)  # Account for title + warning
+        start_y = panel_y + int(70 * scale)  # Account for bigger title + warning
 
         for i, (name, value, unit, color) in enumerate(main_items):
             y = start_y + i * line_h
