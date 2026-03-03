@@ -401,13 +401,9 @@ class Keypoints:
     FACE_KEYPOINTS = {NOSE, LEFT_EYE, RIGHT_EYE, LEFT_EAR, RIGHT_EAR}
 
 
-# Skeleton connections for drawing
+# Skeleton connections for drawing (no arms/forearms - only torso and legs)
 SKELETON = [
     (Keypoints.LEFT_SHOULDER, Keypoints.RIGHT_SHOULDER),
-    (Keypoints.LEFT_SHOULDER, Keypoints.LEFT_ELBOW),
-    (Keypoints.LEFT_ELBOW, Keypoints.LEFT_WRIST),
-    (Keypoints.RIGHT_SHOULDER, Keypoints.RIGHT_ELBOW),
-    (Keypoints.RIGHT_ELBOW, Keypoints.RIGHT_WRIST),
     (Keypoints.LEFT_SHOULDER, Keypoints.LEFT_HIP),
     (Keypoints.RIGHT_SHOULDER, Keypoints.RIGHT_HIP),
     (Keypoints.LEFT_HIP, Keypoints.RIGHT_HIP),
@@ -416,6 +412,10 @@ SKELETON = [
     (Keypoints.RIGHT_HIP, Keypoints.RIGHT_KNEE),
     (Keypoints.RIGHT_KNEE, Keypoints.RIGHT_ANKLE),
 ]
+
+# Keypoints to skip when drawing (face + arms)
+ARM_KEYPOINTS = {Keypoints.LEFT_ELBOW, Keypoints.RIGHT_ELBOW,
+                 Keypoints.LEFT_WRIST, Keypoints.RIGHT_WRIST}
 
 
 @dataclass
@@ -435,6 +435,12 @@ class PoseMetrics:
     fore_aft_left: Optional[float]  # Only in side view
     fore_aft_right: Optional[float]
     confidence: float
+    # Belly button estimated position (pixel coords)
+    belly_button: Optional[Tuple[float, float]] = None
+    # Center of mass position (pixel coords) - can be outside body during carving
+    center_of_mass: Optional[Tuple[float, float]] = None
+    # Whether CoM is inside or outside body silhouette
+    com_inside_body: bool = True
 
 
 def angle_from_horizontal(p1: Tuple[float, float], p2: Tuple[float, float]) -> float:
@@ -488,6 +494,7 @@ class MetricsHistory:
         self.edge_symmetry: Deque[float] = deque(maxlen=max_frames)
         self.fore_aft_left: Deque[float] = deque(maxlen=max_frames)
         self.fore_aft_right: Deque[float] = deque(maxlen=max_frames)
+        self.com_inside: Deque[bool] = deque(maxlen=max_frames)
 
     def add(self, m: PoseMetrics):
         self.shoulder.append(m.shoulder_angle_to_slope)
@@ -502,6 +509,7 @@ class MetricsHistory:
             self.fore_aft_left.append(m.fore_aft_left)
         if m.fore_aft_right is not None:
             self.fore_aft_right.append(m.fore_aft_right)
+        self.com_inside.append(m.com_inside_body)
 
 
 class YOLOPoseAnalyzer:
@@ -687,14 +695,219 @@ class YOLOPoseAnalyzer:
             return None
         return (float(x), float(y), float(conf))
 
+    def _segment_body_sam3(self, frame: np.ndarray) -> Optional[np.ndarray]:
+        """
+        Use SAM3 text prompt "skier" to segment the skier's body.
+
+        Returns binary mask of the body, or None if unavailable.
+        Used to refine center of mass estimation and check if CoM is inside body.
+        """
+        if self.sam3_text_predictor is None or self.sam_version != 'sam3':
+            return None
+
+        try:
+            self.sam3_text_predictor.set_image(frame)
+            results = self.sam3_text_predictor(text=["skier"])
+
+            if not results or len(results) == 0:
+                return None
+
+            # Find the largest person mask
+            best_mask = None
+            best_area = 0
+
+            for result in results:
+                if not hasattr(result, 'masks') or result.masks is None:
+                    continue
+                masks = result.masks.data.cpu().numpy()
+                for mask in masks:
+                    mask_binary = (mask > 0.5).astype(np.uint8)
+                    area = mask_binary.sum()
+                    if area > best_area:
+                        best_area = area
+                        best_mask = mask_binary
+
+            return best_mask
+
+        except Exception as e:
+            print(f"SAM3 body segmentation error: {e}")
+            return None
+
+    def estimate_belly_button(self, keypoints: np.ndarray) -> Optional[Tuple[float, float]]:
+        """
+        Estimate belly button (navel) position from keypoints.
+
+        The navel sits roughly 60% of the way from shoulders to hips,
+        at the midline of the torso.
+        """
+        left_hip = self.get_keypoint(keypoints, Keypoints.LEFT_HIP)
+        right_hip = self.get_keypoint(keypoints, Keypoints.RIGHT_HIP)
+        left_shoulder = self.get_keypoint(keypoints, Keypoints.LEFT_SHOULDER)
+        right_shoulder = self.get_keypoint(keypoints, Keypoints.RIGHT_SHOULDER)
+
+        if not all([left_hip, right_hip, left_shoulder, right_shoulder]):
+            return None
+
+        shoulder_mid = midpoint(left_shoulder[:2], right_shoulder[:2])
+        hip_mid = midpoint(left_hip[:2], right_hip[:2])
+
+        # Belly button is ~60% down from shoulders to hips (closer to hips)
+        t = 0.60
+        bx = shoulder_mid[0] + t * (hip_mid[0] - shoulder_mid[0])
+        by = shoulder_mid[1] + t * (hip_mid[1] - shoulder_mid[1])
+
+        return (bx, by)
+
+    def estimate_center_of_mass(self, keypoints: np.ndarray,
+                                body_mask: Optional[np.ndarray] = None) -> Optional[Tuple[Tuple[float, float], bool]]:
+        """
+        Estimate center of mass using segment mass model.
+
+        Body segment mass percentages (Winter, 2009):
+          Head+neck: 8.1%, Torso: 49.7%,
+          Upper arm: 2.8% each, Forearm+hand: 2.2% each,
+          Thigh: 10.0% each, Shank+foot: 6.1% each
+
+        Each segment's CoM is at its midpoint. The whole-body CoM is
+        the mass-weighted average of all segment positions.
+
+        During carving, the body leans inside the turn, shifting CoM
+        toward the turn center — potentially outside the body silhouette.
+
+        Returns (com_position, is_inside_body) or None.
+        """
+        # Gather all available keypoints
+        nose = self.get_keypoint(keypoints, Keypoints.NOSE)
+        l_shoulder = self.get_keypoint(keypoints, Keypoints.LEFT_SHOULDER)
+        r_shoulder = self.get_keypoint(keypoints, Keypoints.RIGHT_SHOULDER)
+        l_elbow = self.get_keypoint(keypoints, Keypoints.LEFT_ELBOW)
+        r_elbow = self.get_keypoint(keypoints, Keypoints.RIGHT_ELBOW)
+        l_wrist = self.get_keypoint(keypoints, Keypoints.LEFT_WRIST)
+        r_wrist = self.get_keypoint(keypoints, Keypoints.RIGHT_WRIST)
+        l_hip = self.get_keypoint(keypoints, Keypoints.LEFT_HIP)
+        r_hip = self.get_keypoint(keypoints, Keypoints.RIGHT_HIP)
+        l_knee = self.get_keypoint(keypoints, Keypoints.LEFT_KNEE)
+        r_knee = self.get_keypoint(keypoints, Keypoints.RIGHT_KNEE)
+        l_ankle = self.get_keypoint(keypoints, Keypoints.LEFT_ANKLE)
+        r_ankle = self.get_keypoint(keypoints, Keypoints.RIGHT_ANKLE)
+
+        if not all([l_shoulder, r_shoulder, l_hip, r_hip]):
+            return None
+
+        # Segment CoM positions and mass percentages
+        segments = []  # list of ((x, y), mass_pct)
+
+        shoulder_mid = midpoint(l_shoulder[:2], r_shoulder[:2])
+        hip_mid = midpoint(l_hip[:2], r_hip[:2])
+
+        # Head+neck: from nose (or shoulder midpoint) upward
+        if nose:
+            head_com = midpoint(nose[:2], shoulder_mid)
+            segments.append((head_com, 8.1))
+        else:
+            # Estimate head above shoulders
+            head_offset_y = (hip_mid[1] - shoulder_mid[1]) * 0.3
+            head_com = (shoulder_mid[0], shoulder_mid[1] - head_offset_y)
+            segments.append((head_com, 8.1))
+
+        # Torso: midpoint of shoulder-center to hip-center
+        torso_com = midpoint(shoulder_mid, hip_mid)
+        segments.append((torso_com, 49.7))
+
+        # Upper arms (shoulder to elbow)
+        if l_elbow:
+            segments.append((midpoint(l_shoulder[:2], l_elbow[:2]), 2.8))
+        else:
+            segments.append((l_shoulder[:2], 2.8))
+
+        if r_elbow:
+            segments.append((midpoint(r_shoulder[:2], r_elbow[:2]), 2.8))
+        else:
+            segments.append((r_shoulder[:2], 2.8))
+
+        # Forearms+hands (elbow to wrist)
+        if l_elbow and l_wrist:
+            segments.append((midpoint(l_elbow[:2], l_wrist[:2]), 2.2))
+        elif l_elbow:
+            segments.append((l_elbow[:2], 2.2))
+        else:
+            segments.append((l_shoulder[:2], 2.2))
+
+        if r_elbow and r_wrist:
+            segments.append((midpoint(r_elbow[:2], r_wrist[:2]), 2.2))
+        elif r_elbow:
+            segments.append((r_elbow[:2], 2.2))
+        else:
+            segments.append((r_shoulder[:2], 2.2))
+
+        # Thighs (hip to knee)
+        if l_knee:
+            segments.append((midpoint(l_hip[:2], l_knee[:2]), 10.0))
+        else:
+            segments.append((l_hip[:2], 10.0))
+
+        if r_knee:
+            segments.append((midpoint(r_hip[:2], r_knee[:2]), 10.0))
+        else:
+            segments.append((r_hip[:2], 10.0))
+
+        # Shanks+feet (knee to ankle)
+        if l_knee and l_ankle:
+            segments.append((midpoint(l_knee[:2], l_ankle[:2]), 6.1))
+        elif l_knee:
+            segments.append((l_knee[:2], 6.1))
+        else:
+            segments.append((l_hip[:2], 6.1))
+
+        if r_knee and r_ankle:
+            segments.append((midpoint(r_knee[:2], r_ankle[:2]), 6.1))
+        elif r_knee:
+            segments.append((r_knee[:2], 6.1))
+        else:
+            segments.append((r_hip[:2], 6.1))
+
+        # Compute mass-weighted center
+        total_mass = sum(m for _, m in segments)
+        com_x = sum(pos[0] * m for pos, m in segments) / total_mass
+        com_y = sum(pos[1] * m for pos, m in segments) / total_mass
+
+        # Check if CoM is inside body
+        com_inside = True
+        if body_mask is not None:
+            # Use SAM3 body mask to check
+            ix, iy = int(round(com_x)), int(round(com_y))
+            h, w = body_mask.shape[:2]
+            if 0 <= iy < h and 0 <= ix < w:
+                com_inside = bool(body_mask[iy, ix] > 0)
+            else:
+                com_inside = False
+        else:
+            # Heuristic: check if CoM is within the shoulder-hip bounding box
+            # (expanded slightly). During carving, CoM moves laterally outside.
+            min_x = min(l_shoulder[0], r_shoulder[0], l_hip[0], r_hip[0])
+            max_x = max(l_shoulder[0], r_shoulder[0], l_hip[0], r_hip[0])
+            min_y = min(l_shoulder[1], r_shoulder[1])
+            max_y = max(l_hip[1], r_hip[1])
+            margin_x = (max_x - min_x) * 0.15
+            margin_y = (max_y - min_y) * 0.1
+            com_inside = (min_x - margin_x <= com_x <= max_x + margin_x and
+                          min_y - margin_y <= com_y <= max_y + margin_y)
+
+        return ((com_x, com_y), com_inside)
+
     def compute_metrics(self, keypoints: np.ndarray,
                         left_ski: Optional[dict] = None,
-                        right_ski: Optional[dict] = None) -> Optional[PoseMetrics]:
+                        right_ski: Optional[dict] = None,
+                        body_mask: Optional[np.ndarray] = None) -> Optional[PoseMetrics]:
         """
         Compute biomechanics metrics using full 3D slope geometry.
 
         All angles are calculated relative to the true slope plane,
         not just the 2D image projection.
+
+        If body_mask (from SAM3) is provided, it's used to:
+        - Refine body inclination via mask medial axis
+        - Check if center of mass falls inside/outside body silhouette
         """
         left_shoulder = self.get_keypoint(keypoints, Keypoints.LEFT_SHOULDER)
         right_shoulder = self.get_keypoint(keypoints, Keypoints.RIGHT_SHOULDER)
@@ -739,6 +952,29 @@ class YOLOPoseAnalyzer:
         # Uses 3D geometry to account for slope pitch
         ankle_mid = midpoint(left_ankle[:2], right_ankle[:2]) if left_ankle and right_ankle else hip_mid
         body_inclination = geom.inclination_angle(ankle_mid, shoulder_mid)
+
+        # If SAM3 body mask available, refine inclination using mask medial axis
+        # The mask captures the full body silhouette including tucked positions
+        if body_mask is not None:
+            try:
+                contours, _ = cv2.findContours(body_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if contours:
+                    largest = max(contours, key=cv2.contourArea)
+                    if len(largest) >= 5:
+                        line = cv2.fitLine(largest, cv2.DIST_L2, 0, 0.01, 0.01)
+                        vx, vy = float(line[0][0]), float(line[1][0])
+                        cx, cy = float(line[2][0]), float(line[3][0])
+                        # Use mask medial axis endpoints as base/top for inclination
+                        rect = cv2.minAreaRect(largest)
+                        length = max(rect[1]) / 2
+                        base_pt = (cx + vx * length, cy + vy * length)
+                        top_pt = (cx - vx * length, cy - vy * length)
+                        # Ensure base is lower (higher Y) than top
+                        if base_pt[1] < top_pt[1]:
+                            base_pt, top_pt = top_pt, base_pt
+                        body_inclination = geom.inclination_angle(base_pt, top_pt)
+            except Exception:
+                pass  # Keep keypoint-based inclination
 
         # Knee angles (pure joint angles, independent of slope)
         knee_angle_left = 180.0
@@ -791,6 +1027,12 @@ class YOLOPoseAnalyzer:
         shoulder_alignment_pct = max(0, 100 - abs(shoulder_to_slope) * 100 / 45)
         hip_alignment_pct = max(0, 100 - abs(hip_to_slope) * 100 / 45)
 
+        # Belly button and center of mass
+        belly_button = self.estimate_belly_button(keypoints)
+        com_result = self.estimate_center_of_mass(keypoints, body_mask)
+        com_pos = com_result[0] if com_result else None
+        com_inside = com_result[1] if com_result else True
+
         return PoseMetrics(
             shoulder_angle_to_slope=round(shoulder_to_slope, 1),
             hip_angle_to_slope=round(hip_to_slope, 1),
@@ -805,7 +1047,10 @@ class YOLOPoseAnalyzer:
             edge_symmetry_pct=round(edge_symmetry_pct, 0),
             fore_aft_left=round(fore_aft_left, 1) if fore_aft_left is not None else None,
             fore_aft_right=round(fore_aft_right, 1) if fore_aft_right is not None else None,
-            confidence=round(avg_conf, 3)
+            confidence=round(avg_conf, 3),
+            belly_button=belly_button,
+            center_of_mass=com_pos,
+            com_inside_body=com_inside,
         )
 
     def analyze_frame(self, frame: np.ndarray, frame_id: int = None) -> Tuple[Optional[np.ndarray], Optional[PoseMetrics], Optional[dict], Optional[dict]]:
@@ -828,8 +1073,13 @@ class YOLOPoseAnalyzer:
         # Detect skis (uses SAM3 if available)
         left_ski, right_ski = self._detect_skis(frame, person_kpts, frame_id)
 
-        # Compute metrics using ski detection data
-        metrics = self.compute_metrics(person_kpts, left_ski, right_ski)
+        # Get SAM3 body mask for refined metrics (inclination, CoM inside/outside)
+        body_mask = None
+        if self.use_sam and self.sam_version == 'sam3':
+            body_mask = self._segment_body_sam3(frame)
+
+        # Compute metrics using ski detection data and optional body mask
+        metrics = self.compute_metrics(person_kpts, left_ski, right_ski, body_mask)
 
         if metrics:
             self.history.add(metrics)
@@ -1666,9 +1916,9 @@ class YOLOPoseAnalyzer:
         # Draw extended shoulder and hip lines
         output = self._draw_extended_lines(output, keypoints, scale)
 
-        # Draw keypoints (skip face)
+        # Draw keypoints (skip face and arms)
         for i, kp in enumerate(keypoints):
-            if i in Keypoints.FACE_KEYPOINTS:
+            if i in Keypoints.FACE_KEYPOINTS or i in ARM_KEYPOINTS:
                 continue
             if kp[2] > 0.3:
                 pt = (int(kp[0]), int(kp[1]))
@@ -1680,6 +1930,56 @@ class YOLOPoseAnalyzer:
                     color = (0, 165, 255)
                 cv2.circle(output, pt, point_radius, color, -1)
                 cv2.circle(output, pt, point_radius + 1, (255, 255, 255), 1)
+
+        # Draw belly button point
+        if metrics and metrics.belly_button:
+            bx, by = int(metrics.belly_button[0]), int(metrics.belly_button[1])
+            r = max(4, int(5 * scale))
+            cv2.circle(output, (bx, by), r, (0, 0, 0), -1)       # Black fill
+            cv2.circle(output, (bx, by), r, (255, 200, 100), 2)   # Orange ring
+            # Small label
+            cv2.putText(output, "BB", (bx + r + 3, by + 3),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.35 * scale, (255, 200, 100),
+                       max(1, int(scale)), cv2.LINE_AA)
+
+        # Draw center of mass (CoM)
+        if metrics and metrics.center_of_mass:
+            cx, cy = int(metrics.center_of_mass[0]), int(metrics.center_of_mass[1])
+            r = max(6, int(8 * scale))
+
+            if metrics.com_inside_body:
+                # Inside body: solid white diamond
+                com_color = (255, 255, 255)
+            else:
+                # Outside body (carving!): red diamond — the interesting case
+                com_color = (0, 0, 255)
+
+            # Draw diamond shape for CoM
+            pts = np.array([
+                [cx, cy - r],
+                [cx + r, cy],
+                [cx, cy + r],
+                [cx - r, cy],
+            ], dtype=np.int32)
+            cv2.fillPoly(output, [pts], com_color)
+            cv2.polylines(output, [pts], True, (0, 0, 0), max(1, int(2 * scale)), cv2.LINE_AA)
+
+            # Label
+            label = "CoM"
+            if not metrics.com_inside_body:
+                label = "CoM (OUT)"
+            cv2.putText(output, label, (cx + r + 4, cy + 4),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4 * scale, com_color,
+                       max(1, int(scale)), cv2.LINE_AA)
+
+            # Draw line from belly button to CoM if they differ significantly
+            if metrics.belly_button:
+                bbx, bby = int(metrics.belly_button[0]), int(metrics.belly_button[1])
+                dist = math.sqrt((cx - bbx)**2 + (cy - bby)**2)
+                if dist > 10 * scale:
+                    # Dashed line from belly button to CoM
+                    cv2.line(output, (bbx, bby), (cx, cy), com_color,
+                            max(1, int(2 * scale)), cv2.LINE_AA)
 
         # Draw ski rectangles with metrics labels
         output = self._draw_ski_rectangles(output, keypoints, scale, left_ski, right_ski, metrics)
