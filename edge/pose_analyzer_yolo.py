@@ -2527,27 +2527,30 @@ class YOLOPoseAnalyzer:
         if not (la and ra):
             return output
 
-        # Get slope geometry - prefer per-frame depth estimation over static calibration
+        # Get slope geometry - use GPS calibration for fall line (stable), depth for pitch
         depth_slope = getattr(self, '_depth_slope_geometry', None)
         gps_slope = getattr(self, 'slope_geometry', None)
         pitch_deg = 17.0  # Default slope pitch
         fall_line_deg = 25.0  # Default fall line angle
 
-        # Use depth-estimated slope if available (per-frame, more accurate)
-        if depth_slope is not None:
-            pitch_deg = depth_slope.pitch_deg
-            fall_line_deg = depth_slope.fall_line_angle_deg
-        elif gps_slope is not None:
-            pitch_deg = gps_slope.pitch_deg
+        # GPS calibration provides accurate fall line direction from real-world gate positions
+        # Use GPS for fall line angle (stable), depth can supplement pitch
+        if gps_slope is not None:
             fall_line_deg = gps_slope.fall_line_angle_deg
+            pitch_deg = gps_slope.pitch_deg
+
+        # Depth estimation can refine local pitch if available
+        if depth_slope is not None and gps_slope is not None:
+            # Blend depth pitch with GPS (30% depth, 70% GPS for stability)
+            pitch_deg = gps_slope.pitch_deg * 0.7 + depth_slope.pitch_deg * 0.3
 
         # Grid origin: under the ski bases (well below ankles on the snow)
         origin_x = (la[0] + ra[0]) // 2
         origin_y = (la[1] + ra[1]) // 2 + int(80 * scale)  # Below ski base level
 
-        # Grid lies flat on snow, rotated to match fall line direction
-        # Fall line is the direction of steepest descent on the slope
-        grid_rotation_deg = fall_line_deg  # Align grid with fall line
+        # Grid lies flat on snow, no rotation (aligned with image vertical)
+        # This was the original 3D version that looked best
+        grid_rotation_deg = 0
         grid_rot_rad = math.radians(grid_rotation_deg)
 
         # Grid parameters
