@@ -1453,16 +1453,65 @@ class YOLOPoseAnalyzer:
 
         return ((com_x, com_y), com_inside)
 
-    def _compute_edge_angle(self, ski: dict, slope_ref_angle: float) -> float:
+    def _compute_edge_angle_from_tibia(self, ankle: Tuple[float, float, float],
+                                        knee: Tuple[float, float, float],
+                                        cross_slope_deg: float) -> float:
         """
-        Calculate edge angle from ski base orientation relative to slope.
+        Calculate edge angle from tibia (ankle-to-knee) angle relative to slope.
+
+        Edge angle is how much the ski is tilted from flat on the snow.
+        - 0° = ski flat on snow (tibia perpendicular to slope surface)
+        - 90° = ski on full edge (tibia parallel to slope surface)
+
+        We use tibia angle because when a skier tips their skis on edge,
+        their lower leg tilts with the ski. This is much more reliable
+        than trying to measure ski base orientation from the 2D image.
 
         Args:
-            ski: Ski detection dict with 'rotated_rect' from SAM3
-            slope_ref_angle: Slope angle from SAM3 snow detection or calibration
+            ankle: (x, y, confidence) of ankle keypoint
+            knee: (x, y, confidence) of knee keypoint
+            cross_slope_deg: Cross-slope direction in image (perpendicular to fall line)
 
         Returns:
-            Edge angle in degrees (0 = flat on slope, 90 = full edge)
+            Edge angle in degrees (0 = flat, high = on edge)
+        """
+        if ankle is None or knee is None:
+            return 0.0
+        if ankle[2] < 0.3 or knee[2] < 0.3:
+            return 0.0
+
+        # Tibia vector (from ankle up to knee)
+        tibia_dx = knee[0] - ankle[0]
+        tibia_dy = knee[1] - ankle[1]  # Note: y increases downward in image
+
+        # Tibia angle from vertical (0 = straight up, positive = tilted right)
+        # atan2(-dy, dx) because y is inverted in image coordinates
+        tibia_angle_from_vertical = math.degrees(math.atan2(tibia_dx, -tibia_dy))
+
+        # The slope's "vertical" is perpendicular to the cross-slope direction
+        # Cross-slope is horizontal on the slope surface
+        # Slope vertical = cross_slope - 90 (perpendicular to cross-slope)
+        slope_vertical_deg = cross_slope_deg - 90
+
+        # Edge angle = how much tibia deviates from slope vertical
+        # When standing upright on flat skis, tibia aligns with slope vertical → 0°
+        # When on edge, tibia tilts toward cross-slope → high angle
+        edge_angle = abs(tibia_angle_from_vertical - slope_vertical_deg)
+
+        # Normalize to 0-90 range
+        while edge_angle > 180:
+            edge_angle -= 360
+        edge_angle = abs(edge_angle)
+        if edge_angle > 90:
+            edge_angle = 180 - edge_angle
+
+        return edge_angle
+
+    def _compute_edge_angle(self, ski: dict, slope_ref_angle: float) -> float:
+        """
+        Legacy: Calculate edge angle from ski rotated rect.
+        This is less accurate than tibia-based calculation.
+        Kept for reference but not used in main metrics.
         """
         if not ski:
             return 0.0
@@ -1603,29 +1652,17 @@ class YOLOPoseAnalyzer:
         # Check if calibration was from GPS (has realistic pitch > 10°)
         gps_has_pitch = gps_slope is not None and gps_slope.pitch_deg > 10
 
-        if gps_has_pitch and depth_slope is not None:
-            # Combine: use GPS pitch, depth fall_line direction
-            combined = SlopeGeometry.from_combined(
-                gps_slope=gps_slope,
-                depth_slope=depth_slope,
-                pole_slope=None,
-                weights=(0.7, 0.3, 0.0)  # Favor GPS for pitch, depth for fall line
-            )
-            if combined:
-                slope_ref_angle = combined.fall_line_angle_deg
-                self._current_slope_source = 'gps+depth'
-                self._combined_slope_geometry = combined
-            else:
-                slope_ref_angle = gps_slope.fall_line_angle_deg
-                self._current_slope_source = 'gps'
-        elif gps_has_pitch:
-            # GPS only
-            slope_ref_angle = gps_slope.fall_line_angle_deg
-            self._current_slope_source = 'gps'
-        elif depth_slope is not None:
-            # Depth only
+        if depth_slope is not None:
+            # Prefer per-frame depth estimation for local slope accuracy
             slope_ref_angle = depth_slope.fall_line_angle_deg
             self._current_slope_source = 'depth'
+            # Store for grid drawing
+            self._depth_slope_for_grid = depth_slope
+        elif gps_has_pitch:
+            # Fallback to GPS calibration
+            slope_ref_angle = gps_slope.fall_line_angle_deg
+            self._current_slope_source = 'gps'
+            self._depth_slope_for_grid = None
         else:
             # Fallback to calibration (4-pole drawing)
             slope_ref_angle = geom.fall_line_angle_deg
@@ -1633,15 +1670,18 @@ class YOLOPoseAnalyzer:
 
         self._current_local_slope = slope_ref_angle
 
-        # Edge angle = ski base width orientation vs cross-slope (perpendicular to fall line)
-        # Cross-slope angle = fall_line_angle + 90°
+        # Edge angle from tibia (ankle-to-knee) angle relative to slope
+        # Cross-slope angle = fall_line_angle + 90° (horizontal on slope surface)
         cross_slope_angle = slope_ref_angle + 90
 
-        if left_ski:
-            edge_angle_left = self._compute_edge_angle(left_ski, cross_slope_angle)
+        # Use tibia-based edge angle calculation (much more accurate than ski rect)
+        if left_ankle and left_knee:
+            edge_angle_left = self._compute_edge_angle_from_tibia(
+                left_ankle, left_knee, cross_slope_angle)
 
-        if right_ski:
-            edge_angle_right = self._compute_edge_angle(right_ski, cross_slope_angle)
+        if right_ankle and right_knee:
+            edge_angle_right = self._compute_edge_angle_from_tibia(
+                right_ankle, right_knee, cross_slope_angle)
 
         # Edge symmetry as percentage (100% = perfect)
         max_edge = max(abs(edge_angle_left), abs(edge_angle_right), 1)
@@ -2487,12 +2527,17 @@ class YOLOPoseAnalyzer:
         if not (la and ra):
             return output
 
-        # Get slope geometry
+        # Get slope geometry - prefer per-frame depth estimation over static calibration
+        depth_slope = getattr(self, '_depth_slope_geometry', None)
         gps_slope = getattr(self, 'slope_geometry', None)
         pitch_deg = 17.0  # Default slope pitch
         fall_line_deg = 25.0  # Default fall line angle
 
-        if gps_slope is not None:
+        # Use depth-estimated slope if available (per-frame, more accurate)
+        if depth_slope is not None:
+            pitch_deg = depth_slope.pitch_deg
+            fall_line_deg = depth_slope.fall_line_angle_deg
+        elif gps_slope is not None:
             pitch_deg = gps_slope.pitch_deg
             fall_line_deg = gps_slope.fall_line_angle_deg
 
@@ -2500,9 +2545,9 @@ class YOLOPoseAnalyzer:
         origin_x = (la[0] + ra[0]) // 2
         origin_y = (la[1] + ra[1]) // 2 + int(80 * scale)  # Below ski base level
 
-        # Grid lies flat on snow, aligned with image vertical (no rotation)
-        # First 3D version - simple perspective grid
-        grid_rotation_deg = 0  # No rotation, aligned with image
+        # Grid lies flat on snow, rotated to match fall line direction
+        # Fall line is the direction of steepest descent on the slope
+        grid_rotation_deg = fall_line_deg  # Align grid with fall line
         grid_rot_rad = math.radians(grid_rotation_deg)
 
         # Grid parameters
@@ -2866,7 +2911,8 @@ class YOLOPoseAnalyzer:
 
         # Compute current values
         if metrics:
-            edge_angle = (90 - abs(metrics.edge_angle_left) + 90 - abs(metrics.edge_angle_right)) / 2
+            # Edge angle now comes directly from tibia angle (0 = flat, high = on edge)
+            edge_angle = (abs(metrics.edge_angle_left) + abs(metrics.edge_angle_right)) / 2
             edge_sym = metrics.edge_symmetry_pct
             fore_aft = 0.0
             if metrics.fore_aft_left is not None and metrics.fore_aft_right is not None:
@@ -2880,8 +2926,8 @@ class YOLOPoseAnalyzer:
             # Secondary metrics
             shoulder_slope = metrics.shoulder_angle_to_slope
             hip_slope = metrics.hip_angle_to_slope
-            edge_left = 90 - abs(metrics.edge_angle_left)
-            edge_right = 90 - abs(metrics.edge_angle_right)
+            edge_left = abs(metrics.edge_angle_left)
+            edge_right = abs(metrics.edge_angle_right)
             fa_left = metrics.fore_aft_left if metrics.fore_aft_left is not None else 0.0
             fa_right = metrics.fore_aft_right if metrics.fore_aft_right is not None else 0.0
         else:
