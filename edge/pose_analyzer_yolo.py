@@ -252,6 +252,7 @@ class SlopeGeometry:
             # Pitch from the slope of the plane
             pitch = math.degrees(math.atan(fall_line_len))
 
+
         geom = cls()
         geom.fall_line_angle_deg = fall_line_angle
         geom.pitch_deg = pitch
@@ -260,6 +261,207 @@ class SlopeGeometry:
         # Cross-slope direction (perpendicular to fall line in image plane)
         cross_slope_2d = np.array([-fall_line_2d[1], fall_line_2d[0]]) if fall_line_len > 0.001 else np.array([1, 0])
         geom.roll_deg = math.degrees(math.atan2(cross_slope_2d[1], cross_slope_2d[0]))
+
+        geom._compute_3d_vectors()
+
+        return geom
+
+    @classmethod
+    def from_gps_poles(cls, gps_coords: List[dict], pole_image_positions: List[dict],
+                       pole_height: float = 2.05) -> Optional['SlopeGeometry']:
+        """
+        Compute slope geometry from GPS coordinates and pole image positions.
+
+        Combines real-world GPS data with image calibration for accurate slope.
+
+        Args:
+            gps_coords: List of 2 dicts with GPS data for turning pole bases:
+                [{'lat': float, 'lon': float, 'elevation': float}, ...]
+                First pole is uphill, second is downhill.
+            pole_image_positions: List of 4 pole dicts with image positions:
+                [{'top': (x,y), 'bottom': (x,y)}, ...] for each pole
+                Order: turning_pole_1, outside_pole_1, turning_pole_2, outside_pole_2
+            pole_height: Height of turning poles in meters (default 2.05m for GS)
+
+        Returns:
+            SlopeGeometry with accurate fall_line, pitch from GPS elevation data
+        """
+        if len(gps_coords) < 2:
+            return None
+
+        geom = cls()
+
+        # --- Compute fall line direction and pitch from GPS ---
+        # Convert lat/lon to local meters (approximate for small distances)
+        lat1, lon1, elev1 = gps_coords[0]['lat'], gps_coords[0]['lon'], gps_coords[0]['elevation']
+        lat2, lon2, elev2 = gps_coords[1]['lat'], gps_coords[1]['lon'], gps_coords[1]['elevation']
+
+        # Approximate meters per degree at this latitude
+        meters_per_deg_lat = 111320  # ~111km per degree latitude
+        meters_per_deg_lon = 111320 * math.cos(math.radians((lat1 + lat2) / 2))
+
+        # Vector from pole 1 to pole 2 in local ENU (East-North-Up) coordinates
+        delta_east = (lon2 - lon1) * meters_per_deg_lon
+        delta_north = (lat2 - lat1) * meters_per_deg_lat
+        delta_up = elev2 - elev1
+
+        # Horizontal distance between poles
+        horizontal_dist = math.sqrt(delta_east**2 + delta_north**2)
+
+        if horizontal_dist < 0.1:  # Poles too close
+            return None
+
+        # Slope pitch = angle of descent (negative delta_up = downhill)
+        geom.pitch_deg = math.degrees(math.atan2(-delta_up, horizontal_dist))
+
+        # Fall line bearing (compass direction, 0=North, 90=East)
+        bearing_rad = math.atan2(delta_east, delta_north)
+
+        # --- Compute fall line from gate-to-gate direction + offset correction ---
+        # The gate-to-gate direction is the COURSE direction (traverse across slope).
+        # The FALL LINE is perpendicular to contour lines (steepest descent).
+        # The "offset" tells us how much the course deviates from the fall line.
+        #
+        # If we know offset_lr (cross-slope distance between gates), we can compute:
+        # - Along fall line = sqrt(horizontal_dist² - offset²)
+        # - Course angle from fall line = atan2(offset, along_fall_line)
+        # - Fall line = course direction rotated by this angle
+
+        # Get gate-to-gate direction in IMAGE coordinates
+        course_angle_image = None
+        if len(pole_image_positions) >= 3:
+            p1_bottom = pole_image_positions[0].get('bottom')  # Gate 1 (uphill)
+            p2_bottom = pole_image_positions[2].get('bottom')  # Gate 2 (downhill)
+            if p1_bottom and p2_bottom:
+                img_dx = p2_bottom[0] - p1_bottom[0]
+                img_dy = p2_bottom[1] - p1_bottom[1]
+                # Course direction in image (angle from vertical, positive = right)
+                course_angle_image = math.degrees(math.atan2(img_dx, img_dy))
+                print(f"  Course direction in image: {course_angle_image:.1f}° from vertical")
+
+        # Check for offset in GPS coords (offset_lr field)
+        offset_lr = None
+        for coord in gps_coords:
+            if 'offset_lr' in coord:
+                offset_lr = coord['offset_lr']
+                break
+
+        # Compute fall line from gate 9 cross-slope (turning to outside pole)
+        # Gate 9's cross-slope points "skier's right" which helps determine fall line
+        cross_slope_angle = None
+        if len(pole_image_positions) >= 4:
+            # Gate 9: turning pole [2], outside pole [3]
+            g9_turn = pole_image_positions[2].get('bottom')
+            g9_out = pole_image_positions[3].get('bottom')
+
+            if g9_turn and g9_out:
+                cross_dx = g9_out[0] - g9_turn[0]
+                cross_dy = g9_out[1] - g9_turn[1]
+                print(f"  Gate 9 cross-slope vector: ({cross_dx}, {cross_dy})")
+
+                if abs(cross_dx) > 5 or abs(cross_dy) > 5:
+                    # Fall line is perpendicular to cross-slope
+                    # Perpendicular: rotate 90° -> (-dy, dx) or (dy, -dx)
+                    # Choose the one pointing DOWN in image (positive y component)
+                    fall_dx = -cross_dy
+                    fall_dy = cross_dx
+                    if fall_dy < 0:
+                        fall_dx, fall_dy = -fall_dx, -fall_dy
+
+                    # Angle from vertical: atan2(dx, dy)
+                    cross_slope_angle = "computed"
+                    geom.fall_line_angle_deg = math.degrees(math.atan2(fall_dx, fall_dy))
+                    print(f"  Fall line vector: ({fall_dx:.0f}, {fall_dy:.0f})")
+                    print(f"  Fall line angle: {geom.fall_line_angle_deg:.1f}° from vertical")
+
+        if cross_slope_angle is None:
+            # Cross-slope method didn't work, try offset correction
+            if course_angle_image is not None and offset_lr is not None and horizontal_dist > 0:
+                along_fall_line = math.sqrt(max(0, horizontal_dist**2 - offset_lr**2))
+                if along_fall_line > 0:
+                    course_offset_angle = math.degrees(math.atan2(offset_lr, along_fall_line))
+                    geom.fall_line_angle_deg = course_angle_image + course_offset_angle
+                    print(f"  Fall line from offset correction: {geom.fall_line_angle_deg:.1f}°")
+                else:
+                    geom.fall_line_angle_deg = course_angle_image
+            elif course_angle_image is not None:
+                geom.fall_line_angle_deg = course_angle_image
+                print(f"  Warning: No offset data, using course direction as fall line approximation")
+            else:
+                # Fallback to pole orientation (gravity direction)
+                vertical_angles = []
+                for pole in pole_image_positions:
+                    if pole.get('top') and pole.get('bottom'):
+                        top = pole['top']
+                        bottom = pole['bottom']
+                        dx = bottom[0] - top[0]
+                        dy = bottom[1] - top[1]
+                        if dy > 50:
+                            pole_angle = math.degrees(math.atan2(dx, dy))
+                            vertical_angles.append(pole_angle)
+                if vertical_angles:
+                    geom.fall_line_angle_deg = sum(vertical_angles) / len(vertical_angles)
+                    print(f"  Fall line from pole orientation: {geom.fall_line_angle_deg:.1f}°")
+
+        # Camera roll from pole orientation
+        vertical_angles = []
+        for pole in pole_image_positions:
+            if pole.get('top') and pole.get('bottom'):
+                top = pole['top']
+                bottom = pole['bottom']
+                dx = bottom[0] - top[0]
+                dy = bottom[1] - top[1]
+                if dy > 50:
+                    vertical_angles.append(math.degrees(math.atan2(dx, dy)))
+        if vertical_angles:
+            geom.roll_deg = sum(vertical_angles) / len(vertical_angles)
+
+        geom._compute_3d_vectors()
+
+        print(f"  GPS slope: pitch={geom.pitch_deg:.1f}°, fall_line={geom.fall_line_angle_deg:.1f}°, "
+              f"horizontal_dist={horizontal_dist:.1f}m, elev_drop={-delta_up:.1f}m")
+
+        return geom
+
+    @classmethod
+    def from_combined(cls, gps_slope: Optional['SlopeGeometry'],
+                      depth_slope: Optional['SlopeGeometry'],
+                      pole_slope: Optional['SlopeGeometry'],
+                      weights: Tuple[float, float, float] = (0.6, 0.2, 0.2)) -> Optional['SlopeGeometry']:
+        """
+        Combine multiple slope estimation methods for best accuracy.
+
+        Args:
+            gps_slope: Slope from GPS coordinates (most accurate for pitch)
+            depth_slope: Slope from depth estimation (good for local variations)
+            pole_slope: Slope from 4-pole drawing (good for fall line direction)
+            weights: (gps_weight, depth_weight, pole_weight) for combining
+
+        Returns:
+            Combined SlopeGeometry
+        """
+        sources = []
+        if gps_slope is not None:
+            sources.append((gps_slope, weights[0]))
+        if depth_slope is not None:
+            sources.append((depth_slope, weights[1]))
+        if pole_slope is not None:
+            sources.append((pole_slope, weights[2]))
+
+        if not sources:
+            return None
+
+        # Normalize weights
+        total_weight = sum(w for _, w in sources)
+        if total_weight == 0:
+            return None
+
+        geom = cls()
+
+        # Weighted average of angles
+        geom.fall_line_angle_deg = sum(s.fall_line_angle_deg * w for s, w in sources) / total_weight
+        geom.pitch_deg = sum(s.pitch_deg * w for s, w in sources) / total_weight
+        geom.roll_deg = sum(s.roll_deg * w for s, w in sources) / total_weight
 
         geom._compute_3d_vectors()
 
@@ -328,17 +530,59 @@ class SlopeGeometry:
         """
         Load slope geometry from a calibration JSON file.
 
-        Extracts:
-        - gate_line_axis: 2D fall line direction
-        - world_coords: 3D positions for slope plane fitting
-        - homography: image-to-slope transform
+        Extracts (in order of preference):
+        1. gps_coords + gates: Real GPS coordinates with elevation for accurate pitch
+        2. gate_line_axis: 2D fall line direction from 4-pole drawing
+        3. world_coords: 3D positions for slope plane fitting
+        4. homography: image-to-slope transform
+
+        GPS calibration format:
+        {
+            "gps_coords": [
+                {"lat": 43.xxx, "lon": -71.xxx, "elevation": 450.0},  // turning pole 1 (uphill)
+                {"lat": 43.xxx, "lon": -71.xxx, "elevation": 445.0}   // turning pole 2 (downhill)
+            ],
+            "gates": [
+                {"top": [x, y], "base": [x, y]},  // turning pole 1
+                {"top": [x, y], "base": [x, y]},  // outside pole 1
+                {"top": [x, y], "base": [x, y]},  // turning pole 2
+                {"top": [x, y], "base": [x, y]}   // outside pole 2
+            ]
+        }
         """
         with open(calibration_path) as f:
             cal = json.load(f)
 
         geom = cls()
 
-        # Get fall line direction from gate_line_axis
+        # --- Priority 1: GPS coordinates with pole image positions ---
+        if 'gps_coords' in cal and len(cal['gps_coords']) >= 2 and 'gates' in cal:
+            gps_coords = cal['gps_coords']
+            gates = cal['gates']
+
+            # Convert gates to pole_image_positions format
+            pole_positions = []
+            for g in gates:
+                pole_positions.append({
+                    'top': tuple(g.get('top', [0, 0])),
+                    'bottom': tuple(g.get('base', g.get('bottom', [0, 0])))
+                })
+
+            gps_geom = cls.from_gps_poles(gps_coords, pole_positions)
+            if gps_geom is not None:
+                # Check for manual fall_line_angle_deg override in calibration
+                if 'fall_line_angle_deg' in cal:
+                    gps_geom.fall_line_angle_deg = cal['fall_line_angle_deg']
+                    print(f"  Using manual fall_line override: {gps_geom.fall_line_angle_deg:.1f}°")
+                # Check for manual pitch override
+                if 'slope_deg' in cal.get('computed', {}):
+                    gps_geom.pitch_deg = cal['computed']['slope_deg']
+                print(f"  Using GPS-calibrated slope: pitch={gps_geom.pitch_deg:.1f}°, "
+                      f"fall_line={gps_geom.fall_line_angle_deg:.1f}°")
+                gps_geom._compute_3d_vectors()
+                return gps_geom
+
+        # --- Priority 2: Fall line from gate_line_axis (4-pole drawing) ---
         if 'gate_line_axis' in cal:
             axis = cal['gate_line_axis']
             # axis is [x, y] direction vector in image
@@ -1163,15 +1407,33 @@ class YOLOPoseAnalyzer:
         else:
             segments.append((r_hip[:2], 6.1))
 
-        # Compute mass-weighted center
+        # Compute mass-weighted center from segments
         total_mass = sum(m for _, m in segments)
-        com_x = sum(pos[0] * m for pos, m in segments) / total_mass
-        com_y = sum(pos[1] * m for pos, m in segments) / total_mass
+        segment_com_x = sum(pos[0] * m for pos, m in segments) / total_mass
+        segment_com_y = sum(pos[1] * m for pos, m in segments) / total_mass
+
+        com_x, com_y = segment_com_x, segment_com_y
+
+        # If SAM3 body mask available, blend with mask centroid
+        # The mask centroid captures actual body shape including lean during carving
+        if body_mask is not None:
+            # Find mask centroid using image moments
+            mask_points = np.where(body_mask > 0)
+            if len(mask_points[0]) > 100:  # Need enough pixels
+                mask_centroid_y = np.mean(mask_points[0])
+                mask_centroid_x = np.mean(mask_points[1])
+
+                # Blend: 90% segment model, 10% mask centroid
+                # Note: mask centroid can shift AWAY from turn center during carving
+                # because the outside leg extends while inside leg flexes
+                # So we use minimal blending - segment model is more physically accurate
+                blend_weight = 0.1
+                com_x = segment_com_x * (1 - blend_weight) + mask_centroid_x * blend_weight
+                com_y = segment_com_y * (1 - blend_weight) + mask_centroid_y * blend_weight
 
         # Check if CoM is inside body
         com_inside = True
         if body_mask is not None:
-            # Use SAM3 body mask to check
             ix, iy = int(round(com_x)), int(round(com_y))
             h, w = body_mask.shape[:2]
             if 0 <= iy < h and 0 <= ix < w:
@@ -1180,7 +1442,6 @@ class YOLOPoseAnalyzer:
                 com_inside = False
         else:
             # Heuristic: check if CoM is within the shoulder-hip bounding box
-            # (expanded slightly). During carving, CoM moves laterally outside.
             min_x = min(l_shoulder[0], r_shoulder[0], l_hip[0], r_hip[0])
             max_x = max(l_shoulder[0], r_shoulder[0], l_hip[0], r_hip[0])
             min_y = min(l_shoulder[1], r_shoulder[1])
@@ -1325,19 +1586,48 @@ class YOLOPoseAnalyzer:
             knee_angle_right = angle_at_joint(right_hip[:2], right_knee[:2], right_ankle[:2])
 
         # Edge angles: ski base tilt relative to slope plane
-        # Slope plane from depth estimation (best) or calibration (fallback)
+        # Combine multiple slope estimation sources for best accuracy
         edge_angle_left = 0.0
         edge_angle_right = 0.0
 
         # Priority for slope estimation:
-        # 1. Depth-based slope (from Depth Anything + SAM3 snow mask)
-        # 2. Calibration-based slope (from 4-pole calibration file)
+        # 1. GPS-calibrated slope (most accurate for pitch - from calibration file)
+        # 2. Depth-based slope (good for local fall line direction)
+        # 3. 4-pole calibration (fallback)
+        # When GPS available, combine with depth for best of both:
+        # - GPS provides accurate pitch
+        # - Depth provides local fall line direction variations
         depth_slope = getattr(self, '_depth_slope_geometry', None)
-        if depth_slope is not None:
+        gps_slope = self.slope_geometry if hasattr(self, 'slope_geometry') else None
+
+        # Check if calibration was from GPS (has realistic pitch > 10°)
+        gps_has_pitch = gps_slope is not None and gps_slope.pitch_deg > 10
+
+        if gps_has_pitch and depth_slope is not None:
+            # Combine: use GPS pitch, depth fall_line direction
+            combined = SlopeGeometry.from_combined(
+                gps_slope=gps_slope,
+                depth_slope=depth_slope,
+                pole_slope=None,
+                weights=(0.7, 0.3, 0.0)  # Favor GPS for pitch, depth for fall line
+            )
+            if combined:
+                slope_ref_angle = combined.fall_line_angle_deg
+                self._current_slope_source = 'gps+depth'
+                self._combined_slope_geometry = combined
+            else:
+                slope_ref_angle = gps_slope.fall_line_angle_deg
+                self._current_slope_source = 'gps'
+        elif gps_has_pitch:
+            # GPS only
+            slope_ref_angle = gps_slope.fall_line_angle_deg
+            self._current_slope_source = 'gps'
+        elif depth_slope is not None:
+            # Depth only
             slope_ref_angle = depth_slope.fall_line_angle_deg
             self._current_slope_source = 'depth'
         else:
-            # Fallback to calibration
+            # Fallback to calibration (4-pole drawing)
             slope_ref_angle = geom.fall_line_angle_deg
             self._current_slope_source = 'calibration'
 
@@ -2179,9 +2469,10 @@ class YOLOPoseAnalyzer:
 
         return output
 
-    def _draw_slope_line(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
-        """Draw slope line (dotted) perpendicular to fall line - the snow surface reference.
-        Uses ski-derived local slope when available for accuracy."""
+    def _draw_slope_grid(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
+                          left_ski: Optional[dict] = None, right_ski: Optional[dict] = None) -> np.ndarray:
+        """Draw a 3D perspective grid lying ON the snow surface.
+        Uses perspective projection to make grid appear flat on the tilted snow plane."""
         output = frame.copy()
 
         def get_pt(idx):
@@ -2193,59 +2484,290 @@ class YOLOPoseAnalyzer:
         la = get_pt(Keypoints.LEFT_ANKLE)
         ra = get_pt(Keypoints.RIGHT_ANKLE)
 
-        if la and ra:
-            # Start point: below ankle midpoint (on snow)
-            ankle_mid = ((la[0] + ra[0])//2, (la[1] + ra[1])//2)
-            snow_offset = int(40 * scale)  # Below ankle
-            center_pt = (ankle_mid[0], ankle_mid[1] + snow_offset)
+        if not (la and ra):
+            return output
 
-            # Use calibrated slope angle (from gate positions / terrain)
-            slope_angle = self.slope_angle_deg
+        # Get slope geometry
+        gps_slope = getattr(self, 'slope_geometry', None)
+        pitch_deg = 17.0  # Default slope pitch
+        fall_line_deg = 25.0  # Default fall line angle
 
-            # Slope line is perpendicular to fall line (horizontal on the slope surface)
-            slope_line_angle_rad = math.radians(slope_angle)
-            line_len = int(200 * scale)
+        if gps_slope is not None:
+            pitch_deg = gps_slope.pitch_deg
+            fall_line_deg = gps_slope.fall_line_angle_deg
 
-            # Extend in both directions
-            dx = int(line_len * math.cos(slope_line_angle_rad))
-            dy = int(line_len * math.sin(slope_line_angle_rad))
-            pt1 = (center_pt[0] - dx, center_pt[1] - dy)
-            pt2 = (center_pt[0] + dx, center_pt[1] + dy)
+        # Grid origin: under the ski bases (well below ankles on the snow)
+        origin_x = (la[0] + ra[0]) // 2
+        origin_y = (la[1] + ra[1]) // 2 + int(80 * scale)  # Below ski base level
 
-            # Draw dotted line
-            thickness = max(2, int(3 * scale))
-            dash_len = int(15 * scale)
-            gap_len = int(10 * scale)
+        # Grid lies flat on snow, aligned with image vertical (no rotation)
+        # First 3D version - simple perspective grid
+        grid_rotation_deg = 0  # No rotation, aligned with image
+        grid_rot_rad = math.radians(grid_rotation_deg)
 
-            # Calculate line length and draw dashes
-            total_dx = pt2[0] - pt1[0]
-            total_dy = pt2[1] - pt1[1]
-            total_len = math.sqrt(total_dx**2 + total_dy**2)
-            if total_len > 0:
-                ux, uy = total_dx / total_len, total_dy / total_len
-                pos = 0
-                drawing = True
-                while pos < total_len:
-                    if drawing:
-                        seg_len = min(dash_len, total_len - pos)
-                        x1 = int(pt1[0] + ux * pos)
-                        y1 = int(pt1[1] + uy * pos)
-                        x2 = int(pt1[0] + ux * (pos + seg_len))
-                        y2 = int(pt1[1] + uy * (pos + seg_len))
-                        cv2.line(output, (x1, y1), (x2, y2), (255, 255, 255), thickness, cv2.LINE_AA)
-                        pos += dash_len
-                    else:
-                        pos += gap_len
-                    drawing = not drawing
+        # Grid parameters
+        num_lines = 7
+        grid_width = int(350 * scale)   # Width
+        grid_depth = int(80 * scale)    # Depth (foreshortened)
 
-            # Label "SLOPE" at right end - always from calibration
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            label = "SLOPE"
-            label_pos = (pt2[0] + int(10 * scale), pt2[1])
-            cv2.putText(output, label, label_pos, font, 0.45 * scale, (255, 255, 255),
-                       max(1, int(2 * scale)), cv2.LINE_AA)
+        # Perspective parameters
+        # Strong foreshortening to show grid is lying flat on snow
+        foreshorten = 0.35
+
+        # Vanishing point convergence (lines get closer as they go "away" = up in image)
+        convergence_rate = 0.5
+
+        # Grid color - orange for visibility
+        grid_color = (0, 140, 255)  # Orange in BGR
+        thickness = max(2, int(3 * scale))
+
+        # Generate grid points with perspective
+        # Grid uses image coordinates: X = horizontal, Y = vertical (up = away)
+        grid_points = []
+
+        for row in range(num_lines):
+            row_points = []
+            # Distance from skier in "depth" direction (negative = up in image = away)
+            t = (row - num_lines // 2) / (num_lines // 2)  # -1 to +1
+
+            # Vertical offset (up = negative, toward horizon)
+            dist_y = t * grid_depth * foreshorten
+
+            # Perspective scaling: rows further up (negative t) are more compressed
+            if t < 0:
+                persp_scale = 1.0 + t * convergence_rate
+                persp_scale = max(0.3, persp_scale)
+            else:
+                persp_scale = 1.0 + t * 0.1
+
+            for col in range(num_lines):
+                # Horizontal position (left-right in image)
+                s = (col - num_lines // 2) / (num_lines // 2)  # -1 to +1
+                dist_x = s * grid_width * 0.5 * persp_scale
+
+                # Apply rotation toward fall line (50% of fall line angle)
+                rot_x = dist_x * math.cos(grid_rot_rad) - dist_y * math.sin(grid_rot_rad)
+                rot_y = dist_x * math.sin(grid_rot_rad) + dist_y * math.cos(grid_rot_rad)
+
+                # Calculate point position
+                px = origin_x + rot_x
+                py = origin_y + rot_y
+
+                row_points.append((int(px), int(py)))
+
+            grid_points.append(row_points)
+
+        # Draw grid lines
+        # Draw horizontal lines (rows)
+        for row in range(num_lines):
+            for col in range(num_lines - 1):
+                pt1 = grid_points[row][col]
+                pt2 = grid_points[row][col + 1]
+                cv2.line(output, pt1, pt2, grid_color, thickness, cv2.LINE_AA)
+
+        # Draw vertical lines (columns) - these go "into" the snow plane
+        for col in range(num_lines):
+            for row in range(num_lines - 1):
+                pt1 = grid_points[row][col]
+                pt2 = grid_points[row + 1][col]
+                cv2.line(output, pt1, pt2, grid_color, thickness, cv2.LINE_AA)
+
+        # Edge angle arcs removed - too cluttered under skis
+        # output = self._draw_edge_angle_arcs(output, keypoints, scale, left_ski, right_ski,
+        #                                     fall_line_deg, pitch_deg)
 
         return output
+
+    def _draw_edge_angle_arcs(self, frame: np.ndarray, keypoints: np.ndarray, scale: float,
+                               left_ski: Optional[dict], right_ski: Optional[dict],
+                               fall_line_deg: float, pitch_deg: float) -> np.ndarray:
+        """Draw edge angle arcs showing angle between ski base and snow surface.
+        Arc is drawn at the inside edge of each ski."""
+        output = frame
+
+        def get_pt(idx):
+            kp = keypoints[idx]
+            if kp[2] > 0.3:
+                return (int(kp[0]), int(kp[1]))
+            return None
+
+        la = get_pt(Keypoints.LEFT_ANKLE)
+        ra = get_pt(Keypoints.RIGHT_ANKLE)
+
+        if not (la and ra):
+            return output
+
+        # Cross-slope angle (the "horizontal" on the snow surface)
+        cross_slope_deg = fall_line_deg + 90
+        cross_slope_rad = math.radians(cross_slope_deg)
+
+        for ski, ankle, is_left in [(left_ski, la, True), (right_ski, ra, False)]:
+            if ski is None:
+                continue
+
+            # Get ski direction angle from detection
+            ski_angle = ski.get('direction_angle')
+            if ski_angle is None:
+                continue
+
+            # Compute edge angle: angle between ski base and cross-slope (snow surface)
+            edge_angle = self._compute_edge_angle(ski, cross_slope_deg)
+
+            # Position for drawing the arc (at ski contact point on snow)
+            # Use ski center, offset down toward snow
+            ski_center = ski.get('center', ankle)
+            edge_x = int(ski_center[0])
+            edge_y = int(ski_center[1]) + int(20 * scale)
+
+            # Draw arc showing edge angle
+            arc_radius = int(40 * scale)
+
+            # Snow surface line direction (cross-slope)
+            snow_angle_deg = cross_slope_deg
+
+            # Ski base line angle (perpendicular to ski direction = base width direction)
+            # Ski direction is along the length; base is perpendicular
+            ski_base_angle = ski_angle + 90
+
+            # Draw snow surface reference line (cyan)
+            line_len = int(60 * scale)
+            snow_x1 = int(edge_x - line_len * math.cos(math.radians(snow_angle_deg)))
+            snow_y1 = int(edge_y - line_len * math.sin(math.radians(snow_angle_deg)))
+            snow_x2 = int(edge_x + line_len * math.cos(math.radians(snow_angle_deg)))
+            snow_y2 = int(edge_y + line_len * math.sin(math.radians(snow_angle_deg)))
+            cv2.line(output, (snow_x1, snow_y1), (snow_x2, snow_y2), (255, 255, 0), 3, cv2.LINE_AA)
+
+            # Draw ski base line (colored by edge angle quality)
+            # Color based on edge angle (green = high edge, yellow = medium, red = flat)
+            if edge_angle > 60:
+                edge_color = (0, 255, 0)  # Green - high edge
+            elif edge_angle > 40:
+                edge_color = (0, 255, 255)  # Yellow - medium edge
+            else:
+                edge_color = (0, 100, 255)  # Orange - low edge
+
+            ski_x1 = int(edge_x - line_len * 0.8 * math.cos(math.radians(ski_base_angle)))
+            ski_y1 = int(edge_y - line_len * 0.8 * math.sin(math.radians(ski_base_angle)))
+            ski_x2 = int(edge_x + line_len * 0.8 * math.cos(math.radians(ski_base_angle)))
+            ski_y2 = int(edge_y + line_len * 0.8 * math.sin(math.radians(ski_base_angle)))
+
+            # Color based on edge angle (green = high edge, yellow = medium, red = flat)
+            if edge_angle > 60:
+                edge_color = (0, 255, 0)  # Green - high edge
+            elif edge_angle > 40:
+                edge_color = (0, 255, 255)  # Yellow - medium edge
+            else:
+                edge_color = (0, 100, 255)  # Orange - low edge
+
+            cv2.line(output, (ski_x1, ski_y1), (ski_x2, ski_y2), edge_color, 3, cv2.LINE_AA)
+
+            # Draw arc between snow surface and ski base
+            # Calculate start and end angles for the arc
+            start_angle = snow_angle_deg
+            end_angle = ski_base_angle
+
+            # Normalize angles
+            if end_angle < start_angle:
+                start_angle, end_angle = end_angle, start_angle
+
+            # Only draw arc if there's a meaningful angle difference
+            angle_diff = abs(end_angle - start_angle)
+            if angle_diff > 5 and angle_diff < 175:
+                cv2.ellipse(output, (edge_x, edge_y), (arc_radius, arc_radius),
+                           0, start_angle, end_angle, edge_color, 2, cv2.LINE_AA)
+
+                # Label with edge angle
+                label_x = edge_x + int(arc_radius * 1.3 * math.cos(math.radians((start_angle + end_angle) / 2)))
+                label_y = edge_y + int(arc_radius * 1.3 * math.sin(math.radians((start_angle + end_angle) / 2)))
+                label = f"{edge_angle:.0f}°"
+                cv2.putText(output, label, (label_x, label_y),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, edge_color,
+                           max(1, int(2 * scale)), cv2.LINE_AA)
+
+        return output
+
+    def _draw_slope_line(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
+        """Legacy: Draw slope line. Now redirects to grid."""
+        # This is kept for compatibility but we use the grid version
+        return frame  # Grid is drawn separately
+
+    def _compute_slope_from_snow_mask(self, snow_mask: np.ndarray, center_pt: Tuple[int, int], scale: float) -> Optional[float]:
+        """Compute local slope angle from SAM3 snow mask contour near skier position.
+
+        Finds the snow surface edge near the skier's feet and fits a line to it.
+        Returns angle in degrees (0 = horizontal, positive = tilted right).
+        """
+        h, w = snow_mask.shape[:2]
+        cx, cy = center_pt
+
+        # Define search region around skier's feet (wider for slope fitting)
+        search_radius_x = int(300 * scale)
+        search_radius_y = int(100 * scale)
+
+        x_start = max(0, cx - search_radius_x)
+        x_end = min(w, cx + search_radius_x)
+        y_start = max(0, cy - search_radius_y)
+        y_end = min(h, cy + search_radius_y)
+
+        if x_end <= x_start or y_end <= y_start:
+            return None
+
+        # Extract local region of snow mask
+        local_mask = snow_mask[y_start:y_end, x_start:x_end]
+
+        # Find contours of snow mask in this region
+        contours, _ = cv2.findContours(local_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if not contours:
+            return None
+
+        # Collect edge points from all contours
+        edge_points = []
+        for contour in contours:
+            for pt in contour:
+                # Convert to absolute coordinates
+                abs_x = pt[0][0] + x_start
+                abs_y = pt[0][1] + y_start
+                edge_points.append([abs_x, abs_y])
+
+        if len(edge_points) < 10:
+            return None
+
+        edge_points = np.array(edge_points)
+
+        # Filter to points near the center Y (the snow surface line we care about)
+        # Keep points within ±50 pixels of center Y
+        y_tolerance = int(50 * scale)
+        mask = np.abs(edge_points[:, 1] - cy) < y_tolerance
+        nearby_points = edge_points[mask]
+
+        if len(nearby_points) < 5:
+            # If not enough near center, use all points
+            nearby_points = edge_points
+
+        if len(nearby_points) < 5:
+            return None
+
+        # Fit line using linear regression: y = mx + b
+        # We want the angle of this line
+        X = nearby_points[:, 0].reshape(-1, 1)
+        Y = nearby_points[:, 1]
+
+        try:
+            # Use least squares: X @ [m] + [b] = Y
+            # Rewrite as: [X, 1] @ [m, b].T = Y
+            A = np.column_stack([X, np.ones(len(X))])
+            coeffs, residuals, rank, s = np.linalg.lstsq(A, Y, rcond=None)
+            slope_m = coeffs[0]
+
+            # Convert slope to angle
+            angle_rad = math.atan(slope_m)
+            angle_deg = math.degrees(angle_rad)
+
+            return angle_deg
+
+        except (np.linalg.LinAlgError, ValueError):
+            return None
 
     def _draw_fall_line(self, frame: np.ndarray, keypoints: np.ndarray, scale: float) -> np.ndarray:
         """Draw fall line arrow starting from snow level between skis.
@@ -2267,14 +2789,25 @@ class YOLOPoseAnalyzer:
             snow_offset = int(40 * scale)  # Below ankle
             start_pt = (ankle_mid[0], ankle_mid[1] + snow_offset)
 
-            # Use calibrated slope angle (from gate positions / terrain)
-            slope_angle = self.slope_angle_deg
+            # Use GPS-calibrated slope (best), then depth, then fallback
+            gps_slope = getattr(self, 'slope_geometry', None)
+            depth_slope = getattr(self, '_depth_slope_geometry', None)
 
-            # Fall line direction (perpendicular to slope line, pointing downhill)
+            if gps_slope is not None and hasattr(gps_slope, 'fall_line_angle_deg'):
+                slope_angle = gps_slope.fall_line_angle_deg
+            elif depth_slope is not None:
+                slope_angle = depth_slope.fall_line_angle_deg
+            elif self._current_local_slope is not None:
+                slope_angle = self._current_local_slope
+            else:
+                slope_angle = self.slope_angle_deg
+
+            # Fall line direction (from vertical: 0°=down, +angle=right, -angle=left)
             line_len = int(150 * scale)
-            angle_rad = math.radians(90 + slope_angle)
-            dx = int(line_len * math.cos(angle_rad))
-            dy = int(line_len * math.sin(angle_rad))
+            angle_rad = math.radians(slope_angle)
+            # For angle from vertical: dx=sin(angle), dy=cos(angle)
+            dx = int(line_len * math.sin(angle_rad))
+            dy = int(line_len * math.cos(angle_rad))
             end_pt = (start_pt[0] + dx, start_pt[1] + dy)
 
             # Draw arrow
@@ -2306,11 +2839,11 @@ class YOLOPoseAnalyzer:
         text_thickness = max(1, int(2 * scale))
         value_thickness = max(2, int(2 * scale))
 
-        # Position: Lower on left side (30% down from top)
+        # Position: Bottom right corner
         panel_w = int(340 * scale)
         panel_h = int(520 * scale)  # Taller to fit title + warning + metrics + model info with larger fonts
-        panel_x = int(15 * scale)
-        panel_y = int(h * 0.25)  # 25% down from top
+        panel_x = w - panel_w - int(15 * scale)  # Right side with margin
+        panel_y = h - panel_h - int(15 * scale)  # Bottom with margin
 
         # Semi-transparent background
         overlay = output.copy()
@@ -2702,42 +3235,39 @@ class YOLOPoseAnalyzer:
                 cv2.circle(output, pt, r, color, -1)
                 cv2.circle(output, pt, r + 1, (255, 255, 255), 1)
 
-        # Draw belly button point
-        if metrics and metrics.belly_button:
-            bx, by = int(metrics.belly_button[0]), int(metrics.belly_button[1])
-            r = max(4, int(5 * scale))
-            cv2.circle(output, (bx, by), r, (0, 0, 0), -1)       # Black fill
-            cv2.circle(output, (bx, by), r, (255, 200, 100), 2)   # Orange ring
-            # Small label
-            cv2.putText(output, "BB", (bx + r + 3, by + 3),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.35 * scale, (255, 200, 100),
-                       max(1, int(scale)), cv2.LINE_AA)
+        # Draw line from hip midpoint to neck (torso/spine reference line)
+        ls = keypoints[Keypoints.LEFT_SHOULDER]
+        rs = keypoints[Keypoints.RIGHT_SHOULDER]
+        lh = keypoints[Keypoints.LEFT_HIP]
+        rh = keypoints[Keypoints.RIGHT_HIP]
+        nose = keypoints[Keypoints.NOSE]
 
-            # Draw line from belly button to center of neck (spine line)
-            # Neck is between shoulders but higher - use nose as reference
-            ls = keypoints[Keypoints.LEFT_SHOULDER]
-            rs = keypoints[Keypoints.RIGHT_SHOULDER]
-            nose = keypoints[Keypoints.NOSE]
-            if ls[2] > 0.3 and rs[2] > 0.3:
-                shoulder_mid_x = (ls[0] + rs[0]) / 2
-                shoulder_mid_y = (ls[1] + rs[1]) / 2
+        if ls[2] > 0.3 and rs[2] > 0.3 and lh[2] > 0.3 and rh[2] > 0.3:
+            # Hip midpoint
+            hip_mid_x = int((lh[0] + rh[0]) / 2)
+            hip_mid_y = int((lh[1] + rh[1]) / 2)
 
-                # Neck is ~30% of way from shoulder midpoint to nose
-                if nose[2] > 0.3:
-                    neck_x = int(shoulder_mid_x + 0.3 * (nose[0] - shoulder_mid_x))
-                    neck_y = int(shoulder_mid_y + 0.3 * (nose[1] - shoulder_mid_y))
-                else:
-                    # Fallback: estimate neck 20% above shoulder midpoint toward frame center
-                    neck_x = int(shoulder_mid_x)
-                    neck_y = int(shoulder_mid_y - 0.15 * abs(ls[1] - keypoints[Keypoints.LEFT_HIP][1]))
+            # Shoulder midpoint
+            shoulder_mid_x = (ls[0] + rs[0]) / 2
+            shoulder_mid_y = (ls[1] + rs[1]) / 2
 
-                # Draw spine line (orange)
-                cv2.line(output, (bx, by), (neck_x, neck_y), (255, 200, 100),
-                        max(2, int(3 * scale)), cv2.LINE_AA)
+            # Neck is ~30% of way from shoulder midpoint to nose
+            if nose[2] > 0.3:
+                neck_x = int(shoulder_mid_x + 0.3 * (nose[0] - shoulder_mid_x))
+                neck_y = int(shoulder_mid_y + 0.3 * (nose[1] - shoulder_mid_y))
+            else:
+                neck_x = int(shoulder_mid_x)
+                neck_y = int(shoulder_mid_y - 0.1 * abs(lh[1] - ls[1]))
 
-                # Draw neck point
-                cv2.circle(output, (neck_x, neck_y), max(3, int(4 * scale)), (255, 200, 100), -1)
-                cv2.circle(output, (neck_x, neck_y), max(4, int(5 * scale)), (255, 255, 255), 1)
+            # Draw spine line from hip midpoint to neck (cyan)
+            cv2.line(output, (hip_mid_x, hip_mid_y), (neck_x, neck_y), (255, 255, 0),
+                    max(2, int(3 * scale)), cv2.LINE_AA)
+
+            # Draw hip midpoint
+            cv2.circle(output, (hip_mid_x, hip_mid_y), max(4, int(5 * scale)), (255, 255, 0), -1)
+
+            # Draw neck point
+            cv2.circle(output, (neck_x, neck_y), max(3, int(4 * scale)), (255, 255, 0), -1)
 
         # Draw center of mass (CoM)
         if metrics and metrics.center_of_mass:
@@ -2769,20 +3299,10 @@ class YOLOPoseAnalyzer:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.4 * scale, com_color,
                        max(1, int(scale)), cv2.LINE_AA)
 
-            # Draw line from belly button to CoM if they differ significantly
-            if metrics.belly_button:
-                bbx, bby = int(metrics.belly_button[0]), int(metrics.belly_button[1])
-                dist = math.sqrt((cx - bbx)**2 + (cy - bby)**2)
-                if dist > 10 * scale:
-                    # Dashed line from belly button to CoM
-                    cv2.line(output, (bbx, bby), (cx, cy), com_color,
-                            max(1, int(2 * scale)), cv2.LINE_AA)
+        # Skip ski rectangles for debug (removed ski lines/dots)
 
-        # Draw ski rectangles with metrics labels
-        output = self._draw_ski_rectangles(output, keypoints, scale, left_ski, right_ski, metrics)
-
-        # Draw slope line (dotted, perpendicular to fall line)
-        output = self._draw_slope_line(output, keypoints, scale)
+        # Draw 3D slope grid representing snow surface, with edge angle arcs
+        output = self._draw_slope_grid(output, keypoints, scale, left_ski, right_ski)
 
         # Draw fall line from snow level
         output = self._draw_fall_line(output, keypoints, scale)
