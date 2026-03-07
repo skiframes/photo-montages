@@ -52,7 +52,8 @@ class CameraStream:
 
             # Initialize the engine's frame buffer
             buffer_seconds = engine.config.pre_buffer_seconds + 5
-            engine.frame_buffer = FrameBuffer(buffer_seconds, self.stream_fps)
+            frame_scale = getattr(engine.config, 'frame_scale', 1.0)
+            engine.frame_buffer = FrameBuffer(buffer_seconds, self.stream_fps, frame_scale)
             engine.running = True
 
             should_start = not self.running
@@ -116,7 +117,8 @@ class CameraStream:
                 info['runner'].source_fps = fps
                 engine = info['engine']
                 buffer_seconds = engine.config.pre_buffer_seconds + 5
-                engine.frame_buffer = FrameBuffer(buffer_seconds, fps)
+                frame_scale = getattr(engine.config, 'frame_scale', 1.0)
+                engine.frame_buffer = FrameBuffer(buffer_seconds, fps, frame_scale)
 
         reconnect_attempts = 0
         max_reconnect = 10
@@ -190,7 +192,7 @@ class StreamManager:
     thread pool to avoid blocking frame reading.
     """
 
-    def __init__(self, max_montage_workers: int = 4):
+    def __init__(self, max_montage_workers: int = 1):  # Sequential processing to prevent OOM on J40 (was 2, then 4)
         self.streams: Dict[str, CameraStream] = {}  # camera_id -> CameraStream
         self.lock = threading.Lock()
         self.montage_pool = ThreadPoolExecutor(
@@ -213,12 +215,18 @@ class StreamManager:
 
         def async_on_run_complete(run):
             import traceback
+            import gc
             def _safe_callback(r):
                 try:
                     original_callback(r)
                 except Exception:
                     print(f"[MONTAGE ERROR] Run {r.run_number} failed:\n"
                           f"{traceback.format_exc()}")
+                finally:
+                    # Clean up temp frame files from disk
+                    if hasattr(r, 'cleanup'):
+                        r.cleanup()
+                    gc.collect()
             self.montage_pool.submit(_safe_callback, run)
 
         runner.engine.on_run_complete = async_on_run_complete

@@ -688,11 +688,11 @@ class SkiFramesRunner:
         print(f"  Updating manifest (merged_results: {bool(merged_results)}, pairs: {len(self.montage_pairs)})")
         self._update_manifest()
 
-        # Explicitly free frame memory to prevent OOM
-        if hasattr(run, 'frames') and run.frames is not None:
-            del run.frames
-            import gc
-            gc.collect()
+        # Clean up temp frame files from disk to prevent disk fill
+        if hasattr(run, 'cleanup'):
+            run.cleanup()
+        import gc
+        gc.collect()
 
     def _update_manifest(self):
         """Update the session manifest file."""

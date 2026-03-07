@@ -17,11 +17,17 @@ import json
 import threading
 import queue
 import time
+import tempfile
+import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, Callable, List, Dict
 from collections import deque
+
+# Capture FPS during runs - lower than source FPS to reduce memory/disk usage
+# 10fps is sufficient for montages (typically output at 4fps anyway)
+RUN_CAPTURE_FPS = 10
 
 
 @dataclass
@@ -76,6 +82,9 @@ class DetectionConfig:
     # Useful when camera is behind skier - they trigger while close, but you want
     # to capture after they've moved away to a better framing distance
     start_offset_sec: float = 0.0
+    # Frame scale: downsample factor for stored frames (e.g., 0.5 = half resolution)
+    # Reduces memory usage at the cost of montage resolution
+    frame_scale: float = 1.0
 
     # Path to config file for hot-reloading
     config_path: Optional[str] = None
@@ -120,6 +129,7 @@ class DetectionConfig:
             run_duration_seconds=run_duration,
             min_brightness=data.get('min_brightness', 100),
             start_offset_sec=data.get('start_offset_sec', 0.0),
+            frame_scale=data.get('frame_scale', 1.0),
         )
         config.config_path = path
         try:
@@ -196,15 +206,45 @@ class Run:
     end_time: Optional[datetime] = None
     start_frame_num: int = 0
     end_frame_num: int = 0
-    frames: List[np.ndarray] = field(default_factory=list)
+    # Frames stored on disk to avoid OOM on memory-constrained devices (J40)
+    frame_paths: List[str] = field(default_factory=list)
+    frame_dir: Optional[str] = None  # Temp directory for frame storage
     # Track when capture actually starts (after delay)
     capture_start_time: Optional[datetime] = None
+    # For backward compatibility, frames can still be loaded into memory
+    _frames_cache: Optional[List[np.ndarray]] = field(default=None, repr=False)
 
     @property
     def duration(self) -> float:
         if self.end_time:
             return (self.end_time - self.start_time).total_seconds()
         return 0.0
+
+    @property
+    def frames(self) -> List[np.ndarray]:
+        """Load frames from disk on demand."""
+        if self._frames_cache is not None:
+            return self._frames_cache
+        if not self.frame_paths:
+            return []
+        loaded = []
+        for path in self.frame_paths:
+            if os.path.exists(path):
+                frame = cv2.imread(path)
+                if frame is not None:
+                    loaded.append(frame)
+        return loaded
+
+    def cleanup(self):
+        """Remove temporary frame files."""
+        import shutil
+        if self.frame_dir and os.path.exists(self.frame_dir):
+            try:
+                shutil.rmtree(self.frame_dir)
+            except Exception:
+                pass
+        self.frame_paths = []
+        self._frames_cache = None
 
 
 class FrameBuffer:
@@ -213,12 +253,19 @@ class FrameBuffer:
     Stores frames with timestamps for the last N seconds.
     """
 
-    def __init__(self, max_seconds: float, fps: float):
+    def __init__(self, max_seconds: float, fps: float, frame_scale: float = 1.0):
         self.max_frames = int(max_seconds * fps) + 1
         self.buffer = deque(maxlen=self.max_frames)
         self.fps = fps
+        self.frame_scale = frame_scale  # Scale factor for frame storage (e.g., 0.5 for 50%)
 
     def add(self, frame: np.ndarray, frame_num: int, timestamp: datetime):
+        # Optionally downsample frame to save memory (e.g., 0.5 = half resolution)
+        if self.frame_scale < 1.0:
+            import cv2
+            new_w = int(frame.shape[1] * self.frame_scale)
+            new_h = int(frame.shape[0] * self.frame_scale)
+            frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
         self.buffer.append((frame.copy(), frame_num, timestamp))
 
     def get_frames_since(self, since_frame: int) -> List[tuple]:
@@ -271,6 +318,11 @@ class DetectionEngine:
         self._last_end_pct = 0.0
         self._metrics_buffer: deque = deque(maxlen=120)  # Last 60s at 0.5s intervals
         self._last_metrics_write = 0.0  # time.time() of last write
+
+        # Frame disk storage - write frames to temp dir to avoid OOM
+        self._frame_temp_base = Path(tempfile.gettempdir()) / 'skiframes_frames'
+        self._frame_temp_base.mkdir(parents=True, exist_ok=True)
+        self._last_capture_frame = 0  # Track last captured frame for 10fps limiting
 
     def _get_racer_run_duration(self, timestamp: datetime) -> Optional[float]:
         """
@@ -376,10 +428,31 @@ class DetectionEngine:
         except Exception:
             pass  # Non-critical, skip silently
 
+    def _create_run_frame_dir(self, run_number: int) -> str:
+        """Create temp directory for storing run frames on disk."""
+        run_dir = self._frame_temp_base / f"run_{run_number:04d}_{int(time.time())}"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        return str(run_dir)
+
+    def _write_frame_to_disk(self, frame: np.ndarray, frame_dir: str, frame_idx: int) -> str:
+        """Write a single frame to disk, returns the file path."""
+        frame_path = os.path.join(frame_dir, f"frame_{frame_idx:04d}.jpg")
+        # Use high quality JPEG (95) to preserve detail while saving space vs PNG
+        cv2.imwrite(frame_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        return frame_path
+
+    def _should_capture_frame(self, frame_num: int) -> bool:
+        """Check if we should capture this frame (10fps rate limiting)."""
+        source_fps = self.frame_buffer.fps if self.frame_buffer else 30
+        capture_interval = max(1, int(source_fps / RUN_CAPTURE_FPS))
+        return (frame_num - self._last_capture_frame) >= capture_interval
+
     def process_frame(self, frame: np.ndarray, frame_num: int, timestamp: datetime) -> Optional[Run]:
         """
         Process a single frame for run detection.
         Returns a completed Run if one was just finished, None otherwise.
+
+        Frames are written to disk at 10fps to avoid OOM on memory-constrained devices.
         """
         completed_run = None
 
@@ -413,12 +486,18 @@ class DetectionEngine:
             if start_motion and (frame_num - self.last_start_trigger) > cooldown_frames:
                 # Start new run
                 self.run_count += 1
+
+                # Create temp directory for frame storage
+                frame_dir = self._create_run_frame_dir(self.run_count)
+
                 self.current_run = Run(
                     run_number=self.run_count,
                     start_time=timestamp,
                     start_frame_num=frame_num,
+                    frame_dir=frame_dir,
                 )
                 self.last_start_trigger = frame_num
+                self._last_capture_frame = 0  # Reset capture counter
                 mode_str = f"duration={self.config.run_duration_seconds}s" if self.config.run_duration_seconds else "END zone"
 
                 # Fixed delay in seconds after trigger (same for all racers)
@@ -432,8 +511,15 @@ class DetectionEngine:
                 if start_delay_seconds <= 0:
                     self.current_run.capture_start_time = timestamp
                     if self.frame_buffer:
+                        # Write pre-buffer frames to disk (sample at ~10fps from buffer)
                         pre_frames = self.frame_buffer.get_recent(self.config.pre_buffer_seconds)
-                        self.current_run.frames = [f for f, n, t in pre_frames]
+                        source_fps = self.frame_buffer.fps
+                        sample_interval = max(1, int(source_fps / RUN_CAPTURE_FPS))
+                        for i, (f, n, t) in enumerate(pre_frames):
+                            if i % sample_interval == 0:
+                                path = self._write_frame_to_disk(f, frame_dir, len(self.current_run.frame_paths))
+                                self.current_run.frame_paths.append(path)
+                        self._last_capture_frame = frame_num
                 # Otherwise, capture_start_time stays None until delay elapses
         else:
             # Currently tracking a run
@@ -447,11 +533,16 @@ class DetectionEngine:
                     self.current_run.capture_start_time = timestamp
                     print(f"  [RUN {self.current_run.run_number}] Capture started after {elapsed_since_trigger:.1f}s delay")
                     # Add current frame as first frame (no pre-buffer when using delay)
-                    self.current_run.frames.append(frame.copy())
+                    path = self._write_frame_to_disk(frame, self.current_run.frame_dir, len(self.current_run.frame_paths))
+                    self.current_run.frame_paths.append(path)
+                    self._last_capture_frame = frame_num
                 # Still in delay - don't add frames yet
             else:
-                # Actively capturing - add frame
-                self.current_run.frames.append(frame.copy())
+                # Actively capturing - write frame to disk at 10fps rate
+                if self._should_capture_frame(frame_num):
+                    path = self._write_frame_to_disk(frame, self.current_run.frame_dir, len(self.current_run.frame_paths))
+                    self.current_run.frame_paths.append(path)
+                    self._last_capture_frame = frame_num
 
             # Calculate elapsed time since trigger (for timeout check)
             run_elapsed = (timestamp - self.current_run.start_time).total_seconds()
@@ -477,7 +568,7 @@ class DetectionEngine:
                 self.runs_detected += 1
 
                 print(f"  [RUN {self.current_run.run_number}] Completed at {timestamp.strftime('%H:%M:%S')} "
-                      f"({self.current_run.duration:.1f}s, {len(self.current_run.frames)} frames)")
+                      f"({self.current_run.duration:.1f}s, {len(self.current_run.frame_paths)} frames on disk)")
 
                 completed_run = self.current_run
                 self.current_run = None
@@ -488,6 +579,9 @@ class DetectionEngine:
             # Timeout check (30 seconds max run time from trigger)
             elif run_elapsed > 30:
                 print(f"  [RUN {self.current_run.run_number}] Timeout - abandoned")
+                # Clean up temp files for abandoned run
+                if self.current_run.frame_dir:
+                    self.current_run.cleanup()
                 self.current_run = None
 
         # Only update prev_frame at the detection sampling rate (~10fps), not every
@@ -538,7 +632,7 @@ class DetectionEngine:
         # Carry over incomplete run from previous video (cross-file detection)
         if self.current_run is not None:
             print(f"  ⚡ Carrying over incomplete run {self.current_run.run_number} from previous video "
-                  f"(started {self.current_run.start_time.strftime('%H:%M:%S')}, {len(self.current_run.frames)} frames so far)")
+                  f"(started {self.current_run.start_time.strftime('%H:%M:%S')}, {len(self.current_run.frame_paths)} frames so far)")
 
         # Always reset frame-number-based state for new video (frame numbers restart at 0)
         self.last_start_trigger = 0
@@ -546,7 +640,7 @@ class DetectionEngine:
 
         # Initialize frame buffer
         buffer_seconds = (self.config.pre_buffer_seconds or 0) + 5  # Extra buffer
-        self.frame_buffer = FrameBuffer(buffer_seconds, fps)
+        self.frame_buffer = FrameBuffer(buffer_seconds, fps, self.config.frame_scale)
 
         # Use provided video start time, or try to extract from filename, or fall back to mtime
         if video_start_time:
@@ -595,7 +689,7 @@ class DetectionEngine:
         # Log if there's an incomplete run at end of video (will carry over to next file)
         if self.current_run is not None:
             print(f"  ⚡ Run {self.current_run.run_number} still active at end of video "
-                  f"(started {self.current_run.start_time.strftime('%H:%M:%S')}, {len(self.current_run.frames)} frames) "
+                  f"(started {self.current_run.start_time.strftime('%H:%M:%S')}, {len(self.current_run.frame_paths)} frames) "
                   f"— will carry over to next video")
 
         print(f"  Finished: {len(runs)} runs detected")
@@ -630,7 +724,7 @@ class DetectionEngine:
 
         # Initialize frame buffer
         buffer_seconds = self.config.pre_buffer_seconds + 5
-        self.frame_buffer = FrameBuffer(buffer_seconds, fps)
+        self.frame_buffer = FrameBuffer(buffer_seconds, fps, self.config.frame_scale)
 
         self.running = True
         frame_num = 0
