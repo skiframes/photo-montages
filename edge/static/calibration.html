@@ -1846,15 +1846,53 @@
             </div>
         </div>
 
-        <!-- Live Detection Metrics Chart -->
+        <!-- Live Detection Metrics Charts -->
         <div id="metricsSection" style="display: none; margin-top: 20px; padding: 16px; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border);">
             <h3 style="margin: 0 0 12px 0; font-size: 16px; color: var(--text-primary);">Detection Metrics (Live)</h3>
-            <canvas id="metricsCanvas" width="600" height="200" style="width: 100%; height: 200px; background: #1a1a2e; border-radius: 4px;"></canvas>
-            <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap;">
-                <span><span style="display: inline-block; width: 12px; height: 3px; background: #22c55e; vertical-align: middle; margin-right: 4px;"></span>Start zone %</span>
-                <span><span style="display: inline-block; width: 12px; height: 3px; background: #ef4444; vertical-align: middle; margin-right: 4px;"></span>End zone %</span>
-                <span><span style="display: inline-block; width: 12px; height: 3px; background: #f59e0b; vertical-align: middle; margin-right: 4px; border-top: 2px dashed #f59e0b; height: 0;"></span>Threshold</span>
+
+            <!-- Chart 1: Pixel Change % (min_pixel_change_pct) -->
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">
+                    1. Pixel Change % <span style="font-weight: normal; color: var(--text-secondary);">(min_pixel_change_pct)</span>
+                </div>
+                <canvas id="metricsCanvas1" width="600" height="120" style="width: 100%; height: 120px; background: #1a1a2e; border-radius: 4px;"></canvas>
+                <div style="display: flex; gap: 16px; margin-top: 4px; font-size: 11px; color: var(--text-secondary); flex-wrap: wrap;">
+                    <span><span style="display: inline-block; width: 12px; height: 3px; background: #22c55e; vertical-align: middle; margin-right: 4px;"></span>Start zone %</span>
+                    <span><span style="display: inline-block; width: 12px; height: 3px; background: #ef4444; vertical-align: middle; margin-right: 4px;"></span>End zone %</span>
+                    <span><span style="display: inline-block; width: 12px; height: 3px; background: #f59e0b; vertical-align: middle; margin-right: 4px; border-top: 2px dashed #f59e0b; height: 0;"></span>Threshold</span>
+                </div>
+            </div>
+
+            <!-- Chart 2: Pixel Diff Intensity (detection_threshold) -->
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">
+                    2. Pixel Diff Intensity <span style="font-weight: normal; color: var(--text-secondary);">(detection_threshold)</span>
+                </div>
+                <canvas id="metricsCanvas2" width="600" height="120" style="width: 100%; height: 120px; background: #1a1a2e; border-radius: 4px;"></canvas>
+                <div style="display: flex; gap: 16px; margin-top: 4px; font-size: 11px; color: var(--text-secondary); flex-wrap: wrap;">
+                    <span><span style="display: inline-block; width: 12px; height: 3px; background: #22c55e; vertical-align: middle; margin-right: 4px;"></span>Start max diff</span>
+                    <span><span style="display: inline-block; width: 12px; height: 3px; background: #ef4444; vertical-align: middle; margin-right: 4px;"></span>End max diff</span>
+                    <span><span style="display: inline-block; width: 12px; height: 3px; background: #f59e0b; vertical-align: middle; margin-right: 4px; border-top: 2px dashed #f59e0b; height: 0;"></span>Threshold</span>
+                </div>
+            </div>
+
+            <!-- Chart 3: Motion Brightness (min_brightness) -->
+            <div style="margin-bottom: 8px;">
+                <div style="font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">
+                    3. Motion Brightness <span style="font-weight: normal; color: var(--text-secondary);">(min_brightness - shadow filter)</span>
+                </div>
+                <canvas id="metricsCanvas3" width="600" height="120" style="width: 100%; height: 120px; background: #1a1a2e; border-radius: 4px;"></canvas>
+                <div style="display: flex; gap: 16px; margin-top: 4px; font-size: 11px; color: var(--text-secondary); flex-wrap: wrap;">
+                    <span><span style="display: inline-block; width: 12px; height: 3px; background: #22c55e; vertical-align: middle; margin-right: 4px;"></span>Start brightness</span>
+                    <span><span style="display: inline-block; width: 12px; height: 3px; background: #ef4444; vertical-align: middle; margin-right: 4px;"></span>End brightness</span>
+                    <span><span style="display: inline-block; width: 12px; height: 3px; background: #f59e0b; vertical-align: middle; margin-right: 4px; border-top: 2px dashed #f59e0b; height: 0;"></span>Min threshold</span>
+                </div>
+            </div>
+
+            <!-- Run markers legend -->
+            <div style="display: flex; gap: 16px; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-secondary);">
                 <span><span style="display: inline-block; width: 12px; height: 12px; background: rgba(59,130,246,0.3); border: 1px solid #3b82f6; vertical-align: middle; margin-right: 4px;"></span>Run active</span>
+                <span><span style="display: inline-block; width: 2px; height: 12px; background: #3b82f6; vertical-align: middle; margin-right: 4px;"></span>Run triggered</span>
             </div>
         </div>
 
@@ -3529,8 +3567,34 @@
         }
 
         function drawMetricsChart(entries) {
-            const canvas = document.getElementById('metricsCanvas');
-            if (!canvas) return;
+            // Draw all 3 charts
+            drawSingleChart('metricsCanvas1', entries, {
+                startKey: 'start_pct',
+                endKey: 'end_pct',
+                thresholdKey: 'threshold',
+                unit: '%',
+                minY: 10
+            });
+            drawSingleChart('metricsCanvas2', entries, {
+                startKey: 'start_max_diff',
+                endKey: 'end_max_diff',
+                thresholdKey: 'detection_threshold',
+                unit: '',
+                minY: 50
+            });
+            drawSingleChart('metricsCanvas3', entries, {
+                startKey: 'start_brightness',
+                endKey: 'end_brightness',
+                thresholdKey: 'min_brightness',
+                unit: '',
+                minY: 150,
+                invertThreshold: true  // For brightness, values BELOW threshold are filtered out
+            });
+        }
+
+        function drawSingleChart(canvasId, entries, opts) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas || entries.length === 0) return;
             const ctx = canvas.getContext('2d');
 
             // Handle high-DPI displays
@@ -3547,47 +3611,37 @@
             ctx.fillRect(0, 0, W, H);
 
             // Chart area with margins
-            const margin = { top: 10, right: 10, bottom: 25, left: 40 };
+            const margin = { top: 8, right: 10, bottom: 18, left: 36 };
             const cw = W - margin.left - margin.right;
             const ch = H - margin.top - margin.bottom;
 
-            // Find Y max (auto-scale, minimum 10%)
-            let yMax = 10;
+            // Find Y max (auto-scale with minimum)
+            let yMax = opts.minY || 10;
+            const threshold = entries[entries.length - 1][opts.thresholdKey] || 0;
             for (const e of entries) {
-                yMax = Math.max(yMax, e.start_pct, e.end_pct, e.threshold * 1.2);
+                const startVal = e[opts.startKey] || 0;
+                const endVal = e[opts.endKey] || 0;
+                yMax = Math.max(yMax, startVal, endVal, threshold * 1.2);
             }
             yMax = Math.ceil(yMax / 5) * 5;  // Round up to nearest 5
 
             // Draw grid lines
             ctx.strokeStyle = 'rgba(255,255,255,0.1)';
             ctx.lineWidth = 0.5;
-            ctx.font = '10px sans-serif';
+            ctx.font = '9px sans-serif';
             ctx.fillStyle = 'rgba(255,255,255,0.5)';
             ctx.textAlign = 'right';
-            for (let pct = 0; pct <= yMax; pct += Math.max(1, Math.round(yMax / 5))) {
-                const y = margin.top + ch - (pct / yMax) * ch;
+            const gridStep = Math.max(1, Math.round(yMax / 4));
+            for (let val = 0; val <= yMax; val += gridStep) {
+                const y = margin.top + ch - (val / yMax) * ch;
                 ctx.beginPath();
                 ctx.moveTo(margin.left, y);
                 ctx.lineTo(margin.left + cw, y);
                 ctx.stroke();
-                ctx.fillText(`${pct}%`, margin.left - 4, y + 3);
+                ctx.fillText(`${val}${opts.unit}`, margin.left - 3, y + 3);
             }
 
-            // Draw time labels on X axis
-            ctx.textAlign = 'center';
-            ctx.fillStyle = 'rgba(255,255,255,0.4)';
             const n = entries.length;
-            const labelCount = Math.min(6, n);
-            for (let i = 0; i < labelCount; i++) {
-                const idx = Math.floor((i / (labelCount - 1)) * (n - 1));
-                const e = entries[idx];
-                const x = margin.left + (idx / (n - 1)) * cw;
-                try {
-                    const t = new Date(e.t);
-                    const label = `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}:${t.getSeconds().toString().padStart(2,'0')}`;
-                    ctx.fillText(label, x, H - 4);
-                } catch(e) {}
-            }
 
             // Draw run-active regions (blue vertical bands)
             for (let i = 0; i < n; i++) {
@@ -3600,17 +3654,20 @@
             }
 
             // Draw threshold line (orange dashed)
-            if (entries.length > 0) {
-                const threshold = entries[entries.length - 1].threshold;
-                const thY = margin.top + ch - (threshold / yMax) * ch;
-                ctx.strokeStyle = '#f59e0b';
-                ctx.lineWidth = 1.5;
-                ctx.setLineDash([6, 4]);
-                ctx.beginPath();
-                ctx.moveTo(margin.left, thY);
-                ctx.lineTo(margin.left + cw, thY);
-                ctx.stroke();
-                ctx.setLineDash([]);
+            const thY = margin.top + ch - (threshold / yMax) * ch;
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([5, 3]);
+            ctx.beginPath();
+            ctx.moveTo(margin.left, thY);
+            ctx.lineTo(margin.left + cw, thY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // For brightness chart, shade the "reject" zone below threshold
+            if (opts.invertThreshold) {
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';  // Light red
+                ctx.fillRect(margin.left, thY, cw, margin.top + ch - thY);
             }
 
             // Draw start zone line (green)
@@ -3619,7 +3676,8 @@
             ctx.beginPath();
             for (let i = 0; i < n; i++) {
                 const x = margin.left + (i / (n - 1)) * cw;
-                const y = margin.top + ch - (entries[i].start_pct / yMax) * ch;
+                const val = entries[i][opts.startKey] || 0;
+                const y = margin.top + ch - (val / yMax) * ch;
                 if (i === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
@@ -3631,7 +3689,8 @@
             ctx.beginPath();
             for (let i = 0; i < n; i++) {
                 const x = margin.left + (i / (n - 1)) * cw;
-                const y = margin.top + ch - (entries[i].end_pct / yMax) * ch;
+                const val = entries[i][opts.endKey] || 0;
+                const y = margin.top + ch - (val / yMax) * ch;
                 if (i === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
@@ -3648,14 +3707,21 @@
                     ctx.moveTo(x, margin.top);
                     ctx.lineTo(x, margin.top + ch);
                     ctx.stroke();
-                    // Label
-                    ctx.fillStyle = '#3b82f6';
-                    ctx.font = 'bold 10px sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(`Run ${entries[i].run_count}`, x, margin.top - 1);
-                    ctx.font = '10px sans-serif';
                 }
                 prevRunCount = entries[i].run_count;
+            }
+
+            // Current values display (top right corner)
+            if (n > 0) {
+                const last = entries[n - 1];
+                const startVal = (last[opts.startKey] || 0).toFixed(1);
+                const endVal = (last[opts.endKey] || 0).toFixed(1);
+                ctx.font = 'bold 10px sans-serif';
+                ctx.textAlign = 'right';
+                ctx.fillStyle = '#22c55e';
+                ctx.fillText(`S:${startVal}`, W - 45, margin.top + 10);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillText(`E:${endVal}`, W - 5, margin.top + 10);
             }
         }
 

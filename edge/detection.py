@@ -316,6 +316,8 @@ class DetectionEngine:
         self.metrics_path: Optional[str] = None  # Set by runner.py
         self._last_start_pct = 0.0
         self._last_end_pct = 0.0
+        self._last_start_result = {'max_diff': 0, 'mean_diff': 0, 'mean_brightness': 0}
+        self._last_end_result = {'max_diff': 0, 'mean_diff': 0, 'mean_brightness': 0}
         self._metrics_buffer: deque = deque(maxlen=120)  # Last 60s at 0.5s intervals
         self._last_metrics_write = 0.0  # time.time() of last write
 
@@ -353,7 +355,7 @@ class DetectionEngine:
 
         return None
 
-    def detect_motion_in_zone(self, prev_frame: np.ndarray, curr_frame: np.ndarray, zone: Zone) -> tuple:
+    def detect_motion_in_zone(self, prev_frame: np.ndarray, curr_frame: np.ndarray, zone: Zone) -> dict:
         """
         Detect motion in a trigger zone using frame differencing.
 
@@ -361,7 +363,12 @@ class DetectionEngine:
         (shadows are dark, skiers in colorful suits are brighter).
 
         Returns:
-            Tuple of (triggered: bool, pct_changed: float)
+            Dict with keys:
+                - triggered: bool
+                - pct_changed: float (percentage of zone pixels with motion)
+                - max_diff: float (max pixel intensity difference in zone)
+                - mean_diff: float (mean pixel intensity difference for motion pixels)
+                - mean_brightness: float (mean brightness of motion pixels)
         """
         # Extract zone regions
         prev_zone = prev_frame[zone.y1:zone.y2, zone.x1:zone.x2]
@@ -371,14 +378,24 @@ class DetectionEngine:
         diff = cv2.absdiff(prev_zone, curr_zone)
         gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
+        # Stats on the raw diff (before thresholding)
+        max_diff = float(np.max(gray_diff))
+
         # Create mask of pixels with significant motion
         motion_mask = gray_diff > self.config.detection_threshold
+
+        # Mean diff of pixels that passed the threshold
+        mean_diff = float(np.mean(gray_diff[motion_mask])) if np.any(motion_mask) else 0.0
+
+        # Convert current zone to grayscale for brightness check
+        curr_gray = cv2.cvtColor(curr_zone, cv2.COLOR_BGR2GRAY)
+
+        # Mean brightness of motion pixels (before brightness filter)
+        mean_brightness = float(np.mean(curr_gray[motion_mask])) if np.any(motion_mask) else 0.0
 
         # Shadow filtering: check brightness of changed pixels in current frame
         # Shadows cause motion but the area is dark; skiers are brighter
         if self.config.min_brightness > 0:
-            # Convert current zone to grayscale for brightness check
-            curr_gray = cv2.cvtColor(curr_zone, cv2.COLOR_BGR2GRAY)
             # Only count motion pixels that are also bright enough (not shadow)
             brightness_mask = curr_gray >= self.config.min_brightness
             motion_mask = motion_mask & brightness_mask
@@ -389,7 +406,15 @@ class DetectionEngine:
 
         # Check if percentage exceeds minimum
         pct_changed = (motion_pixels / total_pixels) * 100
-        return (pct_changed > self.config.min_pixel_change_pct, pct_changed)
+        triggered = pct_changed > self.config.min_pixel_change_pct
+
+        return {
+            'triggered': triggered,
+            'pct_changed': pct_changed,
+            'max_diff': max_diff,
+            'mean_diff': mean_diff,
+            'mean_brightness': mean_brightness,
+        }
 
     def _write_metrics(self, timestamp: datetime):
         """Write detection metrics to JSON file for live calibration chart."""
@@ -402,14 +427,24 @@ class DetectionEngine:
             return
         self._last_metrics_write = now
 
-        # Add entry to buffer
+        # Add entry to buffer with all 3 metrics
         entry = {
             't': timestamp.isoformat(),
+            # Metric 1: Pixel change % (compared against min_pixel_change_pct)
             'start_pct': round(self._last_start_pct, 2),
             'end_pct': round(self._last_end_pct, 2),
             'threshold': self.config.min_pixel_change_pct,
+            # Metric 2: Pixel diff intensity (compared against detection_threshold)
+            'start_max_diff': round(self._last_start_result.get('max_diff', 0), 1),
+            'start_mean_diff': round(self._last_start_result.get('mean_diff', 0), 1),
+            'end_max_diff': round(self._last_end_result.get('max_diff', 0), 1),
+            'end_mean_diff': round(self._last_end_result.get('mean_diff', 0), 1),
             'detection_threshold': self.config.detection_threshold,
+            # Metric 3: Brightness of motion pixels (compared against min_brightness)
+            'start_brightness': round(self._last_start_result.get('mean_brightness', 0), 1),
+            'end_brightness': round(self._last_end_result.get('mean_brightness', 0), 1),
             'min_brightness': self.config.min_brightness,
+            # Status
             'run_active': self.current_run is not None,
             'run_count': self.run_count,
         }
@@ -466,17 +501,24 @@ class DetectionEngine:
             return None
 
         # Check for motion in START zone
-        start_motion, start_pct = self.detect_motion_in_zone(self.prev_frame, frame, self.config.start_zone)
+        start_result = self.detect_motion_in_zone(self.prev_frame, frame, self.config.start_zone)
+        start_motion = start_result['triggered']
+        start_pct = start_result['pct_changed']
 
         # Check END zone only if configured (not using duration mode)
         end_motion = False
         end_pct = 0.0
+        end_result = {'max_diff': 0, 'mean_diff': 0, 'mean_brightness': 0}
         if self.config.end_zone:
-            end_motion, end_pct = self.detect_motion_in_zone(self.prev_frame, frame, self.config.end_zone)
+            end_result = self.detect_motion_in_zone(self.prev_frame, frame, self.config.end_zone)
+            end_motion = end_result['triggered']
+            end_pct = end_result['pct_changed']
 
         # Store latest metrics for live visualization
         self._last_start_pct = start_pct
         self._last_end_pct = end_pct
+        self._last_start_result = start_result
+        self._last_end_result = end_result
         self._write_metrics(timestamp)
 
         # State machine
