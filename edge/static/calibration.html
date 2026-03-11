@@ -1770,6 +1770,10 @@
                 <input type="range" id="minBrightness" min="0" max="200" value="94">
                 <div class="help-text">Current: <span id="minBrightnessValue">94</span> (0=off, higher=filter more shadows)</div>
 
+                <label for="minRunDuration">Min Run Duration (seconds)</label>
+                <input type="number" id="minRunDuration" min="0.5" max="10" step="0.5" value="3">
+                <div class="help-text">Runs shorter than this are discarded as false positives</div>
+
                 <label for="preBuffer">Pre-buffer (seconds)</label>
                 <input type="number" id="preBuffer" min="0" max="10" value="0">
 
@@ -2061,6 +2065,7 @@
             minPixelsValue: document.getElementById('minPixelsValue'),
             minBrightness: document.getElementById('minBrightness'),
             minBrightnessValue: document.getElementById('minBrightnessValue'),
+            minRunDuration: document.getElementById('minRunDuration'),
             preBuffer: document.getElementById('preBuffer'),
             postBuffer: document.getElementById('postBuffer'),
             saveSection: document.getElementById('saveSection'),
@@ -3338,6 +3343,7 @@
                     min_pixel_change_pct: parseFloat(elements.minPixels.value),
                     start_offset_sec: state.startOffsetSec,  // Fixed delay in seconds after trigger
                     min_brightness: parseInt(elements.minBrightness.value),
+                    min_run_duration_seconds: parseFloat(elements.minRunDuration.value),
                     pre_buffer_seconds: parseInt(elements.preBuffer.value),
                     post_buffer_seconds: parseInt(elements.postBuffer.value),
                     // Duration mode settings
@@ -4847,6 +4853,7 @@
                 detection_threshold: parseInt(elements.threshold.value),
                 min_pixel_change_pct: parseFloat(elements.minPixels.value),
                 min_brightness: parseInt(elements.minBrightness.value),
+                min_run_duration_seconds: parseFloat(elements.minRunDuration.value),
                 // Montage settings
                 montage_fps_list: state.montageFpsList,
                 // Logos

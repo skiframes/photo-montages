@@ -388,6 +388,15 @@ class SkiFramesRunner:
 
     def _on_run_complete(self, run: Run):
         """Callback when a run is detected - generate Time1/Time2 montage pair."""
+        # Filter out short runs (false positives)
+        min_run_duration = self.raw_config.get('min_run_duration_seconds', 3.0)
+        if run.duration < min_run_duration:
+            print(f"  [RUN {run.run_number}] Skipped: duration {run.duration:.2f}s < min {min_run_duration}s")
+            # Clean up temp frame files
+            if hasattr(run, 'cleanup'):
+                run.cleanup()
+            return
+
         # Match this run to a Vola racer by timestamp (Boston clock time)
         racer = None
         if run.start_time and self.vola_racers:
@@ -744,6 +753,7 @@ class SkiFramesRunner:
             "event_date": self.race_date,
             "generated_at": datetime.now().isoformat(),
             "montage_fps_list": self.montage_fps_list,
+            "min_run_duration_seconds": self.raw_config.get('min_run_duration_seconds', 3.0),
             "runs": runs,
         }
 
