@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkiFrames - Run Review</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --card: #16213e;
+            --primary: #3b82f6;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --text: #e0e0e0;
+            --text-muted: #9ca3af;
+            --border: #374151;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .header {
+            background: var(--card);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header h1 { font-size: 20px; font-weight: 600; }
+        .header-controls { display: flex; gap: 12px; align-items: center; }
+        select, input {
+            padding: 8px 12px;
+            font-size: 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .btn {
+            padding: 8px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .stats {
+            padding: 12px 24px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+        .filter-bar {
+            padding: 12px 24px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .filter-btn {
+            padding: 6px 12px;
+            font-size: 13px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+        .filter-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+        .container {
+            padding: 24px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .run-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        .run-card {
+            background: var(--card);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        .run-card.unmatched { border-color: var(--warning); }
+        .run-media {
+            position: relative;
+            background: #000;
+            aspect-ratio: 3/4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .run-media img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .run-media video {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .run-badge {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .run-badge.matched { background: var(--success); }
+        .run-badge.unmatched { background: var(--warning); color: #000; }
+        .run-info {
+            padding: 16px;
+        }
+        .run-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .run-meta {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+        .run-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .assign-form {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+        .assign-form input {
+            width: 70px;
+        }
+        .assign-form select {
+            width: 100px;
+        }
+        .fullscreen-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 1000;
+            padding: 20px;
+            overflow: auto;
+        }
+        .fullscreen-overlay.visible { display: flex; flex-direction: column; }
+        .fullscreen-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 32px;
+            color: white;
+            cursor: pointer;
+            z-index: 1001;
+        }
+        .fullscreen-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fullscreen-content img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .fullscreen-nav {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            padding: 20px;
+        }
+        .nav-btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Run Review</h1>
+        <div class="header-controls">
+            <select id="raceSelect">
+                <option value="">Select Race...</option>
+            </select>
+            <select id="sectionSelect">
+                <option value="">All Cameras</option>
+            </select>
+            <select id="runSelect">
+                <option value="">All Runs</option>
+                <option value="run1">Run 1</option>
+                <option value="run2">Run 2</option>
+            </select>
+            <button class="btn btn-primary" onclick="loadRuns()">Load</button>
+        </div>
+    </div>
+
+    <div class="stats" id="stats">Select a race to begin</div>
+
+    <div class="filter-bar">
+        <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+        <button class="filter-btn" data-filter="matched" onclick="setFilter('matched')">Matched</button>
+        <button class="filter-btn" data-filter="unmatched" onclick="setFilter('unmatched')">Unmatched</button>
+    </div>
+
+    <div class="container">
+        <div class="run-grid" id="runGrid">
+            <div class="loading">Select a race to view runs</div>
+        </div>
+    </div>
+
+    <!-- Fullscreen viewer -->
+    <div class="fullscreen-overlay" id="fullscreenOverlay">
+        <span class="fullscreen-close" onclick="closeFullscreen()">&times;</span>
+        <div class="fullscreen-content">
+            <img id="fullscreenImg" src="">
+        </div>
+        <div class="fullscreen-nav">
+            <button class="nav-btn" onclick="navPrev()">Previous</button>
+            <button class="nav-btn btn-danger" onclick="deleteCurrentRun()">Delete</button>
+            <button class="nav-btn" onclick="navNext()">Next</button>
+        </div>
+    </div>
+
+    <script>
+        let allRuns = [];
+        let filteredRuns = [];
+        let currentFilter = 'all';
+        let currentIndex = 0;
+
+        async function loadRaces() {
+            // Get list of races from montages directory
+            try {
+                const res = await fetch('/api/races/list');
+                const data = await res.json();
+                const select = document.getElementById('raceSelect');
+                (data.races || []).forEach(race => {
+                    const opt = document.createElement('option');
+                    opt.value = race;
+                    opt.textContent = race;
+                    select.appendChild(opt);
+                });
+            } catch (e) {
+                console.error('Failed to load races:', e);
+            }
+        }
+
+        async function loadRuns() {
+            const race = document.getElementById('raceSelect').value;
+            const section = document.getElementById('sectionSelect').value;
+            const run = document.getElementById('runSelect').value;
+
+            if (!race) {
+                alert('Please select a race');
+                return;
+            }
+
+            document.getElementById('runGrid').innerHTML = '<div class="loading">Loading...</div>';
+
+            try {
+                let url = `/api/runs/list?race=${encodeURIComponent(race)}`;
+                if (section) url += `&section=${encodeURIComponent(section)}`;
+                if (run) url += `&run=${encodeURIComponent(run)}`;
+
+                const res = await fetch(url);
+                const data = await res.json();
+                allRuns = data.runs || [];
+
+                const matched = allRuns.filter(r => !r.unmatched).length;
+                const unmatched = allRuns.filter(r => r.unmatched).length;
+                document.getElementById('stats').textContent =
+                    `${allRuns.length} runs: ${matched} matched, ${unmatched} unmatched`;
+
+                applyFilter();
+            } catch (e) {
+                console.error('Failed to load runs:', e);
+                document.getElementById('runGrid').innerHTML = '<div class="loading">Failed to load runs</div>';
+            }
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === filter);
+            });
+            applyFilter();
+        }
+
+        function applyFilter() {
+            if (currentFilter === 'matched') {
+                filteredRuns = allRuns.filter(r => !r.unmatched);
+            } else if (currentFilter === 'unmatched') {
+                filteredRuns = allRuns.filter(r => r.unmatched);
+            } else {
+                filteredRuns = [...allRuns];
+            }
+
+            // Sort: unmatched first, then by timestamp
+            filteredRuns.sort((a, b) => {
+                if (a.unmatched && !b.unmatched) return -1;
+                if (!a.unmatched && b.unmatched) return 1;
+                return (a.timestamp || '').localeCompare(b.timestamp || '');
+            });
+
+            renderRuns();
+        }
+
+        function renderRuns() {
+            const grid = document.getElementById('runGrid');
+            if (filteredRuns.length === 0) {
+                grid.innerHTML = '<div class="loading">No runs found</div>';
+                return;
+            }
+
+            grid.innerHTML = filteredRuns.map((run, idx) => {
+            // Format bib with gender prefix (G for girl, B for boy, F for forerunner)
+            const genderPrefix = run.gender === 'g' ? 'G' : run.gender === 'b' ? 'B' : run.gender === 'f' ? 'F' : '';
+            const bibLabel = run.bib ? `${genderPrefix}${run.bib}` : run.id;
+            const titleLabel = run.name ? `${run.name} (${bibLabel})` : bibLabel;
+
+            return `
+                <div class="run-card ${run.unmatched ? 'unmatched' : ''}">
+                    <div class="run-media" onclick="openFullscreen(${idx})">
+                        ${run.montage_url ?
+                            `<img src="${run.montage_url}" loading="lazy">` :
+                            (run.video_url ?
+                                `<video src="${run.video_url}" muted loop onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>` :
+                                '<div style="color:#666">No preview</div>'
+                            )
+                        }
+                        <span class="run-badge ${run.unmatched ? 'unmatched' : 'matched'}">
+                            ${run.unmatched ? 'UNMATCHED' : bibLabel}
+                        </span>
+                    </div>
+                    <div class="run-info">
+                        <div class="run-title">${run.unmatched ? run.id : titleLabel}</div>
+                        <div class="run-meta">${run.timestamp || ''} | ${run.cam} / ${run.run}</div>
+                        <div class="run-actions">
+                            <button class="btn btn-danger" onclick="deleteRun('${run.id}', ${idx})">Delete</button>
+                            ${run.montage_url ? `<button class="btn btn-primary" onclick="openFullscreen(${idx})">View Large</button>` : ''}
+                        </div>
+                        ${run.unmatched ? `
+                            <div class="assign-form">
+                                <input type="text" id="bib_${idx}" placeholder="Bib #">
+                                <select id="gender_${idx}">
+                                    <option value="g">Girl</option>
+                                    <option value="b">Boy</option>
+                                    <option value="f">Forerunner</option>
+                                </select>
+                                <button class="btn btn-success" onclick="assignBib('${run.id}', ${idx}, '${run.cam}', '${run.run}')">Assign</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        }
+
+        async function deleteRun(id, idx) {
+            if (!confirm(`Delete run ${id}?`)) return;
+
+            const race = document.getElementById('raceSelect').value;
+            const run = filteredRuns[idx];
+
+            try {
+                const res = await fetch('/api/runs/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ race, id, files: run.files })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    // Remove from arrays
+                    allRuns = allRuns.filter(r => r.id !== id);
+                    applyFilter();
+                } else {
+                    alert('Failed to delete: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Failed to delete: ' + e.message);
+            }
+        }
+
+        async function assignBib(id, idx, cam, runNum) {
+            const bib = document.getElementById(`bib_${idx}`).value;
+            const gender = document.getElementById(`gender_${idx}`).value;
+
+            if (!bib) {
+                alert('Please enter a bib number');
+                return;
+            }
+
+            const race = document.getElementById('raceSelect').value;
+
+            try {
+                const res = await fetch('/api/unmatched/assign', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ race, id, bib, gender, cam, run: runNum })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    loadRuns(); // Refresh
+                } else {
+                    alert('Failed to assign: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Failed to assign: ' + e.message);
+            }
+        }
+
+        function openFullscreen(idx) {
+            currentIndex = idx;
+            const run = filteredRuns[idx];
+            const img = document.getElementById('fullscreenImg');
+            img.src = run.montage_url || run.video_url || '';
+            document.getElementById('fullscreenOverlay').classList.add('visible');
+        }
+
+        function closeFullscreen() {
+            document.getElementById('fullscreenOverlay').classList.remove('visible');
+        }
+
+        function navPrev() {
+            if (currentIndex > 0) {
+                openFullscreen(currentIndex - 1);
+            }
+        }
+
+        function navNext() {
+            if (currentIndex < filteredRuns.length - 1) {
+                openFullscreen(currentIndex + 1);
+            }
+        }
+
+        function deleteCurrentRun() {
+            const run = filteredRuns[currentIndex];
+            deleteRun(run.id, currentIndex);
+            closeFullscreen();
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (!document.getElementById('fullscreenOverlay').classList.contains('visible')) return;
+            if (e.key === 'ArrowLeft') navPrev();
+            else if (e.key === 'ArrowRight') navNext();
+            else if (e.key === 'Escape') closeFullscreen();
+            else if (e.key === 'Delete' || e.key === 'Backspace') deleteCurrentRun();
+        });
+
+        // Initialize
+        loadRaces();
+    </script>
+</body>
+</html>

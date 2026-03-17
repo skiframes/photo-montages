@@ -776,7 +776,7 @@ class DetectionEngine:
 
         runs = []
         frame_num = 0
-        check_interval = max(1, int(fps / 10))  # Check ~10 times per second
+        check_interval = max(1, int(fps / 10))  # Check ~10 times per second when idle
 
         while True:
             ret, frame = cap.read()
@@ -784,15 +784,19 @@ class DetectionEngine:
                 break
 
             frame_num += 1
-
-            # Only process every Nth frame for efficiency
-            if frame_num % check_interval != 0:
-                continue
-
             current_time = frame_num / fps
             timestamp = video_start + timedelta(seconds=current_time)
 
-            completed = self.process_frame(frame, frame_num, timestamp)
+            # During active run: process every frame for full fps capture
+            # When idle: only check every Nth frame for efficiency
+            if self.current_run is not None:
+                # Active run - process every frame
+                completed = self.process_frame(frame, frame_num, timestamp)
+            elif frame_num % check_interval == 0:
+                # Idle - check for new run at reduced rate
+                completed = self.process_frame(frame, frame_num, timestamp)
+            else:
+                completed = None
             if completed:
                 runs.append(completed)
                 # Note: on_run_complete callback is already called in process_frame

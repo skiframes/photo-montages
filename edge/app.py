@@ -5414,7 +5414,7 @@ def list_runs():
                     if len(ts) == 6:
                         run_info['timestamp'] = f'{ts[:2]}:{ts[2:4]}:{ts[4:]}'
 
-            # Extract bib/name from matched files (e.g., "g43_d001" or "JohnDoe_43_d001")
+            # Extract bib/name from matched files (e.g., "g43_d001" or "901-A_d001")
             if not is_unmatched:
                 parts = file_stem.split('_')
                 if len(parts) >= 2:
@@ -5425,6 +5425,10 @@ def list_runs():
                         run_info['gender'] = first[0]
                     elif first.isdigit():
                         run_info['bib'] = int(first)
+                    # Check for forerunner bib (e.g., "901-A", "902-B")
+                    elif '-' in first and first.split('-')[0].isdigit():
+                        run_info['bib'] = first  # Keep as string
+                        run_info['gender'] = 'f'  # Forerunner
 
             # Check for timing JSON
             timing_path = run_dir / f'{file_stem}_timing.json'
@@ -5450,10 +5454,16 @@ def list_runs():
                     run_info['files'].append(str(thumb))
                     break
 
-            # Check for fullres
+            # Check for fullres montage (prefer lowest fps for smoother viewing)
             fullres_dir = run_dir / 'fullres'
-            for fullres in fullres_dir.glob(f'{file_stem}*'):
-                run_info['files'].append(str(fullres))
+            montage_files = list(fullres_dir.glob(f'{file_stem}*.jpg'))
+            if montage_files:
+                # Sort to get lowest fps version (e.g., _4.0fps before _6.0fps)
+                montage_files.sort(key=lambda f: f.name)
+                best_montage = montage_files[0]
+                run_info['montage_url'] = f'/api/runs/montage/{race_slug}/{cam_id}/{run_id}/fullres/{best_montage.name}'
+                for mf in montage_files:
+                    run_info['files'].append(str(mf))
 
             runs.append(run_info)
 
@@ -5480,6 +5490,27 @@ def serve_run_thumb(filepath):
     if not full_path.exists():
         return jsonify({'error': 'Thumbnail not found'}), 404
     return send_file(str(full_path))
+
+
+@app.route('/api/runs/montage/<path:filepath>')
+def serve_run_montage(filepath):
+    """Serve a montage image from the montages directory."""
+    full_path = MONTAGES_DIR / filepath
+    if not full_path.exists():
+        return jsonify({'error': 'Montage not found'}), 404
+    return send_file(str(full_path), mimetype='image/jpeg')
+
+
+@app.route('/api/races/list', methods=['GET'])
+def list_races():
+    """List all available races in the montages directory."""
+    races = []
+    if MONTAGES_DIR.exists():
+        for d in MONTAGES_DIR.iterdir():
+            if d.is_dir() and not d.name.startswith('.'):
+                races.append(d.name)
+    races.sort(reverse=True)  # Most recent first
+    return jsonify({'races': races})
 
 
 @app.route('/api/runs/delete', methods=['POST'])
