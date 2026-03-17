@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict
 
-from detection import DetectionEngine, DetectionConfig, Run
+from detection import DetectionEngine, DetectionConfig, Run, RUN_CAPTURE_FPS
 from montage import generate_montage, MontageResult, MontageResultPair, DEFAULT_FPS
 from video_clip import generate_video_clip
 from trajectory import generate_trajectory_video
@@ -537,10 +537,11 @@ class SkiFramesRunner:
                     except Exception:
                         pass
 
+                # Encode at RUN_CAPTURE_FPS (actual capture rate) for real-time playback
                 staging_video_path = generate_video_clip(
                     frames=run.frames,
                     output_path=video_out_path,
-                    source_fps=self.source_fps,
+                    source_fps=RUN_CAPTURE_FPS,
                     crop_region=vid_crop_region,
                     selected_logos=self.selected_logos,
                     gate_info=self.gate_info,
@@ -658,10 +659,11 @@ class SkiFramesRunner:
                         except Exception:
                             pass
 
+                    # Encode at RUN_CAPTURE_FPS (actual capture rate) for real-time playback
                     video_clip_path = generate_video_clip(
                         frames=run.frames,
                         output_path=video_out_path,
-                        source_fps=self.source_fps,
+                        source_fps=RUN_CAPTURE_FPS,
                         crop_region=vid_crop_region,
                         selected_logos=self.selected_logos,
                         gate_info=self.gate_info,

@@ -5346,6 +5346,195 @@ def delete_unmatched():
     })
 
 
+@app.route('/api/runs/list', methods=['GET'])
+def list_runs():
+    """
+    List all detected runs for a race/section/run.
+
+    Query params:
+        race: Race slug (e.g., "Piche-U12-GS-2026-03-15")
+        section: Section ID (e.g., "Cam1") - optional
+        run: Run number (e.g., "run1", "run2") - optional
+
+    Returns list of runs with video/thumbnail URLs and metadata.
+    """
+    race_slug = request.args.get('race', '')
+    section = request.args.get('section', '')
+    run_number = request.args.get('run', '')
+
+    if not race_slug:
+        return jsonify({'error': 'Missing race parameter'}), 400
+
+    staging_dir = MONTAGES_DIR / race_slug
+    if not staging_dir.exists():
+        return jsonify({'error': f'Race not found: {race_slug}', 'runs': []})
+
+    runs = []
+
+    # Find all section/run directories
+    if section and run_number:
+        run_dirs = [staging_dir / section / run_number]
+    elif section:
+        run_dirs = list((staging_dir / section).glob('run*'))
+    else:
+        run_dirs = []
+        for cam_dir in staging_dir.iterdir():
+            if cam_dir.is_dir() and not cam_dir.name.startswith('.'):
+                run_dirs.extend(cam_dir.glob('run*'))
+
+    for run_dir in run_dirs:
+        if not run_dir.exists() or not run_dir.is_dir():
+            continue
+
+        cam_id = run_dir.parent.name
+        run_id = run_dir.name
+
+        # Find all video files
+        for video_file in run_dir.glob('*.mp4'):
+            file_stem = video_file.stem
+            file_name = video_file.name
+
+            # Parse run info from filename
+            is_unmatched = file_stem.startswith('unmatched_')
+
+            run_info = {
+                'id': file_stem,
+                'cam': cam_id,
+                'run': run_id,
+                'unmatched': is_unmatched,
+                'video_url': f'/api/runs/video/{race_slug}/{cam_id}/{run_id}/{file_name}',
+                'files': [str(video_file)],
+            }
+
+            # Extract timestamp from unmatched ID
+            if is_unmatched:
+                parts = file_stem.split('_')
+                if len(parts) >= 2:
+                    ts = parts[1]  # e.g., "121732"
+                    if len(ts) == 6:
+                        run_info['timestamp'] = f'{ts[:2]}:{ts[2:4]}:{ts[4:]}'
+
+            # Extract bib/name from matched files (e.g., "g43_d001" or "JohnDoe_43_d001")
+            if not is_unmatched:
+                parts = file_stem.split('_')
+                if len(parts) >= 2:
+                    first = parts[0]
+                    # Check for gender prefix (g/b/f + number)
+                    if first[0] in 'gbf' and first[1:].isdigit():
+                        run_info['bib'] = int(first[1:])
+                        run_info['gender'] = first[0]
+                    elif first.isdigit():
+                        run_info['bib'] = int(first)
+
+            # Check for timing JSON
+            timing_path = run_dir / f'{file_stem}_timing.json'
+            if timing_path.exists():
+                run_info['files'].append(str(timing_path))
+                try:
+                    with open(timing_path) as f:
+                        timing = json.load(f)
+                    run_info['timestamp'] = timing.get('start_trigger_time', '')[:19].replace('T', ' ')
+                    if timing.get('bib'):
+                        run_info['bib'] = timing['bib']
+                    if timing.get('name'):
+                        run_info['name'] = timing['name']
+                except Exception:
+                    pass
+
+            # Check for thumbnail
+            thumb_dir = run_dir / 'thumbnails'
+            for ext in ['.jpg', '.png']:
+                thumb = thumb_dir / f'{file_stem}{ext}'
+                if thumb.exists():
+                    run_info['thumbnail_url'] = f'/api/runs/thumb/{race_slug}/{cam_id}/{run_id}/{thumb.name}'
+                    run_info['files'].append(str(thumb))
+                    break
+
+            # Check for fullres
+            fullres_dir = run_dir / 'fullres'
+            for fullres in fullres_dir.glob(f'{file_stem}*'):
+                run_info['files'].append(str(fullres))
+
+            runs.append(run_info)
+
+    return jsonify({
+        'race': race_slug,
+        'runs': runs,
+        'total': len(runs),
+    })
+
+
+@app.route('/api/runs/video/<path:filepath>')
+def serve_run_video(filepath):
+    """Serve a video file from the montages directory."""
+    full_path = MONTAGES_DIR / filepath
+    if not full_path.exists():
+        return jsonify({'error': 'Video not found'}), 404
+    return send_file(str(full_path), mimetype='video/mp4')
+
+
+@app.route('/api/runs/thumb/<path:filepath>')
+def serve_run_thumb(filepath):
+    """Serve a thumbnail from the montages directory."""
+    full_path = MONTAGES_DIR / filepath
+    if not full_path.exists():
+        return jsonify({'error': 'Thumbnail not found'}), 404
+    return send_file(str(full_path))
+
+
+@app.route('/api/runs/delete', methods=['POST'])
+def delete_run():
+    """
+    Delete all files for a detected run.
+
+    Request body:
+    {
+        "race": "Piche-U12-GS-2026-03-15",
+        "id": "g43_d001",
+        "files": ["/path/to/file1.mp4", "/path/to/file2.json"]  # optional, for efficiency
+    }
+    """
+    data = request.get_json() or {}
+    race_slug = data.get('race')
+    run_id = data.get('id')
+    provided_files = data.get('files', [])
+
+    if not race_slug or not run_id:
+        return jsonify({'error': 'Missing race or id'}), 400
+
+    deleted_files = 0
+
+    # If files provided, delete them directly
+    if provided_files:
+        for file_path in provided_files:
+            try:
+                p = Path(file_path)
+                if p.exists():
+                    p.unlink()
+                    deleted_files += 1
+            except Exception as e:
+                print(f'[runs] Warning: failed to delete {file_path}: {e}')
+    else:
+        # Search for files matching the run_id pattern
+        staging_dir = MONTAGES_DIR / race_slug
+        if staging_dir.exists():
+            # Search in all subdirectories
+            for f in staging_dir.rglob(f'{run_id}*'):
+                try:
+                    if f.is_file():
+                        f.unlink()
+                        deleted_files += 1
+                except Exception as e:
+                    print(f'[runs] Warning: failed to delete {f}: {e}')
+
+    print(f'[runs] Deleted {deleted_files} files for {run_id}')
+
+    return jsonify({
+        'ok': True,
+        'deleted_files': deleted_files,
+    })
+
+
 if __name__ == '__main__':
     # Restore persisted sessions on startup
     _load_persisted_sessions()

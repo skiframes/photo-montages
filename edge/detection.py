@@ -25,9 +25,9 @@ from dataclasses import dataclass, field
 from typing import Optional, Callable, List, Dict
 from collections import deque
 
-# Capture FPS during runs - lower than source FPS to reduce memory/disk usage
-# 10fps is sufficient for montages (typically output at 4fps anyway)
-RUN_CAPTURE_FPS = 10
+# Capture FPS during runs - set to source FPS for real-time video playback
+# Lower values save disk space but result in choppier video
+RUN_CAPTURE_FPS = 30
 
 
 @dataclass
