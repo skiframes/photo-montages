@@ -132,6 +132,34 @@
         }
         .run-badge.matched { background: var(--success); }
         .run-badge.unmatched { background: var(--warning); color: #000; }
+        .media-tabs {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 4px;
+            background: rgba(0,0,0,0.7);
+            padding: 4px;
+            border-radius: 6px;
+        }
+        .media-tab {
+            padding: 4px 10px;
+            font-size: 11px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: transparent;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        .media-tab.active {
+            background: var(--primary);
+            color: white;
+        }
+        .media-tab:hover:not(.active) {
+            background: rgba(255,255,255,0.1);
+        }
         .run-info {
             padding: 16px;
         }
@@ -364,20 +392,39 @@
             // Format elapsed time
             const elapsedStr = run.elapsed_sec ? `${run.elapsed_sec.toFixed(2)}s` : '';
 
+            // Determine available media types
+            const hasPhoto = !!run.montage_url;
+            const hasVideo = !!run.video_url;
+            const hasGhost = !!run.ghosttrail_url;
+            const mediaCount = (hasPhoto ? 1 : 0) + (hasVideo ? 1 : 0) + (hasGhost ? 1 : 0);
+
             return `
-                <div class="run-card ${run.unmatched ? 'unmatched' : ''}">
+                <div class="run-card ${run.unmatched ? 'unmatched' : ''}" data-idx="${idx}">
                     <div class="run-media" onclick="openFullscreen(${idx})">
-                        ${run.montage_url ?
-                            `<img src="${run.montage_url}" loading="lazy">` :
-                            (run.video_url ?
-                                `<video src="${run.video_url}" muted loop onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>` :
-                                '<div style="color:#666">No preview</div>'
-                            )
+                        ${hasPhoto ?
+                            `<img class="media-content" data-type="photo" src="${run.montage_url}" loading="lazy">` :
+                            ''
                         }
+                        ${hasVideo ?
+                            `<video class="media-content" data-type="video" src="${run.video_url}" muted loop ${hasPhoto ? 'style="display:none"' : ''} onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>` :
+                            ''
+                        }
+                        ${hasGhost ?
+                            `<video class="media-content" data-type="ghost" src="${run.ghosttrail_url}" muted loop style="display:none" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0"></video>` :
+                            ''
+                        }
+                        ${!hasPhoto && !hasVideo && !hasGhost ? '<div style="color:#666">No preview</div>' : ''}
                         <span class="run-badge ${run.unmatched ? 'unmatched' : 'matched'}">
                             ${run.unmatched ? 'UNMATCHED' : bibLabel}
                         </span>
-                        ${elapsedStr ? `<span style="position:absolute; bottom:12px; right:12px; background:rgba(0,0,0,0.7); color:#fff; padding:4px 8px; border-radius:4px; font-size:14px; font-weight:600;">${elapsedStr}</span>` : ''}
+                        ${elapsedStr ? `<span style="position:absolute; bottom:${mediaCount > 1 ? '40' : '12'}px; right:12px; background:rgba(0,0,0,0.7); color:#fff; padding:4px 8px; border-radius:4px; font-size:14px; font-weight:600;">${elapsedStr}</span>` : ''}
+                        ${mediaCount > 1 ? `
+                            <div class="media-tabs" onclick="event.stopPropagation()">
+                                ${hasPhoto ? `<button class="media-tab active" onclick="switchMedia(${idx}, 'photo')">Photo</button>` : ''}
+                                ${hasVideo ? `<button class="media-tab" onclick="switchMedia(${idx}, 'video')">Video</button>` : ''}
+                                ${hasGhost ? `<button class="media-tab" onclick="switchMedia(${idx}, 'ghost')">Ghost</button>` : ''}
+                            </div>
+                        ` : ''}
                     </div>
                     <div class="run-info">
                         <div class="run-title">${run.unmatched ? run.id : titleLabel}</div>
@@ -387,8 +434,8 @@
                         </div>
                         <div class="run-actions">
                             <button class="btn btn-danger" onclick="deleteRun('${run.id}', ${idx})">Delete All</button>
-                            ${run.video_url ? `<button class="btn btn-warning btn-small" onclick="deleteVideo('${run.id}', ${idx})">Delete Video Only</button>` : ''}
-                            ${run.montage_url ? `<button class="btn btn-primary" onclick="openFullscreen(${idx})">View Large</button>` : ''}
+                            ${(hasVideo || hasGhost) ? `<button class="btn btn-warning btn-small" onclick="deleteVideo('${run.id}', ${idx})">Delete Videos</button>` : ''}
+                            ${hasPhoto ? `<button class="btn btn-primary" onclick="openFullscreen(${idx})">View Large</button>` : ''}
                         </div>
                         ${run.unmatched ? `
                             <div class="assign-form">
@@ -407,8 +454,36 @@
         }).join('');
         }
 
+        function switchMedia(idx, type) {
+            const card = document.querySelector(`.run-card[data-idx="${idx}"]`);
+            if (!card) return;
+
+            // Hide all media content
+            card.querySelectorAll('.media-content').forEach(el => {
+                el.style.display = 'none';
+                if (el.tagName === 'VIDEO') {
+                    el.pause();
+                    el.currentTime = 0;
+                }
+            });
+
+            // Show selected media
+            const selected = card.querySelector(`.media-content[data-type="${type}"]`);
+            if (selected) {
+                selected.style.display = '';
+            }
+
+            // Update tab active state
+            card.querySelectorAll('.media-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.textContent.toLowerCase() === type ||
+                    (type === 'ghost' && tab.textContent === 'Ghost') ||
+                    (type === 'photo' && tab.textContent === 'Photo') ||
+                    (type === 'video' && tab.textContent === 'Video'));
+            });
+        }
+
         async function deleteRun(id, idx) {
-            if (!confirm(`Delete ALL files for run ${id}? (video + montage)`)) return;
+            if (!confirm(`Delete ALL files for run ${id}? (photo + video + ghosttrail)`)) return;
 
             const race = document.getElementById('raceSelect').value;
             const run = filteredRuns[idx];
@@ -433,7 +508,7 @@
         }
 
         async function deleteVideo(id, idx) {
-            if (!confirm(`Delete VIDEO ONLY for ${id}? (keeps montage)`)) return;
+            if (!confirm(`Delete VIDEOS for ${id}? (keeps photo montage, deletes video + ghosttrail)`)) return;
 
             const race = document.getElementById('raceSelect').value;
             const run = filteredRuns[idx];
@@ -442,18 +517,19 @@
                 const res = await fetch('/api/runs/delete-video', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ race, id, video_url: run.video_url })
+                    body: JSON.stringify({ race, id, video_url: run.video_url, ghosttrail_url: run.ghosttrail_url })
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    // Remove video_url from this run and refresh
+                    // Remove video_url and ghosttrail_url from this run and refresh
                     run.video_url = null;
+                    run.ghosttrail_url = null;
                     renderRuns();
                 } else {
-                    alert('Failed to delete video: ' + (data.error || 'Unknown error'));
+                    alert('Failed to delete videos: ' + (data.error || 'Unknown error'));
                 }
             } catch (e) {
-                alert('Failed to delete video: ' + e.message);
+                alert('Failed to delete videos: ' + e.message);
             }
         }
 

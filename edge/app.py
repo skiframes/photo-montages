@@ -5467,6 +5467,12 @@ def list_runs():
                 for mf in montage_files:
                     run_info['files'].append(str(mf))
 
+            # Check for ghosttrail video
+            ghosttrail_file = run_dir / f'{file_stem}_ghosttrail.mp4'
+            if ghosttrail_file.exists():
+                run_info['ghosttrail_url'] = f'/api/runs/video/{race_slug}/{cam_id}/{run_id}/{ghosttrail_file.name}'
+                run_info['files'].append(str(ghosttrail_file))
+
             runs.append(run_info)
 
     return jsonify({
