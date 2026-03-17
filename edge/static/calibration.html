@@ -1880,9 +1880,15 @@
 
         <!-- Live Video Preview -->
         <div id="videoPreviewSection" style="display: none; margin-top: 20px; padding: 16px; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border);">
-            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: var(--text-primary);">
-                Live Video Preview
-                <span id="previewFps" style="font-size: 12px; font-weight: normal; color: var(--text-muted); margin-left: 8px;">—</span>
+            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: var(--text-primary); display: flex; justify-content: space-between; align-items: center;">
+                <span>
+                    Live Video Preview
+                    <span id="previewFps" style="font-size: 12px; font-weight: normal; color: var(--text-muted); margin-left: 8px;">—</span>
+                </span>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: normal; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="previewToggle" style="width: 16px; height: 16px; cursor: pointer;">
+                    Enable
+                </label>
             </h3>
             <div style="position: relative; background: #000; border-radius: 4px; overflow: hidden; min-height: 300px;">
                 <img id="videoPreviewImg"
@@ -1955,22 +1961,6 @@
             <div style="display: flex; gap: 16px; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-secondary);">
                 <span><span style="display: inline-block; width: 12px; height: 12px; background: rgba(59,130,246,0.3); border: 1px solid #3b82f6; vertical-align: middle; margin-right: 4px;"></span>Run active</span>
                 <span><span style="display: inline-block; width: 2px; height: 12px; background: #3b82f6; vertical-align: middle; margin-right: 4px;"></span>Run triggered</span>
-            </div>
-        </div>
-
-        <!-- Run Review Section -->
-        <div id="runReviewSection" style="display: none; margin-top: 20px; padding: 16px; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border);">
-            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: var(--text-primary); display: flex; justify-content: space-between; align-items: center;">
-                Run Review
-                <button id="refreshRunsBtn" style="font-size: 12px; padding: 4px 8px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); cursor: pointer;">
-                    Refresh
-                </button>
-            </h3>
-            <div style="margin-bottom: 12px; font-size: 13px; color: var(--text-secondary);">
-                <span id="runReviewStats">Loading...</span>
-            </div>
-            <div id="runReviewList" style="display: flex; flex-direction: column; gap: 12px; max-height: 500px; overflow-y: auto;">
-                <!-- Runs will be populated here -->
             </div>
         </div>
 
@@ -2181,16 +2171,12 @@
             videoPreviewImg: document.getElementById('videoPreviewImg'),
             videoPreviewStatus: document.getElementById('videoPreviewStatus'),
             previewFps: document.getElementById('previewFps'),
+            previewToggle: document.getElementById('previewToggle'),
             // Processing logs elements
             processingLogsSection: document.getElementById('processingLogsSection'),
             processingLogsContainer: document.getElementById('processingLogsContainer'),
             processingLogsContent: document.getElementById('processingLogsContent'),
             toggleLogsBtn: document.getElementById('toggleLogsBtn'),
-            // Run review elements
-            runReviewSection: document.getElementById('runReviewSection'),
-            runReviewStats: document.getElementById('runReviewStats'),
-            runReviewList: document.getElementById('runReviewList'),
-            refreshRunsBtn: document.getElementById('refreshRunsBtn'),
             // Vola elements
             numAthletes: document.getElementById('numAthletes'),
             volaSelect: document.getElementById('volaSelect'),
@@ -2943,6 +2929,26 @@
                     btn.textContent = 'Expand';
                 }
             });
+
+            // Live video preview toggle
+            if (elements.previewToggle) {
+                elements.previewToggle.addEventListener('change', () => {
+                    if (elements.previewToggle.checked && state.currentJobId) {
+                        // Start polling if toggle enabled and job is running
+                        startPreviewPolling();
+                    } else {
+                        // Stop polling but keep section visible
+                        if (previewPollingInterval) {
+                            clearInterval(previewPollingInterval);
+                            previewPollingInterval = null;
+                        }
+                        if (elements.videoPreviewStatus) {
+                            elements.videoPreviewStatus.textContent = 'Preview disabled';
+                            elements.videoPreviewStatus.style.background = 'rgba(0,0,0,0.7)';
+                        }
+                    }
+                });
+            }
 
             // Advanced settings toggle
             elements.advancedToggle.addEventListener('click', () => {
@@ -3810,6 +3816,15 @@
                 elements.videoPreviewSection.style.display = 'block';
             }
 
+            // Only start actual polling if toggle is enabled
+            if (!elements.previewToggle || !elements.previewToggle.checked) {
+                if (elements.videoPreviewStatus) {
+                    elements.videoPreviewStatus.textContent = 'Preview disabled';
+                    elements.videoPreviewStatus.style.background = 'rgba(0,0,0,0.7)';
+                }
+                return;
+            }
+
             previewFrameCount = 0;
             previewFpsStartTime = Date.now();
 
@@ -4113,13 +4128,6 @@
                         elements.processingLogsContent.innerHTML = logsHtml;
                         // Auto-scroll to bottom
                         elements.processingLogsContainer.scrollTop = elements.processingLogsContainer.scrollHeight;
-                    }
-                    // Show run review section and refresh when new runs detected
-                    if (elements.runReviewSection) {
-                        elements.runReviewSection.style.display = 'block';
-                    }
-                    if (newRuns > 0) {
-                        loadRunReview();
                     }
                     // Refresh gallery when new runs detected
                     if (newRuns > 0 && state.mode === 'gallery') { loadGalleryMontages(); }
@@ -6507,221 +6515,10 @@
             });
         }
 
-        // =====================
-        // Run Review Functions
-        // =====================
-
-        async function loadRunReview() {
-            const raceSlug = state.raceSlug;
-            const sectionId = state.sectionId;
-            const runNumber = state.runNumber;
-
-            if (!raceSlug) {
-                document.getElementById('runReviewStats').textContent = 'No race selected';
-                return;
-            }
-
-            try {
-                const res = await fetch(`/api/runs/list?race=${encodeURIComponent(raceSlug)}&section=${encodeURIComponent(sectionId || '')}&run=${encodeURIComponent(runNumber || '')}`);
-                const data = await res.json();
-
-                if (data.error) {
-                    document.getElementById('runReviewStats').textContent = data.error;
-                    return;
-                }
-
-                const runs = data.runs || [];
-                const matched = runs.filter(r => !r.unmatched).length;
-                const unmatched = runs.filter(r => r.unmatched).length;
-
-                document.getElementById('runReviewStats').textContent =
-                    `${runs.length} runs: ${matched} matched, ${unmatched} unmatched`;
-
-                renderRunList(runs, data.athletes || []);
-
-            } catch (e) {
-                console.error('Failed to load runs:', e);
-                document.getElementById('runReviewStats').textContent = 'Failed to load runs';
-            }
-        }
-
-        function renderRunList(runs, athletes) {
-            const container = document.getElementById('runReviewList');
-            container.innerHTML = '';
-
-            if (runs.length === 0) {
-                container.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">No runs detected yet</div>';
-                return;
-            }
-
-            // Sort: unmatched first, then by timestamp
-            runs.sort((a, b) => {
-                if (a.unmatched && !b.unmatched) return -1;
-                if (!a.unmatched && b.unmatched) return 1;
-                return (a.timestamp || '').localeCompare(b.timestamp || '');
-            });
-
-            runs.forEach(run => {
-                const div = document.createElement('div');
-                div.style.cssText = 'display: flex; gap: 12px; padding: 10px; background: var(--bg-secondary); border-radius: 6px; align-items: center;';
-
-                // Thumbnail/video preview
-                const preview = document.createElement('div');
-                preview.style.cssText = 'width: 120px; height: 80px; background: #222; border-radius: 4px; overflow: hidden; flex-shrink: 0;';
-                if (run.video_url) {
-                    const video = document.createElement('video');
-                    video.src = run.video_url;
-                    video.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
-                    video.muted = true;
-                    video.loop = true;
-                    video.addEventListener('mouseenter', () => video.play());
-                    video.addEventListener('mouseleave', () => { video.pause(); video.currentTime = 0; });
-                    preview.appendChild(video);
-                } else if (run.thumbnail_url) {
-                    const img = document.createElement('img');
-                    img.src = run.thumbnail_url;
-                    img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
-                    preview.appendChild(img);
-                }
-                div.appendChild(preview);
-
-                // Info
-                const info = document.createElement('div');
-                info.style.cssText = 'flex: 1; min-width: 0;';
-
-                const title = document.createElement('div');
-                title.style.cssText = 'font-weight: 500; font-size: 14px; color: var(--text-primary);';
-                if (run.unmatched) {
-                    title.innerHTML = `<span style="color: #f59e0b;">UNMATCHED</span> ${run.id}`;
-                } else {
-                    title.textContent = `Bib ${run.bib} - ${run.name || 'Unknown'}`;
-                }
-                info.appendChild(title);
-
-                const time = document.createElement('div');
-                time.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-top: 2px;';
-                time.textContent = run.timestamp || '';
-                info.appendChild(time);
-
-                // Assign bib input for unmatched
-                if (run.unmatched) {
-                    const assignRow = document.createElement('div');
-                    assignRow.style.cssText = 'display: flex; gap: 6px; margin-top: 6px; align-items: center;';
-
-                    const bibInput = document.createElement('input');
-                    bibInput.type = 'text';
-                    bibInput.placeholder = 'Bib #';
-                    bibInput.style.cssText = 'width: 60px; padding: 4px 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;';
-                    assignRow.appendChild(bibInput);
-
-                    const genderSelect = document.createElement('select');
-                    genderSelect.style.cssText = 'padding: 4px 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;';
-                    genderSelect.innerHTML = '<option value="g">Girl</option><option value="b">Boy</option><option value="f">Forerunner</option>';
-                    assignRow.appendChild(genderSelect);
-
-                    const assignBtn = document.createElement('button');
-                    assignBtn.textContent = 'Assign';
-                    assignBtn.style.cssText = 'padding: 4px 8px; font-size: 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;';
-                    assignBtn.addEventListener('click', () => assignBibToRun(run.id, bibInput.value, genderSelect.value));
-                    assignRow.appendChild(assignBtn);
-
-                    info.appendChild(assignRow);
-                }
-
-                div.appendChild(info);
-
-                // Delete button
-                const deleteBtn = document.createElement('button');
-                deleteBtn.innerHTML = '&times;';
-                deleteBtn.title = 'Delete this run';
-                deleteBtn.style.cssText = 'width: 32px; height: 32px; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 18px; flex-shrink: 0;';
-                deleteBtn.addEventListener('click', () => deleteRun(run.id, run.files));
-                div.appendChild(deleteBtn);
-
-                container.appendChild(div);
-            });
-        }
-
-        async function assignBibToRun(runId, bib, gender) {
-            if (!bib) {
-                alert('Please enter a bib number');
-                return;
-            }
-
-            const raceSlug = state.raceSlug;
-            const sectionId = state.sectionId;
-            const runNumber = state.runNumber;
-
-            try {
-                const res = await fetch('/api/unmatched/assign', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        race: raceSlug,
-                        id: runId,
-                        bib: bib,
-                        gender: gender,
-                        cam: sectionId,
-                        run: runNumber
-                    })
-                });
-
-                const data = await res.json();
-                if (data.error) {
-                    alert('Failed to assign: ' + data.error);
-                } else {
-                    showStatus(`Assigned bib ${bib} to ${runId}`, 'success');
-                    loadRunReview(); // Refresh list
-                }
-            } catch (e) {
-                console.error('Failed to assign bib:', e);
-                alert('Failed to assign bib');
-            }
-        }
-
-        async function deleteRun(runId, files) {
-            if (!confirm(`Delete run ${runId}? This cannot be undone.`)) {
-                return;
-            }
-
-            const raceSlug = state.raceSlug;
-
-            try {
-                const res = await fetch('/api/runs/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        race: raceSlug,
-                        id: runId,
-                        files: files
-                    })
-                });
-
-                const data = await res.json();
-                if (data.error) {
-                    alert('Failed to delete: ' + data.error);
-                } else {
-                    showStatus(`Deleted run ${runId}`, 'success');
-                    loadRunReview(); // Refresh list
-                }
-            } catch (e) {
-                console.error('Failed to delete run:', e);
-                alert('Failed to delete run');
-            }
-        }
-
-        function setupRunReviewListeners() {
-            const refreshBtn = document.getElementById('refreshRunsBtn');
-            if (refreshBtn) {
-                refreshBtn.addEventListener('click', loadRunReview);
-            }
-        }
-
         // Initialize on load
         init();
         setupStitchEventListeners();
         setupGatesEventListeners();
-        setupRunReviewListeners();
     </script>
 </body>
 </html>
