@@ -1572,6 +1572,15 @@
                         <div id="montageLogoList" style="display: flex; flex-direction: column; gap: 4px;">
                             <!-- Logos will be populated dynamically by renderLogoList() -->
                         </div>
+                        <div style="margin-top: 10px;">
+                            <label for="logoCorner" style="font-size: 12px; color: #64748b;">Logo Position</label>
+                            <select id="logoCorner" style="width: 100%; margin-top: 4px;">
+                                <option value="bottom-right" selected>Bottom Right</option>
+                                <option value="bottom-left">Bottom Left</option>
+                                <option value="top-right">Top Right</option>
+                                <option value="top-left">Top Left</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Gate Info Overlay -->
@@ -2146,6 +2155,7 @@
             postBuffer: document.getElementById('postBuffer'),
             ghosttrailInterval: document.getElementById('ghosttrailInterval'),
             ghosttrailOpacity: document.getElementById('ghosttrailOpacity'),
+            logoCorner: document.getElementById('logoCorner'),
             saveSection: document.getElementById('saveSection'),
             saveConfig: document.getElementById('saveConfig'),
             outputDestSection: document.getElementById('outputDestSection'),
@@ -3595,6 +3605,7 @@
                     num_athletes: parseInt(elements.numAthletes.value) || 0,
                     // Logo selection
                     selected_logos: state.selectedLogos.length > 0 ? state.selectedLogos : null,
+                    logo_corner: elements.logoCorner ? elements.logoCorner.value : 'bottom-right',
                     // Gate info overlay
                     gate_info: state.gateInfoEnabled ? state.gateInfo : null,
                     gate_info_corner: state.gateInfoCorner,
@@ -5240,6 +5251,7 @@
                 montage_fps_list: state.montageFpsList,
                 // Logos
                 selected_logos: state.selectedLogos,
+                logo_corner: elements.logoCorner ? elements.logoCorner.value : 'bottom-right',
                 // Race info
                 race_info: state.raceInfo || {},
                 // Test count (0 = all)

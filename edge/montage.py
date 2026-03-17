@@ -406,13 +406,14 @@ def add_gate_info(image: np.ndarray, gate_info: Dict, corner: str = "top-right",
     return img
 
 
-def add_logos(image: np.ndarray, selected_logos: Optional[List[str]] = None) -> np.ndarray:
-    """Add sponsor logos at bottom-left corner.
+def add_logos(image: np.ndarray, selected_logos: Optional[List[str]] = None, corner: str = "bottom-right") -> np.ndarray:
+    """Add sponsor logos to specified corner.
 
     Args:
         image: The image to add logos to.
         selected_logos: Optional list of logo filenames in order (e.g., ['NHARA_logo.png', 'RMST_logo.png']).
                        If None, uses default logos.
+        corner: Corner to place logos - "bottom-right", "bottom-left", "top-right", "top-left".
     """
     img = image.copy()
     h, w = img.shape[:2]
@@ -425,25 +426,47 @@ def add_logos(image: np.ndarray, selected_logos: Optional[List[str]] = None) -> 
     logo_height = int(h * 0.06)
     padding = int(logo_height * 0.3)
 
-    # Starting position - bottom left
-    x_pos = padding
-    y_bottom = h - padding
-
+    # Calculate total width of all logos first (needed for right-aligned corners)
+    total_logo_width = 0
+    logo_data = []
     for logo_file in logo_files:
         logo_path = logo_dir / logo_file
         if not logo_path.exists():
             continue
-
-        # Load logo with alpha channel
         logo = cv2.imread(str(logo_path), cv2.IMREAD_UNCHANGED)
         if logo is None:
             continue
-
-        # Resize logo to target height while maintaining aspect ratio
         logo_h, logo_w = logo.shape[:2]
         scale = logo_height / logo_h
         new_w = int(logo_w * scale)
-        new_h = logo_height
+        total_logo_width += new_w + padding
+        logo_data.append((logo, new_w, logo_height))
+
+    if not logo_data:
+        return img
+
+    total_logo_width -= padding  # Remove extra padding after last logo
+
+    # Determine starting position based on corner
+    if corner == "bottom-left":
+        x_pos = padding
+        y_bottom = h - padding
+        x_direction = 1  # Move right
+    elif corner == "top-left":
+        x_pos = padding
+        y_bottom = padding + logo_height
+        x_direction = 1
+    elif corner == "top-right":
+        x_pos = w - padding - total_logo_width
+        y_bottom = padding + logo_height
+        x_direction = 1
+    else:  # bottom-right (default)
+        x_pos = w - padding - total_logo_width
+        y_bottom = h - padding
+        x_direction = 1
+
+    for logo, new_w, new_h in logo_data:
+        # Resize logo
         logo = cv2.resize(logo, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         # Position for this logo
@@ -464,7 +487,7 @@ def add_logos(image: np.ndarray, selected_logos: Optional[List[str]] = None) -> 
             img[y_pos:y_pos+new_h, x_pos:x_pos+new_w] = logo
 
         # Move x position for next logo
-        x_pos += new_w + padding
+        x_pos += (new_w + padding) * x_direction
 
     return img
 

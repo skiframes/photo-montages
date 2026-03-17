@@ -118,6 +118,7 @@ class SkiFramesRunner:
 
         # Selected logos for overlay (from UI logo selection)
         self.selected_logos: Optional[List[str]] = self.raw_config.get('selected_logos') or None
+        self.logo_corner: str = self.raw_config.get('logo_corner', 'bottom-right')
 
         # Gate info for overlay (gate number, slope, distance, etc.)
         self.gate_info: Optional[Dict] = self.raw_config.get('gate_info') or None
@@ -545,6 +546,7 @@ class SkiFramesRunner:
                     source_fps=RUN_CAPTURE_FPS,
                     crop_region=vid_crop_region,
                     selected_logos=self.selected_logos,
+                    logo_corner=self.logo_corner,
                     gate_info=self.gate_info,
                     gate_info_corner=self.gate_info_corner,
                 )
@@ -568,6 +570,8 @@ class SkiFramesRunner:
                     impression_interval=ghosttrail_interval,
                     impression_opacity=ghosttrail_opacity,
                     crop_region=vid_crop_region,
+                    selected_logos=self.selected_logos,
+                    logo_corner=self.logo_corner,
                 )
                 if ghosttrail_path:
                     size_kb = os.path.getsize(ghosttrail_path) / 1024
@@ -689,6 +693,7 @@ class SkiFramesRunner:
                         source_fps=RUN_CAPTURE_FPS,
                         crop_region=vid_crop_region,
                         selected_logos=self.selected_logos,
+                        logo_corner=self.logo_corner,
                         gate_info=self.gate_info,
                         gate_info_corner=self.gate_info_corner,
                     )
@@ -716,6 +721,8 @@ class SkiFramesRunner:
                         impression_interval=ghosttrail_interval,
                         impression_opacity=ghosttrail_opacity,
                         crop_region=vid_crop_region,
+                        selected_logos=self.selected_logos,
+                        logo_corner=self.logo_corner,
                     )
                     if ghosttrail_path:
                         size_kb = os.path.getsize(ghosttrail_path) / 1024
