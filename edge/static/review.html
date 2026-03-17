@@ -305,12 +305,18 @@
                 const res = await fetch('/api/races/list');
                 const data = await res.json();
                 const select = document.getElementById('raceSelect');
+                const defaultRace = 'Piche-U12-GS-2026-03-15';
                 (data.races || []).forEach(race => {
                     const opt = document.createElement('option');
                     opt.value = race;
                     opt.textContent = race;
+                    if (race === defaultRace) opt.selected = true;
                     select.appendChild(opt);
                 });
+                // Auto-load default race
+                if (select.value) {
+                    loadRuns();
+                }
             } catch (e) {
                 console.error('Failed to load races:', e);
             }
