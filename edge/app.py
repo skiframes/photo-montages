@@ -5389,10 +5389,14 @@ def list_runs():
         cam_id = run_dir.parent.name
         run_id = run_dir.name
 
-        # Find all video files
+        # Find all video files (skip ghosttrail files - they get attached later)
         for video_file in run_dir.glob('*.mp4'):
             file_stem = video_file.stem
             file_name = video_file.name
+
+            # Skip ghosttrail videos - they'll be attached to the main video
+            if file_stem.endswith('_ghosttrail'):
+                continue
 
             # Parse run info from filename
             is_unmatched = file_stem.startswith('unmatched_')
