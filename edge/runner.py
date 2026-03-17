@@ -659,8 +659,9 @@ class SkiFramesRunner:
                     print(f"  Embedding skipped: {e}")
 
             # Generate video clip from raw frames (can be disabled via config to save memory)
+            # Skip in staging mode - videos already created with bib naming above
             video_clip_path = None
-            if self.generate_videos:
+            if self.generate_videos and not self.staging_output_dir:
                 try:
                     video_dir = os.path.join(self.session_dir, 'videos')
                     video_filename = f"run_{run.run_number:03d}_{run.start_time.strftime('%H%M%S')}.mp4"
@@ -698,8 +699,9 @@ class SkiFramesRunner:
                     print(f"  Video clip skipped: {e}")
 
             # Generate GhostTrail stroboscopic slow-motion video
+            # Skip in staging mode - ghosttrail already created with bib naming above
             ghosttrail_path = None
-            if self.generate_videos:
+            if self.generate_videos and not self.staging_output_dir:
                 try:
                     ghosttrail_dir = os.path.join(self.session_dir, 'ghosttrail')
                     ghosttrail_filename = f"run_{run.run_number:03d}_{run.start_time.strftime('%H%M%S')}_ghosttrail.mp4"
