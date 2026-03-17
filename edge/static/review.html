@@ -55,6 +55,8 @@
         .btn-primary { background: var(--primary); color: white; }
         .btn-danger { background: var(--danger); color: white; }
         .btn-success { background: var(--success); color: white; }
+        .btn-warning { background: var(--warning); color: #000; }
+        .btn-small { padding: 4px 10px; font-size: 12px; }
         .stats {
             padding: 12px 24px;
             background: var(--card);
@@ -359,6 +361,9 @@
             const bibLabel = run.bib ? `${genderPrefix}${run.bib}` : run.id;
             const titleLabel = run.name ? `${run.name} (${bibLabel})` : bibLabel;
 
+            // Format elapsed time
+            const elapsedStr = run.elapsed_sec ? `${run.elapsed_sec.toFixed(2)}s` : '';
+
             return `
                 <div class="run-card ${run.unmatched ? 'unmatched' : ''}">
                     <div class="run-media" onclick="openFullscreen(${idx})">
@@ -372,12 +377,17 @@
                         <span class="run-badge ${run.unmatched ? 'unmatched' : 'matched'}">
                             ${run.unmatched ? 'UNMATCHED' : bibLabel}
                         </span>
+                        ${elapsedStr ? `<span style="position:absolute; bottom:12px; right:12px; background:rgba(0,0,0,0.7); color:#fff; padding:4px 8px; border-radius:4px; font-size:14px; font-weight:600;">${elapsedStr}</span>` : ''}
                     </div>
                     <div class="run-info">
                         <div class="run-title">${run.unmatched ? run.id : titleLabel}</div>
-                        <div class="run-meta">${run.timestamp || ''} | ${run.cam} / ${run.run}</div>
+                        <div class="run-meta">
+                            ${run.timestamp || ''} | ${run.cam} / ${run.run}
+                            ${elapsedStr ? ` | <strong>${elapsedStr}</strong>` : ''}
+                        </div>
                         <div class="run-actions">
-                            <button class="btn btn-danger" onclick="deleteRun('${run.id}', ${idx})">Delete</button>
+                            <button class="btn btn-danger" onclick="deleteRun('${run.id}', ${idx})">Delete All</button>
+                            ${run.video_url ? `<button class="btn btn-warning btn-small" onclick="deleteVideo('${run.id}', ${idx})">Delete Video Only</button>` : ''}
                             ${run.montage_url ? `<button class="btn btn-primary" onclick="openFullscreen(${idx})">View Large</button>` : ''}
                         </div>
                         ${run.unmatched ? `
@@ -398,7 +408,7 @@
         }
 
         async function deleteRun(id, idx) {
-            if (!confirm(`Delete run ${id}?`)) return;
+            if (!confirm(`Delete ALL files for run ${id}? (video + montage)`)) return;
 
             const race = document.getElementById('raceSelect').value;
             const run = filteredRuns[idx];
@@ -419,6 +429,31 @@
                 }
             } catch (e) {
                 alert('Failed to delete: ' + e.message);
+            }
+        }
+
+        async function deleteVideo(id, idx) {
+            if (!confirm(`Delete VIDEO ONLY for ${id}? (keeps montage)`)) return;
+
+            const race = document.getElementById('raceSelect').value;
+            const run = filteredRuns[idx];
+
+            try {
+                const res = await fetch('/api/runs/delete-video', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ race, id, video_url: run.video_url })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    // Remove video_url from this run and refresh
+                    run.video_url = null;
+                    renderRuns();
+                } else {
+                    alert('Failed to delete video: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Failed to delete video: ' + e.message);
             }
         }
 

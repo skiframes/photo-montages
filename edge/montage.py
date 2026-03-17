@@ -479,6 +479,7 @@ class MontageResultPair:
     embedding: Optional[list] = None  # 512-dim CLIP embedding for athlete re-identification
     video_clip_path: Optional[str] = None  # Path to MP4 video clip of this run
     trajectory_path: Optional[str] = None  # Path to trajectory (TR) overlay video
+    ghosttrail_path: Optional[str] = None  # Path to GhostTrail stroboscopic video
 
 
 def generate_montage(frames: List[np.ndarray],

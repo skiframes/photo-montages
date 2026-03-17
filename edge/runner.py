@@ -17,6 +17,7 @@ from detection import DetectionEngine, DetectionConfig, Run, RUN_CAPTURE_FPS
 from montage import generate_montage, MontageResult, MontageResultPair, DEFAULT_FPS
 from video_clip import generate_video_clip
 from trajectory import generate_trajectory_video
+from ghosttrail import generate_ghosttrail_video
 
 
 def parse_reolink_video_start_time(video_path: str, race_date: str) -> Optional[datetime]:
@@ -553,6 +554,27 @@ class SkiFramesRunner:
             except Exception as e:
                 print(f"  Video clip skipped: {e}")
 
+            # Generate GhostTrail stroboscopic slow-motion video
+            try:
+                ghosttrail_filename = f"{staging_filename}_{det_id}_ghosttrail.mp4"
+                ghosttrail_out_path = os.path.join(self.staging_output_dir, ghosttrail_filename)
+                ghosttrail_interval = self.raw_config.get('ghosttrail_interval', 4)
+                ghosttrail_opacity = self.raw_config.get('ghosttrail_opacity', 1.0)
+                ghosttrail_path = generate_ghosttrail_video(
+                    frames=run.frames,
+                    output_path=ghosttrail_out_path,
+                    source_fps=RUN_CAPTURE_FPS,
+                    slowmo_factor=4.0,  # 0.25x speed
+                    impression_interval=ghosttrail_interval,
+                    impression_opacity=ghosttrail_opacity,
+                    crop_region=vid_crop_region,
+                )
+                if ghosttrail_path:
+                    size_kb = os.path.getsize(ghosttrail_path) / 1024
+                    print(f"  GhostTrail: {ghosttrail_filename} ({size_kb:.0f} KB)")
+            except Exception as e:
+                print(f"  GhostTrail skipped: {e}")
+
             # Trajectory generation disabled for now
             # try:
             #     tr_filename = f"{staging_filename}_TR.mp4"
@@ -675,6 +697,30 @@ class SkiFramesRunner:
                 except Exception as e:
                     print(f"  Video clip skipped: {e}")
 
+            # Generate GhostTrail stroboscopic slow-motion video
+            ghosttrail_path = None
+            if self.generate_videos:
+                try:
+                    ghosttrail_dir = os.path.join(self.session_dir, 'ghosttrail')
+                    ghosttrail_filename = f"run_{run.run_number:03d}_{run.start_time.strftime('%H%M%S')}_ghosttrail.mp4"
+                    ghosttrail_out_path = os.path.join(ghosttrail_dir, ghosttrail_filename)
+                    ghosttrail_interval = self.raw_config.get('ghosttrail_interval', 4)
+                    ghosttrail_opacity = self.raw_config.get('ghosttrail_opacity', 1.0)
+                    ghosttrail_path = generate_ghosttrail_video(
+                        frames=run.frames,
+                        output_path=ghosttrail_out_path,
+                        source_fps=RUN_CAPTURE_FPS,
+                        slowmo_factor=4.0,  # 0.25x speed
+                        impression_interval=ghosttrail_interval,
+                        impression_opacity=ghosttrail_opacity,
+                        crop_region=vid_crop_region,
+                    )
+                    if ghosttrail_path:
+                        size_kb = os.path.getsize(ghosttrail_path) / 1024
+                        print(f"  GhostTrail: {ghosttrail_filename} ({size_kb:.0f} KB)")
+                except Exception as e:
+                    print(f"  GhostTrail skipped: {e}")
+
             # Trajectory generation disabled for now
             trajectory_path = None
             # try:
@@ -699,6 +745,7 @@ class SkiFramesRunner:
                 embedding=embedding,
                 video_clip_path=video_clip_path,
                 trajectory_path=trajectory_path,
+                ghosttrail_path=ghosttrail_path,
             )
             if racer:
                 merged_pair.racer_bib = racer.get('bib')
@@ -738,6 +785,12 @@ class SkiFramesRunner:
                     run_entry["trajectory_url"] = os.path.relpath(pair.trajectory_path, self.session_dir)
                 except ValueError:
                     run_entry["trajectory_url"] = os.path.basename(pair.trajectory_path)
+            # Add GhostTrail video URL if available
+            if pair.ghosttrail_path:
+                try:
+                    run_entry["ghosttrail_url"] = os.path.relpath(pair.ghosttrail_path, self.session_dir)
+                except ValueError:
+                    run_entry["ghosttrail_url"] = os.path.basename(pair.ghosttrail_path)
             for variant, m in pair.results.items():
                 # Use relative paths from session dir (e.g., "thumbnails/run_001_thumb.jpg")
                 # to preserve subdirectory structure for S3 upload

@@ -1799,6 +1799,14 @@
 
                 <label for="postBuffer">Post-buffer (seconds)</label>
                 <input type="number" id="postBuffer" min="0" max="10" value="0">
+
+                <label for="ghosttrailInterval">GhostTrail Impression Interval (frames)</label>
+                <input type="number" id="ghosttrailInterval" min="1" max="20" step="1" value="4">
+                <div class="help-text">Freeze a ghost impression every N frames (default: 4)</div>
+
+                <label for="ghosttrailOpacity">GhostTrail Impression Opacity (%)</label>
+                <input type="number" id="ghosttrailOpacity" min="10" max="100" step="5" value="100">
+                <div class="help-text">Opacity of frozen impressions (default: 100%)</div>
             </div>
         </div>
 
@@ -2136,6 +2144,8 @@
             maxRunDuration: document.getElementById('maxRunDuration'),
             preBuffer: document.getElementById('preBuffer'),
             postBuffer: document.getElementById('postBuffer'),
+            ghosttrailInterval: document.getElementById('ghosttrailInterval'),
+            ghosttrailOpacity: document.getElementById('ghosttrailOpacity'),
             saveSection: document.getElementById('saveSection'),
             saveConfig: document.getElementById('saveConfig'),
             outputDestSection: document.getElementById('outputDestSection'),
@@ -3574,6 +3584,9 @@
                     max_run_duration_seconds: parseFloat(elements.maxRunDuration.value) || 0,
                     pre_buffer_seconds: parseInt(elements.preBuffer.value),
                     post_buffer_seconds: parseInt(elements.postBuffer.value),
+                    // GhostTrail settings
+                    ghosttrail_interval: parseInt(elements.ghosttrailInterval.value) || 4,
+                    ghosttrail_opacity: (parseInt(elements.ghosttrailOpacity.value) || 100) / 100.0,
                     // Duration mode settings
                     run_duration_seconds: state.endMode === 'duration' ? state.runDurationSeconds : null,
                     // Montage settings
@@ -5220,6 +5233,9 @@
                 min_brightness: parseInt(elements.minBrightness.value),
                 min_run_duration_seconds: parseFloat(elements.minRunDuration.value),
                 max_run_duration_seconds: parseFloat(elements.maxRunDuration.value) || 0,
+                // GhostTrail settings
+                ghosttrail_interval: parseInt(elements.ghosttrailInterval.value) || 4,
+                ghosttrail_opacity: (parseInt(elements.ghosttrailOpacity.value) || 100) / 100.0,
                 // Montage settings
                 montage_fps_list: state.montageFpsList,
                 // Logos

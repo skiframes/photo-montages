@@ -5442,6 +5442,8 @@ def list_runs():
                         run_info['bib'] = timing['bib']
                     if timing.get('name'):
                         run_info['name'] = timing['name']
+                    if timing.get('section_elapsed_sec') is not None:
+                        run_info['elapsed_sec'] = timing['section_elapsed_sec']
                 except Exception:
                     pass
 
@@ -5559,6 +5561,59 @@ def delete_run():
                     print(f'[runs] Warning: failed to delete {f}: {e}')
 
     print(f'[runs] Deleted {deleted_files} files for {run_id}')
+
+    return jsonify({
+        'ok': True,
+        'deleted_files': deleted_files,
+    })
+
+
+@app.route('/api/runs/delete-video', methods=['POST'])
+def delete_run_video():
+    """
+    Delete only the video file(s) for a run, keeping the montage.
+
+    Request body:
+    {
+        "race": "Piche-U12-GS-2026-03-15",
+        "id": "g43_d001",
+        "video_url": "/api/runs/video/..."  # optional, for direct deletion
+    }
+    """
+    data = request.get_json() or {}
+    race_slug = data.get('race')
+    run_id = data.get('id')
+    video_url = data.get('video_url', '')
+
+    if not race_slug or not run_id:
+        return jsonify({'error': 'Missing race or id'}), 400
+
+    deleted_files = 0
+
+    # Search for video files matching the run_id pattern
+    staging_dir = MONTAGES_DIR / race_slug
+    if staging_dir.exists():
+        # Delete main video file
+        for f in staging_dir.rglob(f'{run_id}.mp4'):
+            try:
+                if f.is_file():
+                    f.unlink()
+                    deleted_files += 1
+                    print(f'[runs] Deleted video: {f}')
+            except Exception as e:
+                print(f'[runs] Warning: failed to delete {f}: {e}')
+
+        # Also delete ghosttrail video if exists
+        for f in staging_dir.rglob(f'{run_id}_ghosttrail.mp4'):
+            try:
+                if f.is_file():
+                    f.unlink()
+                    deleted_files += 1
+                    print(f'[runs] Deleted ghosttrail: {f}')
+            except Exception as e:
+                print(f'[runs] Warning: failed to delete {f}: {e}')
+
+    print(f'[runs] Deleted {deleted_files} video files for {run_id}')
 
     return jsonify({
         'ok': True,
