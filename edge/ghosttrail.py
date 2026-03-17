@@ -130,25 +130,20 @@ def generate_ghosttrail_video(
     """
     if not frames or len(frames) < 2:
         logger.warning("Not enough frames for GhostTrail video")
-        print(f"  [GhostTrail] ERROR: Not enough frames ({len(frames) if frames else 0})")
         return None
 
     try:
-        print(f"  [GhostTrail] Starting with {len(frames)} frames")
-
         # Apply crop if specified
         if crop_region:
             x = crop_region.get('x', 0)
             y = crop_region.get('y', 0)
             w = crop_region.get('w', frames[0].shape[1])
             h = crop_region.get('h', frames[0].shape[0])
-            print(f"  [GhostTrail] Cropping: x={x}, y={y}, w={w}, h={h}")
             frames = [f[y:y+h, x:x+w].copy() for f in frames]
 
         # Get frame dimensions
         sample = frames[0]
         frame_h, frame_w = sample.shape[:2]
-        print(f"  [GhostTrail] Frame dimensions: {frame_w}x{frame_h}")
 
         # Ensure even dimensions (required by H.264)
         out_w = frame_w if frame_w % 2 == 0 else frame_w - 1
@@ -156,7 +151,6 @@ def generate_ghosttrail_video(
 
         if out_w < 2 or out_h < 2:
             logger.warning(f"Frame dimensions too small: {out_w}x{out_h}")
-            print(f"  [GhostTrail] ERROR: Frame dimensions too small: {out_w}x{out_h}")
             return None
 
         # Use first frame as background reference (cropped to even dimensions)
@@ -199,22 +193,9 @@ def generate_ghosttrail_video(
         impressions_added = 0
         frames_written = 0
 
-        print(f"  [GhostTrail] Output: {out_w}x{out_h}, fps={output_fps:.1f}", flush=True)
-        print(f"  [GhostTrail] Background shape: {background.shape}, canvas shape: {canvas.shape}", flush=True)
-        print(f"  [GhostTrail] Starting frame loop with {len(frames)} frames...", flush=True)
-
         for i, frame in enumerate(frames):
-            if i == 0:
-                print(f"  [GhostTrail] Frame 0 shape: {frame.shape}", flush=True)
-            # Crop if needed
-            if crop_region:
-                pass  # Already cropped above
-
             # Ensure even dimensions
             frame = frame[:out_h, :out_w]
-
-            if i == 0:
-                print(f"  [GhostTrail] Frame 0 after crop: {frame.shape}, expected: ({out_h}, {out_w}, 3)", flush=True)
 
             # Check if this is an impression frame
             if i > 0 and i % impression_interval == 0:
@@ -231,21 +212,14 @@ def generate_ghosttrail_video(
                     impressions_added += 1
 
             # Composite: canvas (with accumulated impressions) + current skier
-            # Extract current skier
-            if i == 0:
-                print(f"  [GhostTrail] Extracting mask for frame 0...", flush=True)
             current_mask = extract_skier_mask(
                 frame, background,
                 threshold=diff_threshold,
                 min_area=min_skier_area
             )
-            if i == 0:
-                print(f"  [GhostTrail] Mask extracted, shape: {current_mask.shape}", flush=True)
 
             # Create output frame: canvas + current moving skier overlaid
             output_frame = canvas.copy()
-            if i == 0:
-                print(f"  [GhostTrail] Creating composite...", flush=True)
 
             # Overlay current skier at full opacity
             mask_3ch = cv2.cvtColor(current_mask, cv2.COLOR_GRAY2BGR).astype(np.float32) / 255.0
@@ -255,24 +229,14 @@ def generate_ghosttrail_video(
 
             # Write frame
             try:
-                frame_bytes = output_frame.tobytes()
-                if i == 0:
-                    print(f"  [GhostTrail] Frame 0 bytes: {len(frame_bytes)}, output shape: {output_frame.shape}", flush=True)
-                process.stdin.write(frame_bytes)
+                process.stdin.write(output_frame.tobytes())
                 frames_written += 1
-                if i == 0:
-                    print(f"  [GhostTrail] Frame 0 written successfully", flush=True)
-                # Progress every 50 frames
-                if frames_written % 50 == 0:
-                    print(f"  [GhostTrail] Progress: {frames_written}/{len(frames)} frames", flush=True)
             except BrokenPipeError:
-                print(f"  [GhostTrail] ERROR: Broken pipe at frame {i}", flush=True)
+                logger.error(f"Broken pipe at frame {i}")
                 break
             except Exception as e:
-                print(f"  [GhostTrail] ERROR writing frame {i}: {e}", flush=True)
+                logger.error(f"Error writing frame {i}: {e}")
                 break
-
-        print(f"  [GhostTrail] Wrote {frames_written}/{len(frames)} frames, {impressions_added} impressions", flush=True)
 
         process.stdin.close()
         process.wait(timeout=120)
@@ -280,7 +244,6 @@ def generate_ghosttrail_video(
         if process.returncode != 0:
             stderr = process.stderr.read().decode('utf-8', errors='replace')
             logger.error(f"ffmpeg failed (exit {process.returncode}): {stderr[-500:]}")
-            print(f"  [GhostTrail] ERROR: ffmpeg exit {process.returncode}: {stderr[-200:]}")
             return None
 
         # Verify output exists and has meaningful content (>1KB for a real video)
@@ -293,18 +256,10 @@ def generate_ghosttrail_video(
                 print(f"  GhostTrail: {os.path.basename(output_path)} ({size_kb:.0f} KB, {impressions_added} impressions)")
                 return output_path
             else:
-                print(f"  [GhostTrail] ERROR: Output too small ({size_bytes} bytes), ffmpeg may have failed")
-                # Read stderr for clues
-                try:
-                    stderr = process.stderr.read().decode('utf-8', errors='replace')
-                    if stderr:
-                        print(f"  [GhostTrail] ffmpeg stderr: {stderr[-300:]}")
-                except:
-                    pass
+                logger.error(f"Output too small ({size_bytes} bytes), ffmpeg may have failed")
                 return None
         else:
             logger.error(f"Output file missing: {output_path}")
-            print(f"  [GhostTrail] ERROR: Output file not created")
             return None
 
     except subprocess.TimeoutExpired:
@@ -324,7 +279,7 @@ def generate_ghosttrail_from_clip(
     output_path: str,
     slowmo_factor: float = 4.0,
     impression_interval: int = 4,
-    impression_opacity: float = 0.75,
+    impression_opacity: float = 1.0,
     crop_region: Optional[Dict] = None,
 ) -> Optional[str]:
     """
