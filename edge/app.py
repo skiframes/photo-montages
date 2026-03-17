@@ -5631,6 +5631,52 @@ def delete_run_video():
     })
 
 
+@app.route('/api/runs/clear-time', methods=['POST'])
+def clear_run_time():
+    """
+    Clear the elapsed time for a run (e.g., when a coach triggers the zone).
+
+    Request body:
+    {
+        "race": "Piche-U12-GS-2026-03-15",
+        "id": "g43_d001"
+    }
+    """
+    data = request.get_json() or {}
+    race_slug = data.get('race')
+    run_id = data.get('id')
+
+    if not race_slug or not run_id:
+        return jsonify({'error': 'Missing race or id'}), 400
+
+    # Search for timing JSON matching the run_id
+    staging_dir = MONTAGES_DIR / race_slug
+    if not staging_dir.exists():
+        return jsonify({'error': f'Race not found: {race_slug}'}), 404
+
+    updated = False
+    for timing_file in staging_dir.rglob(f'{run_id}_timing.json'):
+        try:
+            with open(timing_file, 'r') as f:
+                timing_data = json.load(f)
+
+            # Clear elapsed time
+            timing_data['section_elapsed_sec'] = None
+
+            with open(timing_file, 'w') as f:
+                json.dump(timing_data, f, indent=2)
+
+            updated = True
+            print(f'[runs] Cleared time in: {timing_file}')
+        except Exception as e:
+            print(f'[runs] Warning: failed to update {timing_file}: {e}')
+
+    if updated:
+        return jsonify({'ok': True})
+    else:
+        return jsonify({'error': 'Timing file not found'}), 404
+
+
 if __name__ == '__main__':
     # Restore persisted sessions on startup
     _load_persisted_sessions()

@@ -440,7 +440,7 @@
                         </div>
                         <div class="run-actions">
                             <button class="btn btn-danger" onclick="deleteRun('${run.id}', ${idx})">Delete All</button>
-                            ${(hasVideo || hasGhost) ? `<button class="btn btn-warning btn-small" onclick="deleteVideo('${run.id}', ${idx})">Delete Videos</button>` : ''}
+                            ${run.elapsed_sec ? `<button class="btn btn-warning btn-small" onclick="clearTime('${run.id}', ${idx})">Clear Time</button>` : ''}
                             ${hasPhoto ? `<button class="btn btn-primary" onclick="openFullscreen(${idx})">View Large</button>` : ''}
                         </div>
                         ${run.unmatched ? `
@@ -513,29 +513,28 @@
             }
         }
 
-        async function deleteVideo(id, idx) {
-            if (!confirm(`Delete VIDEOS for ${id}? (keeps photo montage, deletes video + ghosttrail)`)) return;
+        async function clearTime(id, idx) {
+            if (!confirm(`Clear elapsed time for ${id}? (keeps all media, just removes the time)`)) return;
 
             const race = document.getElementById('raceSelect').value;
             const run = filteredRuns[idx];
 
             try {
-                const res = await fetch('/api/runs/delete-video', {
+                const res = await fetch('/api/runs/clear-time', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ race, id, video_url: run.video_url, ghosttrail_url: run.ghosttrail_url })
+                    body: JSON.stringify({ race, id })
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    // Remove video_url and ghosttrail_url from this run and refresh
-                    run.video_url = null;
-                    run.ghosttrail_url = null;
+                    // Remove elapsed_sec from this run and refresh
+                    run.elapsed_sec = null;
                     renderRuns();
                 } else {
-                    alert('Failed to delete videos: ' + (data.error || 'Unknown error'));
+                    alert('Failed to clear time: ' + (data.error || 'Unknown error'));
                 }
             } catch (e) {
-                alert('Failed to delete videos: ' + e.message);
+                alert('Failed to clear time: ' + e.message);
             }
         }
 
