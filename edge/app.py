@@ -76,6 +76,162 @@ stream_manager = StreamManager()
 rtsp_sessions = {}
 rtsp_sessions_lock = threading.Lock()
 
+# Persistence file for auto-restart on Flask restart
+SESSIONS_PERSIST_FILE = Path(tempfile.gettempdir()) / 'skiframes_active_sessions.json'
+
+
+def _persist_sessions():
+    """Save active RTSP sessions to disk for auto-restart."""
+    try:
+        with rtsp_sessions_lock:
+            sessions_to_save = []
+            for job_id, session in rtsp_sessions.items():
+                if session.get('status') == 'running':
+                    sessions_to_save.append({
+                        'job_id': job_id,
+                        'session_id': session['session_id'],
+                        'camera_id': session['camera_id'],
+                        'config_path': session['config_path'],
+                        'started_at': session.get('started_at', ''),
+                    })
+        with open(SESSIONS_PERSIST_FILE, 'w') as f:
+            json.dump({'sessions': sessions_to_save}, f, indent=2)
+        print(f"[PERSIST] Saved {len(sessions_to_save)} active sessions to {SESSIONS_PERSIST_FILE}")
+    except Exception as e:
+        print(f"[PERSIST] Failed to save sessions: {e}")
+
+
+def _load_persisted_sessions():
+    """Load and restart sessions from persistence file."""
+    if not SESSIONS_PERSIST_FILE.exists():
+        print("[PERSIST] No persisted sessions file found")
+        return
+
+    try:
+        with open(SESSIONS_PERSIST_FILE) as f:
+            data = json.load(f)
+
+        sessions = data.get('sessions', [])
+        if not sessions:
+            print("[PERSIST] No sessions to restore")
+            return
+
+        print(f"[PERSIST] Restoring {len(sessions)} sessions...")
+
+        for session_info in sessions:
+            config_path = session_info.get('config_path')
+            if not config_path or not Path(config_path).exists():
+                print(f"[PERSIST] Skipping {session_info.get('session_id')} - config not found")
+                continue
+
+            # Check if session is still valid (not expired)
+            try:
+                with open(config_path) as f:
+                    config = json.load(f)
+
+                session_end = config.get('session_end_time')
+                if session_end:
+                    end_time = parse_iso_datetime(session_end)
+                    if datetime.now() > end_time:
+                        print(f"[PERSIST] Skipping {session_info['session_id']} - session expired")
+                        continue
+            except Exception as e:
+                print(f"[PERSIST] Error reading config {config_path}: {e}")
+                continue
+
+            # Restart the session
+            try:
+                camera_id = session_info['camera_id']
+                session_id = session_info['session_id']
+                rtsp_url = config.get('camera_url', '')
+                if not rtsp_url:
+                    rtsp_url = CAMERAS.get(camera_id, {}).get('rtsp_url', '')
+
+                if not rtsp_url:
+                    print(f"[PERSIST] Skipping {session_id} - no RTSP URL")
+                    continue
+
+                output_dir = str(Path(__file__).resolve().parent.parent / 'output')
+                runner = SkiFramesRunner(config_path, output_dir)
+                stream_manager.start_session(camera_id, rtsp_url, session_id, runner)
+
+                job_id = str(uuid.uuid4())[:8]
+                with rtsp_sessions_lock:
+                    rtsp_sessions[job_id] = {
+                        'runner': runner,
+                        'session_id': session_id,
+                        'camera_id': camera_id,
+                        'config_path': config_path,
+                        'status': 'running',
+                        'started_at': datetime.now().isoformat(),
+                        'restored': True,
+                    }
+                print(f"[PERSIST] Restored session {session_id} on {camera_id} (new job {job_id})")
+            except Exception as e:
+                print(f"[PERSIST] Failed to restore {session_info['session_id']}: {e}")
+
+        # Clear persistence file after restore
+        SESSIONS_PERSIST_FILE.unlink(missing_ok=True)
+        print("[PERSIST] Cleared persistence file after restore")
+
+    except Exception as e:
+        print(f"[PERSIST] Failed to load sessions: {e}")
+
+
+# Auto-sync montages to S3 in background
+_sync_thread = None
+_sync_stop_event = threading.Event()
+
+
+def _auto_sync_worker():
+    """Background worker that periodically syncs montages to S3."""
+    sync_script = Path(__file__).resolve().parent.parent / 'infrastructure' / 'sync-montages.sh'
+    if not sync_script.exists():
+        print(f"[SYNC] Sync script not found: {sync_script}")
+        return
+
+    print(f"[SYNC] Auto-sync worker started (interval: 60s)")
+
+    while not _sync_stop_event.is_set():
+        # Wait for interval or stop event
+        if _sync_stop_event.wait(timeout=60):
+            break
+
+        try:
+            import subprocess
+            result = subprocess.run(
+                [str(sync_script), '--auto'],
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minute timeout
+                cwd=str(sync_script.parent),
+            )
+            if result.returncode == 0:
+                # Only log if something was synced
+                if 'Syncing' in result.stdout:
+                    for line in result.stdout.strip().split('\n'):
+                        if line.strip():
+                            print(f"[SYNC] {line}")
+            else:
+                if result.stderr.strip():
+                    print(f"[SYNC] Error: {result.stderr.strip()}")
+        except subprocess.TimeoutExpired:
+            print("[SYNC] Sync timed out after 5 minutes")
+        except Exception as e:
+            print(f"[SYNC] Error running sync: {e}")
+
+    print("[SYNC] Auto-sync worker stopped")
+
+
+def _start_auto_sync():
+    """Start the auto-sync background thread."""
+    global _sync_thread
+    if _sync_thread is None or not _sync_thread.is_alive():
+        _sync_stop_event.clear()
+        _sync_thread = threading.Thread(target=_auto_sync_worker, daemon=True)
+        _sync_thread.start()
+
+
 # Configuration
 # Use arm64 homebrew python if available, then venv, then system python3
 _arm64_python = Path('/opt/homebrew/bin/python3.11')
@@ -127,12 +283,12 @@ def _expire_session_config(config_path: str):
 CAMERAS = {
     'R1': {
         'name': 'R1',
-        'rtsp_url': os.environ.get('R1_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.101/h264Preview_01_main'),
+        'rtsp_url': os.environ.get('R1_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.1.101/h264Preview_01_main'),
         'offset_pct': 0,  # 0% - covers start gate
     },
     'R2': {
         'name': 'R2',
-        'rtsp_url': os.environ.get('R2_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.102/h264Preview_01_main'),
+        'rtsp_url': os.environ.get('R2_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.1.102/h264Preview_01_main'),
         'offset_pct': 10,  # 10% into the run
     },
     'Axis': {
@@ -142,7 +298,7 @@ CAMERAS = {
     },
     'R3': {
         'name': 'R3',
-        'rtsp_url': os.environ.get('R3_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.0.103/h265Preview_01_main'),
+        'rtsp_url': os.environ.get('R3_RTSP_URL', 'rtsp://j40:J40j40j40@192.168.1.103/h265Preview_01_main'),
         'offset_pct': 50,  # 50% - covers last half of run
     },
 }
@@ -190,10 +346,12 @@ def serve_montage(filepath):
     return resp
 
 
-@app.route('/race/<path:filepath>')
-def serve_race_web(filepath):
+@app.route('/race/<race_slug>/<path:filepath>')
+def serve_race_web(race_slug, filepath):
     """Serve the web gallery files (race page) for local preview."""
-    race_dir = WEB_RACES_DIR / 'western-q-2026-02-22'
+    race_dir = WEB_RACES_DIR / race_slug
+    if not race_dir.exists():
+        return jsonify({'error': f'Race {race_slug} not found'}), 404
     resp = send_from_directory(str(race_dir), filepath)
     resp.headers['Access-Control-Allow-Origin'] = '*'
     return resp
@@ -311,7 +469,12 @@ def list_vola_dates():
             runs = []
             for run_num in ['run1', 'run2']:
                 # Look for any CSV matching *-runN.csv (e.g., boys-run1.csv, girls-run1.csv)
+                # Also match "run N" with space (e.g., "skiframes - start TOD - run 1.csv")
                 csvs = list(d.glob(f'*-{run_num}.csv'))
+                if not csvs:
+                    # Try pattern with space: "run 1", "run 2"
+                    run_with_space = run_num.replace('run', 'run ')  # "run1" -> "run 1"
+                    csvs = list(d.glob(f'*{run_with_space}*.csv'))
                 if csvs:
                     runs.append(run_num)
             if runs:
@@ -340,6 +503,32 @@ def find_vola_dir_for_date(race_date: str) -> 'Path | None':
         if d.is_dir() and folder_date in d.name:
             return d
     return None
+
+
+def find_vola_csvs_for_run(vola_dir: Path, run_number: str) -> dict:
+    """Find Vola CSV files for a given run in a directory.
+
+    Handles multiple naming conventions:
+    - boys-run1.csv, girls-run1.csv (Western Q format)
+    - skiframes - start TOD - run 1.csv (Gunstock format - combined)
+
+    Returns dict: {'boys': [paths], 'girls': [paths], 'combined': [paths]}
+    """
+    result = {'boys': [], 'girls': [], 'combined': []}
+
+    # Format 1: boys-run1.csv, girls-run1.csv
+    boys_csv = list(vola_dir.glob(f'boys-{run_number}.csv'))
+    girls_csv = list(vola_dir.glob(f'girls-{run_number}.csv'))
+    result['boys'] = boys_csv
+    result['girls'] = girls_csv
+
+    # Format 2: "run 1" with space (Gunstock: "skiframes - start TOD - run 1.csv")
+    if not boys_csv and not girls_csv:
+        run_with_space = run_number.replace('run', 'run ')  # "run1" -> "run 1"
+        combined_csv = list(vola_dir.glob(f'*{run_with_space}*.csv'))
+        result['combined'] = combined_csv
+
+    return result
 
 
 @app.route('/api/race-manifest/cameras')
@@ -738,14 +927,20 @@ def parse_vola_csv(filepath):
     """
     Parse Vola timing CSV file. Returns dict of {bib: start_seconds}.
 
-    CSV format (comma or tab separated):
+    CSV format 1 (2 columns - Western Q):
         Num,Hour Cell.
         86,10h10:11.58575
         85,10h09:46.64594
         80,Did Not Start
 
+    CSV format 2 (4 columns - Gunstock "skiframes" format):
+        Seq,,Num,Hour Cell.
+        2,0,901-A,8h58:50.1964
+        8,0,42,9h03:32.6896
+
     Handles:
     - Auto-detects comma vs tab separator
+    - Auto-detects 2-column vs 4-column format
     - Skips header row
     - Skips DNS/DNF entries
     - Skips non-numeric bibs (forerunners like 901-A)
@@ -760,30 +955,44 @@ def parse_vola_csv(filepath):
         return results
     sep = ',' if ',' in lines[1] else '\t'
 
+    # Detect column format from header
+    header_parts = lines[0].split(sep)
+    is_4_column = len(header_parts) >= 4 and header_parts[0].strip().lower() == 'seq'
+
     for line in lines:
         line = line.strip()
         if not line:
             continue
         parts = line.split(sep)
-        if len(parts) < 2:
-            continue
 
-        bib_str = parts[0].strip()
-        time_str = parts[1].strip()
+        # Extract bib and time based on format
+        if is_4_column:
+            # Gunstock format: Seq,,Num,Hour Cell.
+            if len(parts) < 4:
+                continue
+            bib_str = parts[2].strip()
+            time_str = parts[3].strip()
+        else:
+            # Western Q format: Num,Hour Cell.
+            if len(parts) < 2:
+                continue
+            bib_str = parts[0].strip()
+            time_str = parts[1].strip()
 
         # Skip header
-        if bib_str == 'Num' or not bib_str:
+        if bib_str.lower() == 'num' or not bib_str:
             continue
 
         # Skip DNS/DNF
         if 'Did Not Start' in time_str or 'Did Not Finish' in time_str:
             continue
 
-        # Skip non-numeric bibs (forerunners like 901-A)
-        if not bib_str.isdigit():
-            continue
-
-        bib = int(bib_str)
+        # Keep bib as string to support alphanumeric forerunner bibs (e.g., "901-A")
+        # Convert numeric bibs to int for consistent sorting, keep alphanumeric as string
+        if bib_str.isdigit():
+            bib = int(bib_str)
+        else:
+            bib = bib_str  # Forerunner bibs like "901-A", "901-B"
 
         # Parse time using existing parse_vola_time()
         start_seconds = parse_vola_time(time_str)
@@ -897,7 +1106,8 @@ def build_racers_from_start_times(start_times, camera_id, estimated_duration=40.
         camera_offset_pct = CAMERAS.get(camera_id, {}).get('offset_pct', 0) / 100.0
 
     racers = []
-    for bib in sorted(start_times.keys()):
+    # Use str(bib) as sort key to handle mixed int/string bibs (forerunners like "901-A")
+    for bib in sorted(start_times.keys(), key=lambda x: str(x)):
         start_sec = start_times[bib]
 
         # CSV files only have start times, so estimate duration
@@ -1372,10 +1582,42 @@ def save_config():
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
 
+    # Auto-start RTSP session unless explicitly disabled
+    auto_start = data.get('auto_start', True)
+    job_id = None
+
+    if auto_start:
+        rtsp_url = config.get('camera_url', '')
+        if not rtsp_url:
+            rtsp_url = CAMERAS.get(camera_id, {}).get('rtsp_url', '')
+
+        if rtsp_url:
+            try:
+                output_dir = str(Path(__file__).resolve().parent.parent / 'output')
+                runner = SkiFramesRunner(str(config_path), output_dir)
+                stream_manager.start_session(camera_id, rtsp_url, session_id, runner)
+
+                job_id = str(uuid.uuid4())[:8]
+                with rtsp_sessions_lock:
+                    rtsp_sessions[job_id] = {
+                        'runner': runner,
+                        'session_id': session_id,
+                        'camera_id': camera_id,
+                        'config_path': str(config_path),
+                        'status': 'running',
+                        'started_at': datetime.now().isoformat(),
+                    }
+                print(f"[RTSP] Auto-started session {session_id} on camera {camera_id} (job {job_id})")
+                _persist_sessions()  # Save for auto-restart on Flask restart
+            except Exception as e:
+                print(f"[RTSP] Auto-start failed for {session_id}: {e}")
+
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'config_path': str(config_path)
+        'config_path': str(config_path),
+        'job_id': job_id,
+        'auto_started': job_id is not None
     })
 
 
@@ -1504,11 +1746,22 @@ def get_detection_metrics(job_id):
             with open(config_path) as f:
                 config = json.load(f)
             session_id = config.get('session_id', Path(config_path).stem)
+            # Check for staging mode (batch processing with section_id/run_number)
+            staging_dir = config.get('staging_dir')
+            section_id = config.get('section_id')
+            run_number = config.get('run_number')
         except Exception:
             session_id = Path(config_path).stem
+            staging_dir = None
+            section_id = None
+            run_number = None
 
-        output_dir = str(Path(__file__).resolve().parent.parent / 'output')
-        metrics_path = os.path.join(output_dir, session_id, 'detection_metrics.json')
+        # In staging mode, metrics are in staging_dir/section_id/run_number/
+        if staging_dir and section_id and run_number:
+            metrics_path = os.path.join(staging_dir, section_id, run_number, 'detection_metrics.json')
+        else:
+            output_dir = str(Path(__file__).resolve().parent.parent / 'output')
+            metrics_path = os.path.join(output_dir, session_id, 'detection_metrics.json')
 
     if not os.path.exists(metrics_path):
         return jsonify({'entries': [], 'message': 'No metrics yet'})
@@ -1582,6 +1835,63 @@ def stop_session(session_id):
                     break
 
     return jsonify({'success': True, 'session_id': session_id, 'process_killed': process_killed})
+
+
+@app.route('/api/config/zone-presets')
+def list_zone_presets():
+    """List previous zone configurations for a given camera.
+
+    Query params:
+    - camera_id: Filter by camera ID (optional)
+
+    Returns list of configs with zone info, sorted by most recent first.
+    """
+    camera_id = request.args.get('camera_id', '')
+
+    configs = sorted(CONFIG_DIR.glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True)
+    presets = []
+
+    for config_path in configs[:50]:  # Limit to last 50 configs
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+
+            # Filter by camera if specified
+            if camera_id and config.get('camera_id') != camera_id:
+                continue
+
+            # Only include configs that have zone info
+            if not config.get('start_zone'):
+                continue
+
+            preset = {
+                'session_id': config.get('session_id', config_path.stem),
+                'camera_id': config.get('camera_id', ''),
+                'group': config.get('group', ''),
+                'session_type': config.get('session_type', ''),
+                'race_date': config.get('race_date', ''),
+                'run_number': config.get('run_number', ''),
+                'section_id': config.get('section_id', ''),
+                'start_zone': config.get('start_zone'),
+                'end_zone': config.get('end_zone'),
+                'crop_zone': config.get('crop_zone'),
+                'detection_threshold': config.get('detection_threshold'),
+                'min_pixel_change_pct': config.get('min_pixel_change_pct'),
+                'min_brightness': config.get('min_brightness'),
+                'min_run_duration_seconds': config.get('min_run_duration_seconds'),
+                'max_run_duration_seconds': config.get('max_run_duration_seconds'),
+                'created_at': datetime.fromtimestamp(config_path.stat().st_mtime).isoformat(),
+            }
+            presets.append(preset)
+
+            # Limit results
+            if len(presets) >= 20:
+                break
+
+        except Exception:
+            continue
+
+    return jsonify({'presets': presets})
 
 
 @app.route('/api/config/update_live/<session_id>', methods=['POST'])
@@ -1868,6 +2178,31 @@ def list_recording_videos():
                 'duration_sec': end_sec - start_sec,
             })
 
+    # Source 4: Flat directory recordings (sd_R1/R1_YYYYMMDD_HHMMSS.mp4)
+    flat_cam_path = RECORDINGS_DIR / folder_name
+    if flat_cam_path.exists() and flat_cam_path != export_cam_path:
+        for video_file in sorted(flat_cam_path.glob('*.mp4')):
+            parsed_date, start_sec, end_sec = parse_j40_video_times(video_file.name)
+            if start_sec is None or parsed_date != date:
+                continue
+            # Avoid duplicates
+            if any(v['path'] == str(video_file) for v in videos):
+                continue
+            if filter_start is not None and filter_end is not None:
+                if end_sec < filter_start or start_sec > filter_end:
+                    continue
+            start_time_str = f"{start_sec // 3600:02d}:{(start_sec % 3600) // 60:02d}:{start_sec % 60:02d}"
+            end_time_str = f"{end_sec // 3600:02d}:{(end_sec % 3600) // 60:02d}:{end_sec % 60:02d}"
+            videos.append({
+                'name': video_file.name,
+                'path': str(video_file),
+                'start_time_sec': start_sec,
+                'end_time_sec': end_sec,
+                'start_time_str': start_time_str,
+                'end_time_str': end_time_str,
+                'duration_sec': end_sec - start_sec,
+            })
+
     if not videos:
         return jsonify({'error': f'No recordings found for {camera_id} on {date}', 'videos': []})
 
@@ -1917,11 +2252,13 @@ def get_videos_for_race():
             if not vola_dir:
                 return jsonify({'error': f'No Vola data found for date {race_date_override}'}), 400
 
-            # Find boys and girls CSVs for this run
-            boys_csv = list(vola_dir.glob(f'boys-{run_number}.csv'))
-            girls_csv = list(vola_dir.glob(f'girls-{run_number}.csv'))
+            # Find CSVs for this run (handles multiple naming conventions)
+            csv_files = find_vola_csvs_for_run(vola_dir, run_number)
+            boys_csv = csv_files['boys']
+            girls_csv = csv_files['girls']
+            combined_csv = csv_files['combined']
 
-            if not boys_csv and not girls_csv:
+            if not boys_csv and not girls_csv and not combined_csv:
                 return jsonify({'error': f'No CSV files found for {run_number} in {vola_dir.name}'}), 400
 
             # Parse boys and girls separately — bibs overlap between genders!
@@ -1932,29 +2269,43 @@ def get_videos_for_race():
             gate_offset = get_gate_offset_pct(camera_id, race_date=race_date_override,
                                                run_number=run_number)
 
-            if boys_csv:
-                boys_times = parse_vola_csv(str(boys_csv[0]))
-                bib_to_racer_boys = load_race_manifest(str(boys_csv[0]))
-                boys_racers = build_racers_from_start_times(boys_times, camera_id,
-                                                             gate_offset_pct=gate_offset)
-                for racer in boys_racers:
-                    racer_info = bib_to_racer_boys.get(racer['bib'], {})
+            if combined_csv:
+                # Combined format (Gunstock): single CSV with all racers
+                combined_times = parse_vola_csv(str(combined_csv[0]))
+                bib_to_racer = load_race_manifest(str(combined_csv[0]))
+                combined_racers = build_racers_from_start_times(combined_times, camera_id,
+                                                                 gate_offset_pct=gate_offset)
+                for racer in combined_racers:
+                    racer_info = bib_to_racer.get(racer['bib'], {})
                     racer['name'] = racer_info.get('name', '')
                     racer['team'] = racer_info.get('team', '')
-                    racer['gender'] = 'Men'
-                racers.extend(boys_racers)
+                    racer['gender'] = racer_info.get('gender', '')
+                racers.extend(combined_racers)
+            else:
+                # Separate boys/girls files (Western Q format)
+                if boys_csv:
+                    boys_times = parse_vola_csv(str(boys_csv[0]))
+                    bib_to_racer_boys = load_race_manifest(str(boys_csv[0]))
+                    boys_racers = build_racers_from_start_times(boys_times, camera_id,
+                                                                 gate_offset_pct=gate_offset)
+                    for racer in boys_racers:
+                        racer_info = bib_to_racer_boys.get(racer['bib'], {})
+                        racer['name'] = racer_info.get('name', '')
+                        racer['team'] = racer_info.get('team', '')
+                        racer['gender'] = 'Men'
+                    racers.extend(boys_racers)
 
-            if girls_csv:
-                girls_times = parse_vola_csv(str(girls_csv[0]))
-                bib_to_racer_girls = load_race_manifest(str(girls_csv[0]))
-                girls_racers = build_racers_from_start_times(girls_times, camera_id,
-                                                              gate_offset_pct=gate_offset)
-                for racer in girls_racers:
-                    racer_info = bib_to_racer_girls.get(racer['bib'], {})
-                    racer['name'] = racer_info.get('name', '')
-                    racer['team'] = racer_info.get('team', '')
-                    racer['gender'] = 'Women'
-                racers.extend(girls_racers)
+                if girls_csv:
+                    girls_times = parse_vola_csv(str(girls_csv[0]))
+                    bib_to_racer_girls = load_race_manifest(str(girls_csv[0]))
+                    girls_racers = build_racers_from_start_times(girls_times, camera_id,
+                                                                  gate_offset_pct=gate_offset)
+                    for racer in girls_racers:
+                        racer_info = bib_to_racer_girls.get(racer['bib'], {})
+                        racer['name'] = racer_info.get('name', '')
+                        racer['team'] = racer_info.get('team', '')
+                        racer['gender'] = 'Women'
+                    racers.extend(girls_racers)
 
             # Sort all racers by start time (interleaved boys + girls)
             racers.sort(key=lambda r: r['start_time_sec'])
@@ -2272,6 +2623,7 @@ def process_rtsp():
 
         print(f"[RTSP] Session {session_id} started on camera {camera_id} "
               f"(job {job_id})")
+        _persist_sessions()  # Save for auto-restart on Flask restart
 
         return jsonify({
             'job_id': job_id,
@@ -2281,6 +2633,39 @@ def process_rtsp():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/process/preview')
+def process_preview():
+    """Serve the current preview frame from detection engine."""
+    import tempfile
+    preview_path = Path(tempfile.gettempdir()) / 'skiframes_preview.jpg'
+
+    if not preview_path.exists():
+        # Return a placeholder or 204 No Content
+        return '', 204
+
+    try:
+        # Check if preview is recent (within last 5 seconds)
+        import time
+        mtime = preview_path.stat().st_mtime
+        age = time.time() - mtime
+        if age > 5.0:
+            # Preview is stale, processing may have stopped
+            return '', 204
+
+        # Send the preview image with cache-busting headers
+        response = send_file(
+            str(preview_path),
+            mimetype='image/jpeg',
+            as_attachment=False
+        )
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
@@ -2331,6 +2716,8 @@ def process_status(job_id):
         matched_count = 0
         total_athletes = 0
         output_dir = ''
+        current_video = ''
+        video_progress = ''
         for line in output.split('\n'):
             # Count completed runs in real-time from "[RUN X] Completed" messages
             if '] Completed at' in line:
@@ -2351,6 +2738,19 @@ def process_status(job_id):
                     pass
             if 'Output directory:' in line:
                 output_dir = line.split(':', 1)[1].strip()
+            # Parse "Processing video X/Y: /path/to/video.mp4"
+            if 'Processing video' in line and '/' in line:
+                try:
+                    # Extract progress like "1/22"
+                    import re
+                    match = re.search(r'Processing video (\d+/\d+):', line)
+                    if match:
+                        video_progress = match.group(1)
+                    # Extract filename
+                    path = line.split(':', 1)[1].strip() if ':' in line else ''
+                    current_video = os.path.basename(path) if path else ''
+                except:
+                    pass
 
         # Health check: verify subprocess is actually alive if status says 'running'
         actual_status = job['status']
@@ -2368,6 +2768,10 @@ def process_status(job_id):
                 job['status'] = actual_status
                 print(f"[HEALTH] Job {job_id} process died (exit={poll}), status corrected to '{actual_status}'")
 
+        # Get last 30 log lines for UI display
+        all_lines = output.strip().split('\n')
+        log_lines = all_lines[-30:] if len(all_lines) > 30 else all_lines
+
         response = {
             'job_id': job_id,
             'status': actual_status,
@@ -2375,10 +2779,13 @@ def process_status(job_id):
             'matched_count': matched_count,
             'total_athletes': total_athletes,
             'output_dir': output_dir,
+            'current_video': current_video,
+            'video_progress': video_progress,
             'output': output,
+            'log_lines': log_lines,
             'error': job.get('error', ''),
         }
-        print(f"[DEBUG] Status for {job_id}: status={actual_status}, runs={runs_detected}, matched={matched_count}/{total_athletes}")
+        print(f"[DEBUG] Status for {job_id}: status={actual_status}, runs={runs_detected}, matched={matched_count}/{total_athletes}, video={current_video}")
         return jsonify(response)
 
 
@@ -2395,6 +2802,7 @@ def stop_process(job_id):
         with rtsp_sessions_lock:
             rtsp_sessions[job_id]['status'] = 'stopped'
         print(f"[STOP] In-process RTSP session {session_id} stopped (job {job_id})")
+        _persist_sessions()  # Update persistence file
         # Expire session config
         config_path = CONFIG_DIR / f'{session_id}.json'
         _expire_session_config(str(config_path))
@@ -3321,13 +3729,14 @@ def list_available_logos():
         'default_order': [
             'US-Ski-Snowboard.png',
             'NHARA_logo.png',
-            'ProctorLogo.jpg',
+            'GSC.jpg',
             'Skiframes-com_logo.png'
         ],
         'excluded_by_default': [
             'skieast_logo.png',
             'Ragged_logo.png',
-            'RMST_logo.png'
+            'RMST_logo.png',
+            'ProctorLogo.jpg'
         ]
     })
 
@@ -4938,4 +5347,8 @@ def delete_unmatched():
 
 
 if __name__ == '__main__':
+    # Restore persisted sessions on startup
+    _load_persisted_sessions()
+    # Start auto-sync to S3 in background
+    _start_auto_sync()
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('FLASK_DEBUG', '0') == '1')

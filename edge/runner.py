@@ -397,6 +397,15 @@ class SkiFramesRunner:
                 run.cleanup()
             return
 
+        # Filter out long runs (coaches side-slipping, not racing)
+        max_run_duration = self.raw_config.get('max_run_duration_seconds', 0)  # 0 = disabled
+        if max_run_duration > 0 and run.duration > max_run_duration:
+            print(f"  [RUN {run.run_number}] Skipped: duration {run.duration:.2f}s > max {max_run_duration}s (likely coach)")
+            # Clean up temp frame files
+            if hasattr(run, 'cleanup'):
+                run.cleanup()
+            return
+
         # Match this run to a Vola racer by timestamp (Boston clock time)
         racer = None
         if run.start_time and self.vola_racers:

@@ -326,6 +326,12 @@ class DetectionEngine:
         self._frame_temp_base.mkdir(parents=True, exist_ok=True)
         self._last_capture_frame = 0  # Track last captured frame for 10fps limiting
 
+        # Preview frame for live video display in UI
+        self._preview_path = Path(tempfile.gettempdir()) / 'skiframes_preview.jpg'
+        self._last_preview_time = 0.0  # time.time() of last preview save
+        self._preview_interval = 0.1  # Save preview every 100ms (10fps)
+        self._preview_started = False  # Log first successful preview
+
     def _get_racer_run_duration(self, timestamp: datetime) -> Optional[float]:
         """
         Find racer by timestamp and return their run duration.
@@ -462,6 +468,75 @@ class DetectionEngine:
             os.replace(tmp_path, self.metrics_path)
         except Exception:
             pass  # Non-critical, skip silently
+
+    def _save_preview_frame(self, frame: np.ndarray):
+        """Save current frame as preview for live video display in UI."""
+        now = time.time()
+        if now - self._last_preview_time < self._preview_interval:
+            return
+        self._last_preview_time = now
+
+        try:
+            # Debug: verify frame is valid
+            if frame is None or frame.size == 0:
+                print(f"  [PREVIEW] Invalid frame (None or empty)")
+                return
+            # Resize to max 640px width for quick transfer
+            h, w = frame.shape[:2]
+            if w > 640:
+                scale = 640 / w
+                new_w = 640
+                new_h = int(h * scale)
+                preview = cv2.resize(frame, (new_w, new_h))
+            else:
+                preview = frame
+
+            # Draw detection zones on preview
+            start_zone = self.config.start_zone
+            end_zone = self.config.end_zone
+            scale_factor = preview.shape[1] / w  # Scaling for overlay
+
+            if start_zone:
+                x = int(start_zone.x * scale_factor)
+                y = int(start_zone.y * scale_factor)
+                w_z = int(start_zone.w * scale_factor)
+                h_z = int(start_zone.h * scale_factor)
+                color = (0, 255, 0) if self.current_run else (0, 200, 0)  # Brighter green when run active
+                cv2.rectangle(preview, (x, y), (x + w_z, y + h_z), color, 2)
+                cv2.putText(preview, 'START', (x + 5, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+            if end_zone:
+                x = int(end_zone.x * scale_factor)
+                y = int(end_zone.y * scale_factor)
+                w_z = int(end_zone.w * scale_factor)
+                h_z = int(end_zone.h * scale_factor)
+                color = (0, 0, 255)  # Red for end zone
+                cv2.rectangle(preview, (x, y), (x + w_z, y + h_z), color, 2)
+                cv2.putText(preview, 'END', (x + 5, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+            # Add run status
+            if self.current_run:
+                cv2.putText(preview, f'RUN {self.run_count} ACTIVE', (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            else:
+                cv2.putText(preview, f'Runs: {self.run_count}', (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+
+            # Atomic write: tmp file + os.replace()
+            # Use .jpg extension for temp file so OpenCV knows the format
+            tmp_path = str(self._preview_path).replace('.jpg', '_tmp.jpg')
+            cv2.imwrite(tmp_path, preview, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            os.replace(tmp_path, str(self._preview_path))
+
+            # Log first successful preview
+            if not self._preview_started:
+                print(f"  [PREVIEW] Live preview started: {self._preview_path}")
+                self._preview_started = True
+        except Exception as e:
+            # Log first error only
+            if not hasattr(self, '_preview_error_logged'):
+                print(f"  [PREVIEW] Error saving preview: {e}")
+                self._preview_error_logged = True
 
     def _create_run_frame_dir(self, run_number: int) -> str:
         """Create temp directory for storing run frames on disk."""
@@ -722,6 +797,9 @@ class DetectionEngine:
                 runs.append(completed)
                 # Note: on_run_complete callback is already called in process_frame
 
+            # Save preview frame for live video display
+            self._save_preview_frame(frame)
+
             # Progress update every minute
             if frame_num % int(fps * 60) == 0:
                 print(f"  ... {current_time / 60:.1f} minutes processed")
@@ -801,6 +879,9 @@ class DetectionEngine:
                 elif frame_num % check_interval == 0:
                     # Idle: check for new run trigger at ~10fps
                     self.process_frame(frame, frame_num, now)
+
+                # Save preview frame for live video display (rate limited internally)
+                self._save_preview_frame(frame)
 
         except KeyboardInterrupt:
             print("\n  Interrupted by user")
